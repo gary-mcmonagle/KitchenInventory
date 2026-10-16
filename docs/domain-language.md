@@ -12,6 +12,10 @@ If you need a term that isn't here, add it as part of the card that introduces i
 - Not to be confused with: **Unit**. Many units share one barcode.
 - In code: `barcode` (string)
 
+**Display name** – the name the UI and digest show for a product. From product lookup (Open Food Facts), naming or photo identification; `Unknown item (<barcode>)` for a no-match.
+- Not to be confused with: the brand and size, which are shown separately.
+- In code: `displayName`
+
 **Product** – a kind of item, identified by its barcode (e.g. "Heinz Baked Beans 415g").
 - Not to be confused with: **Unit**. A product is the kind of thing; a unit is one physical tin.
 - In code: `Product`
