@@ -29,7 +29,7 @@ The Cosmos data model (containers, partition keys, change-feed flow, idempotency
 - Every behaviour change ships with **unit tests**. Tests must pass before merging.
 - Configuration via app settings / env vars. Key Vault is not used yet — it's added when the first real secret appears.
 - **.NET 10 (LTS)**, Azure Functions **isolated worker** (Functions host v4), on the Flex Consumption plan. Everything .NET lives in `BE/`: pinned in `BE/global.json`, shared build settings in `BE/Directory.Build.props` (nullable, warnings as errors, recommended analysers); package versions only in `BE/Directory.Packages.props` (central package management).
-- **Local scanner (Pi client), in `LocalScanner/`: Python 3.11+**, standard library only at runtime (lean thin client); `pytest` and `ruff` for development. The simulator (card #66) imports the `cupboard_pi` package's ingest client and payload models, so keep them free of Pi-only dependencies.
+- **Local scanner (Pi client), in `LocalScanner/`: Python 3.11+**, standard library only at runtime (lean thin client); `pytest` and `ruff` for development. The simulator (card #66) imports the `cupboard_pi` package's ingest client and payload models, so keep them free of Pi-only dependencies. The shared ingest contract lives in `cupboard_pi.payloads` (scan event, heartbeat, barcode validation) and `cupboard_pi.identity` (`HUB_ID`, `SCANNERS=deviceId=in|out,...`).
 
 ### Build and test
 
@@ -169,6 +169,13 @@ Read-only scripts in `deploy/verify/` for checking cards against the **live** sy
 | `deploy/verify/ping.sh` | See both Function apps answer `/api/ping`, and which commit each runs. |
 | `deploy/verify/logs.sh <ingest\|api> [minutes=30] [rows=50]` | Read recent requests, traces and exceptions for one app (newest first). It queries the Log Analytics workspace behind App Insights; ingestion lags 1–3 minutes. |
 | `deploy/verify/cosmos.sh <container> ["SELECT ..."]` | Read documents from a container (default `SELECT * FROM c`, at most 100 shown). Only `SELECT` is allowed. Cross-partition `TOP`, `ORDER BY`, `GROUP BY` and aggregates aren't supported: filter on the partition key instead. |
+
+**Scan and heartbeat simulator** (`tools/simulator/`, see its README): sends scan events and heartbeats to the live ingest Function exactly as the Pi does, using the Pi package's own client and payload models. `cupboard-simulator [--dry-run] scan --role in|out --barcode <digits>`, `scans --file <json>` (a list of `{barcode, role}` or the phone scanner app's export), `resend --scan-id <id>`, `heartbeat [--every <s> --for <min>]`. It reads `HUB_ID` and `SCANNERS` like the Pi (`--env-file LocalScanner/.env.example` works for dry runs) and fetches the function key at runtime without ever showing it.
+
+**Rules for simulating against the live system:**
+- There's **one live environment**, so simulated scans create **real** stock. Only simulate items Gary **actually has**, with their real barcodes (from Gary, or his phone scanner app), unless a card says otherwise.
+- Anything sent only to test must be **undone** (e.g. checked out again) and recorded in the card comment.
+- Until [Feature] Pi reads both scanners and sends scans (#67) is Done, a verification step saying "Gary scans X" means: get the barcode from Gary and send it with the simulator.
 
 - When querying App Insights yourself, query the **workspace** (`az monitor log-analytics query`, tables `AppRequests`, `AppTraces`, `AppExceptions`, `AppDependencies`); `az monitor app-insights query` returned nothing here. `last` and `kind` are reserved words in KQL.
 - **Evidence pasted into Trello must have keys, tokens and personal data redacted.** The scripts never print the function key, but check anything you paste.

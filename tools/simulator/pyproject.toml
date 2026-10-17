@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cupboard-simulator"
+version = "0.1.0"
+description = "Sends scan events and heartbeats to Cupboard Tracker ingest, exactly as the Pi does (a stand-in until it's live)."
+requires-python = ">=3.11"
+# The Pi package (LocalScanner/), installed alongside: its client, payloads and identity are imported, never copied.
+dependencies = ["cupboard-pi"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+cupboard-simulator = "cupboard_simulator.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+"src/cupboard_simulator/azure.py" = ["S603", "S607"]  # runs the az CLI with fixed arguments
