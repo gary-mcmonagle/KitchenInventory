@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Application: use cases, and interfaces for external services. No Azure or HTTP types. -->
+  <ItemGroup>
+    <ProjectReference Include="..\CupboardTracker.Domain\CupboardTracker.Domain.csproj" />
+  </ItemGroup>
+</Project>
