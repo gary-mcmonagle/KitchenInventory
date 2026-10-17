@@ -11,4 +11,4 @@ ruff check . && ruff format --check .
 python -m cupboard_pi        # needs the variables in .env.example set in the environment
 ```
 
-The ingest client and (later) the payload models are imported by the scan and heartbeat simulator (card #66), so keep them importable and free of Pi-only dependencies.
+The ingest client (`ingest_client`), payload models (`payloads`: scan event, heartbeat, barcode validation) and identity config (`identity`: `HUB_ID`, `SCANNERS`) are imported by the scan and heartbeat simulator (card #66), so keep them importable and free of Pi-only dependencies.
