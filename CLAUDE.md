@@ -154,11 +154,27 @@ Spikes are verified by checking the write-up answers the card's question and its
 There is **one environment, and it's the live household system**. Treat it with care.
 
 - Each component gets its own deployment script under `deploy/` once its deployment task is done. Document each script here as it lands:
-  - Infra (Bicep): _TBD_
+  - **Infra (Bicep): `deploy/infra.sh [--yes] [--what-if-only]`.** Deploys `infra/main.bicep` with `infra/main.bicepparam` at subscription scope (it creates the resource group). It shows the signed-in subscription, prints a **what-if**, and deploys only after confirmation (`--yes` skips the prompt; use it only when Gary has approved the what-if). Safe to re-run: it reads each Function app's live `COMMIT_SHA` and passes it back, so infra never resets the deployed commit. A re-run with no template changes leaves the live resources **identical** (checked on #31 by snapshotting the group before and after). **What-if still lists some "Modify" entries that are false positives**, not real changes: app settings (what-if can't read them, so they always show as "Create"), role assignments' `principalId` (a managed identity's ID can't be resolved during what-if), and read-only or server-defaulted properties (e.g. Cosmos `sqlEndpoint`, storage blob-service defaults, App Insights `Flow_Type`). Look for anything else. Prints the outputs (app names, hostnames, Cosmos endpoint, App Insights name).
   - Function apps: _TBD_
   - UI (Static Web Apps): _TBD_
   - Pi client: _TBD_
 - Never delete or overwrite Cosmos data, containers or resources outside what a card asks for. Anything destructive or irreversible: stop and ask in a card comment.
+
+### Azure resources and naming
+
+Everything lives in **`rg-cupboard-tracker`** in **UK South** (the subscription holds other projects; never touch anything outside this group). Names are `<type>-cupboard-<role>[-<suffix>]`, using the Azure abbreviations, with a 6-character `suffix` (from `uniqueString(subscription, resource group)`) only where a name must be globally unique:
+
+| Resource | Name |
+|---|---|
+| Resource group | `rg-cupboard-tracker` |
+| Log Analytics / Application Insights | `log-cupboard-tracker` / `appi-cupboard-tracker` |
+| Cosmos DB (serverless), database `cupboard` | `cosmos-cupboard-<suffix>` |
+| Function apps (Flex Consumption, one plan each) | `func-cupboard-ingest-<suffix>`, `func-cupboard-api-<suffix>`; plans `plan-cupboard-ingest`, `plan-cupboard-api` |
+| Storage (one per Function app; no dashes allowed) | `stcupboarding<suffix>`, `stcupboardapi<suffix>` |
+
+Tags on everything: `app=cupboard-tracker`, `environment=live`, `managedBy=bicep` (plus `component=ingest|api` on each Function app's resources).
+
+**No keys anywhere:** Cosmos has local (key) auth disabled and both apps use their system-assigned managed identities with the **Cosmos DB Built-in Data Contributor** role on the database. Storage has shared-key access disabled (the apps use **Storage Blob Data Owner** on their own account for host storage and the deployment package). Application Insights accepts only Entra-authenticated telemetry (**Monitoring Metrics Publisher**). App settings hold endpoints and names only (`COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `AzureWebJobsStorage__accountName`, the App Insights connection string, `COMMIT_SHA`).
 
 ---
 
@@ -187,8 +203,8 @@ docs/
   domain-language.md
   data-model.md
   spikes/
-deploy/                          # deployment scripts (not yet)
-infra/                           # Bicep (not yet)
+deploy/                          # deployment scripts (infra.sh)
+infra/                           # Bicep: main.bicep, main.bicepparam, modules/
 ```
 
 Older cards may say `src/`, `pi/` or `ui/`: read those as `BE/src/`, `LocalScanner/` and `FE/`. Where a card names a new top-level folder (e.g. `tools/simulator/`), check with Gary which of the three it belongs in.
