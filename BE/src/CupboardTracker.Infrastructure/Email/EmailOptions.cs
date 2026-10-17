@@ -16,6 +16,11 @@ public sealed record EmailOptions(Uri Endpoint, string Sender, IReadOnlyDictiona
             recipients[NotificationKind.OfflineAlert] = alertTo.Trim();
         }
 
+        if (config["DIGEST_EMAIL_TO"] is { Length: > 0 } digestTo)
+        {
+            recipients[NotificationKind.DailyDigest] = digestTo.Trim();
+        }
+
         return new EmailOptions(new Uri(endpoint), Required(config, "EMAIL_SENDER"), recipients);
     }
 
@@ -28,6 +33,7 @@ public sealed record EmailOptions(Uri Endpoint, string Sender, IReadOnlyDictiona
     public static string SettingFor(NotificationKind kind) => kind switch
     {
         NotificationKind.OfflineAlert => "ALERT_EMAIL_TO",
+        NotificationKind.DailyDigest => "DIGEST_EMAIL_TO",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

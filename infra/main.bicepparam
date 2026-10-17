@@ -15,5 +15,8 @@ param openFoodFactsContactEmail = readEnvironmentVariable('OFF_CONTACT_EMAIL', '
 // Offline alert recipient: deploy/infra.sh sets ALERT_EMAIL_TO from the live API app (or asks), never committed.
 param alertEmailTo = readEnvironmentVariable('ALERT_EMAIL_TO', '')
 
+// Daily digest recipient (#46): same rule, DIGEST_EMAIL_TO.
+param digestEmailTo = readEnvironmentVariable('DIGEST_EMAIL_TO', '')
+
 // The verifier's object ID: set by deploy/infra.sh to the signed-in user unless VERIFIER_PRINCIPAL_ID is already set.
 param verifierPrincipalId = readEnvironmentVariable('VERIFIER_PRINCIPAL_ID', '')

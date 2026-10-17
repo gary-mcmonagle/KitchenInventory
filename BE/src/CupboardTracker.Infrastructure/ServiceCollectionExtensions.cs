@@ -1,5 +1,6 @@
 using Azure.Communication.Email;
 using Azure.Identity;
+using CupboardTracker.Application.Digest;
 using CupboardTracker.Application.Hubs;
 using CupboardTracker.Application.Notifications;
 using CupboardTracker.Application.Ping;
@@ -66,6 +67,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(sp => new EmailClient(sp.GetRequiredService<EmailOptions>().Endpoint, new DefaultAzureCredential()));
         services.AddSingleton<INotifier, AcsEmailNotifier>();
         services.AddTransient<CheckHubsOffline>();
+
+        // The 9pm daily digest (API timer), through the same notifier.
+        services.AddSingleton<IDigestQueries, CosmosDigestQueries>();
+        services.AddSingleton<ISentDigestRepository, CosmosSentDigestRepository>();
+        services.AddSingleton(_ => new DigestSettings(TimeZoneInfo.FindSystemTimeZoneById("Europe/London")));
+        services.AddTransient<SendDailyDigest>();
 
         return services;
     }
