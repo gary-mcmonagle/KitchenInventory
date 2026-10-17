@@ -12,7 +12,7 @@ Use the terms defined in `docs/domain-language.md` in code, comments, commits an
 
 | Component | Tech | Notes |
 |---|---|---|
-| Pi client | Python, Raspberry Pi 3 (headless) | Lean thin client. Reads both scanners, maps each to a logical `deviceId`, POSTs scan events + periodic heartbeat to the ingest Function. Auth header name/value come from env vars and are abstracted in the client. Deployed via git pull over SSH. |
+| Pi client | Python, Raspberry Pi 3 (headless) | Lean thin client. Reads both scanners, maps each to a logical `deviceId`, POSTs scan events + periodic heartbeat to the ingest Function. Auth header name/value come from env vars and are abstracted in the client. Deployed by `deploy/pi.sh` copying a built wheel over SSH (#33), not git pull. |
 | Ingest Function | .NET Azure Functions | HTTP, function-key auth. Writes append-only scan events to Cosmos. |
 | API / BFF Function | .NET Azure Functions | Entra ID bearer-token auth from the UI. Also hosts change-feed processing and timer functions unless a card says otherwise. |
 | UI | React on Azure Static Web Apps (free tier) | Phone-first, calm and clean. Entra ID sign-in. Live scan feed via Azure SignalR (free tier). |
@@ -190,11 +190,12 @@ Headless Raspberry Pi 3, managed over SSH from the MacBook. No secrets here: the
 |---|---|
 | Host / user | `cupboard-pi.local` / `gary` (SSH key only: password and keyboard-interactive logins are off, root login off) |
 | OS | Raspberry Pi OS 13 "trixie" Lite, 32-bit (`armv7l`), Python 3.13, timezone Europe/London, NTP on |
-| Packages | `git`, `python3`, `python3-venv`, `python3-pip`, `evtest` (scanner spike), `unattended-upgrades` (security updates, on) |
-| App directory | `/opt/cupboard-tracker` (owned by `gary`, 755): the client and its venv, deployed by git |
+| Packages | `git` (installed but unused: deployment is by file copy), `python3`, `python3-venv`, `python3-pip`, `evtest` (scanner spike), `unattended-upgrades` (security updates, on) |
+| App directory | `/opt/cupboard-tracker` (owned by `gary`, 755): releases of the client, each with its own venv, **copied over SSH** by `deploy/pi.sh` (#33; no git clone on the Pi) |
+| Data directory | `/var/lib/cupboard-tracker` (owned by `gary`, 750): the scan queue. Outside the releases, so deploys never wipe it |
 | Config directory | `/etc/cupboard-tracker/` (root, 750): `pi.env` with the ingest URL and function key. **Never in the repo**, never printed |
 
-`deploy/pi-setup.sh` set this up (idempotent; Gary runs it as root because it needs his sudo password: `scp deploy/pi-setup.sh gary@cupboard-pi.local:/tmp/ && ssh -t gary@cupboard-pi.local sudo bash /tmp/pi-setup.sh`). **The agent never types the Pi's sudo password**; anything needing root is a script Gary runs. `gary` is in the `input` group, so scanner input devices can be read without root.
+`deploy/pi-setup.sh` set this up (idempotent; Gary runs it as root because it needs his sudo password: `scp deploy/pi-setup.sh gary@cupboard-pi.local:/tmp/ && ssh -t gary@cupboard-pi.local sudo bash /tmp/pi-setup.sh`). **The agent never types the Pi's sudo password**; anything needing root is a script Gary runs. `gary` is in the `input` group, so scanner input devices can be read without root. Scanners are told apart by the USB port their dongle is in (spike #27, `docs/spikes/27-scanner-input.md`).
 
 ### Azure resources and naming
 
