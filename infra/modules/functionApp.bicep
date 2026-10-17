@@ -90,14 +90,12 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
-    siteConfig: {
-      minTlsVersion: '1.2'
-    }
     functionAppConfig: {
       deployment: {
         storage: {
           type: 'blobContainer'
-          value: '${storage.properties.primaryEndpoints.blob}${deploymentContainerName}'
+          // Built from names (not a runtime reference) so what-if can compare it.
+          value: 'https://${storageAccountName}.blob.${environment().suffixes.storage}/${deploymentContainerName}'
           authentication: {
             type: 'SystemAssignedIdentity'
           }

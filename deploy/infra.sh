@@ -76,5 +76,10 @@ az deployment sub create \
   --location "$LOCATION" \
   --template-file "$TEMPLATE" \
   --parameters "$PARAMS" \
-  --query "properties.outputs" -o json \
-  | python3 -c 'import json,sys; [print(f"{k}: {v[\"value\"]}") for k, v in json.load(sys.stdin).items()]'
+  --query "properties.outputs" -o json > /dev/null
+
+echo
+echo "Outputs:"
+az deployment sub show --name "$DEPLOYMENT_NAME" \
+  --query "properties.outputs | [keys(@), values(@)[].value]" -o json \
+  | python3 -c 'import json, sys; keys, values = json.load(sys.stdin); print("\n".join("  %s: %s" % kv for kv in zip(keys, values)))'

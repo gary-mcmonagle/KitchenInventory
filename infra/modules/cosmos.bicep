@@ -38,6 +38,8 @@ resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
         isZoneRedundant: false
       }
     ]
+    // Azure's default; stated so what-if matches the live account (single region, so it has no effect).
+    enableAutomaticFailover: true
     consistencyPolicy: {
       defaultConsistencyLevel: 'Session'
     }
@@ -70,6 +72,17 @@ resource sqlContainers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/conta
           paths: [c.partitionKey]
           kind: 'Hash'
           version: 2
+        }
+        // Azure's defaults, stated so what-if matches the live containers.
+        indexingPolicy: {
+          automatic: true
+          indexingMode: 'consistent'
+          includedPaths: [{ path: '/*' }]
+          excludedPaths: [{ path: '/"_etag"/?' }]
+        }
+        conflictResolutionPolicy: {
+          mode: 'LastWriterWins'
+          conflictResolutionPath: '/_ts'
         }
       }
     }
