@@ -95,16 +95,50 @@ Each gets a **service principal** (enterprise app).
 - **Who can sign in:** single-tenant means only **users in that tenant**: Gary, plus household members Gary **invites as guests** (Entra admin center → Users → Invite external user). Guests sign in with their own Microsoft account, or with a one-time passcode emailed to them if they don't have one. **Removing someone = deleting the guest.**
 - **Belt and braces:** turn on **"Assignment required"** on the SPA's enterprise app (`appRoleAssignmentRequired: true` on its service principal) and assign each household user **directly**. Assigning a **group** needs Entra ID P1, so use direct assignment. *Check during the registrations task that assignment works on the free tier; if it doesn't, the tenant boundary above is still the control.*
 - **In the API:** the `tid` and `azp` checks mean a token for some other app, or from another tenant, is rejected even if it's otherwise valid.
-- Make sure nobody else is in the tenant who shouldn't use the app. *Gary to confirm.*
+- **Decision (Gary):** use his existing tenant.
 
 ## 6. Registrations as code: Microsoft Graph Bicep extension
 
 - **Recommended:** the **Microsoft Graph Bicep extension** (`extension microsoftGraphV1` in Bicep, configured in `bicepconfig.json`). It's GA (Microsoft identity blog, August 2025) and supports `Microsoft.Graph/applications` and `Microsoft.Graph/servicePrincipals`. Each app needs a stable `uniqueName`, so redeploys update rather than duplicate.
-- Put it in `infra/` as an `entra.bicep` module, deployed by `deploy/infra.sh` with everything else. It outputs the client IDs, tenant ID and scope for the UI deploy and the API's app settings.
+- Put it in `infra/entra.bicep`, deployed **on its own** by `deploy/entra.sh` as the dedicated deployer account (see [Deployment identity](#deployment-identity-least-privilege)). It outputs the client IDs, tenant ID and scope, which the infra, Function and UI deploys take as plain parameters (they aren't secrets).
 - **Order:** the Static Web App before the SPA registration (it needs the hostname); the SPA registration before the API registration (pre-authorisation needs the SPA's client ID).
-- **Permissions:** whoever runs the deployment needs to be able to create app registrations (Application Administrator, or Global Administrator, which Gary is in his own tenant).
-- **To check during the registrations task:** Graph Bicep's reference pages say *personal Microsoft accounts* aren't supported for some resources. If Gary's admin account is a personal Microsoft account (e.g. a Gmail-backed one) and the deployment fails, the fallbacks are: (a) create a cloud-only admin user in the tenant for deployments, or (b) an idempotent `az ad app` script in `deploy/`.
+- **Gary's admin account can't run it.** Microsoft's Graph Bicep reference says "Permissions for personal Microsoft accounts cannot be used to deploy Microsoft Graph resources declared in Bicep files", and Gary's account is Gmail-based. That applies to reading existing Graph resources too, so the main infra deployment can't look the registrations up either; it gets their IDs as parameters.
 - Assigning users to the app ("Assignment required") stays a manual step, done in the Entra admin center when someone is invited.
+
+### Deployment identity (least privilege)
+
+Gary asked for an account limited to exactly what's needed. The design:
+
+**A dedicated cloud-only user**, e.g. `cupboard-deployer@<tenant>.onmicrosoft.com`, created once by Gary in the Entra admin center.
+- It's a member user of the tenant, so Graph Bicep accepts it. No licence or mailbox.
+- **MFA on** (Microsoft Authenticator). Gary signs in as it only when the registrations change, which is rare: first set-up and when a redirect URI changes.
+- It never uses the app, and it isn't assigned to it.
+
+**One Entra role: Application Developer.** Nothing else.
+- What it can do (Microsoft's permissions reference): create app registrations and service principals, becoming their **owner**, and update only the apps it owns. It can also grant OAuth consent on its own behalf, which we don't use.
+- What it can't do: manage users or guests, groups, other people's apps, tenant settings or role assignments.
+- Microsoft marks it "privileged", because an owner can add credentials to the apps it owns. It's still the smallest built-in role that can create app registrations; Application Administrator and Global Administrator are far broader.
+- Because it can only edit apps it owns, it must **create** the registrations (rather than take over ones made by hand). It sets "Assignment required" on the SPA's service principal in Bicep, which it can do as owner.
+
+**Azure access: only what an ARM deployment needs.** The Graph extension runs inside an ARM deployment, which needs a scope to deploy to, but `entra.bicep` contains no Azure resources.
+- A **custom role** ("Cupboard Tracker deployment runner") assigned on the project's resource group, with only:
+  - `Microsoft.Resources/deployments/*`
+  - `Microsoft.Resources/subscriptions/resourceGroups/read`
+- It can run and read deployments in that one resource group, and can't create, change or delete any Azure resource.
+- The registrations task must confirm this is enough. If ARM asks for more, the fallback is to drop ARM for this step and use an idempotent `az ad app` / `az ad sp` script run as the same user, which needs **no Azure role at all**.
+
+**What stays with Gary's own admin account** (in the portal, by hand): creating the deployer user and giving it its role (once), inviting guests, and assigning users to the app.
+
+**Recommended hardening:** set the tenant's "Users can register applications" to **No**. Only the deployer (through its role) and Gary can then create apps. Guests can't by default anyway.
+
+**Running it from the Mac:** use a separate Azure CLI profile, so the deployer's sign-in never mixes with Gary's:
+
+```bash
+AZURE_CONFIG_DIR=~/.azure-cupboard-deployer az login --tenant <tenantId>   # interactive, with MFA
+AZURE_CONFIG_DIR=~/.azure-cupboard-deployer ./deploy/entra.sh
+```
+
+**Deploy order:** `deploy/infra.sh` (Gary: Static Web App and the rest) → `deploy/entra.sh` (deployer: the registrations, taking the Static Web App hostname as input) → `deploy/infra.sh` / `deploy/functions.sh` / `deploy/ui.sh` with the client IDs as parameters. After the first set-up, `entra.sh` only runs when the registrations change.
 
 ## 7. Cost
 
@@ -160,19 +194,19 @@ sequenceDiagram
 
 1. **UI:** MSAL React, auth code + PKCE, redirect flow, single-tenant authority, `localStorage` cache, `acquireTokenSilent` → redirect fallback. Call the API Function app directly; CORS allows the Static Web App origin.
 2. **API:** validate bearer tokens in a worker middleware (`Microsoft.IdentityModel`), checking signature, issuer, audience, tenant, `azp` and `scp`. Expose `CurrentUser` to Application. Don't use Easy Auth.
-3. **Registrations:** single-tenant API (`access_as_user`, pre-authorising the SPA, v2 tokens) and SPA (SPA redirect URIs), as code with the Graph Bicep extension in `infra/`.
+3. **Registrations:** single-tenant API (`access_as_user`, pre-authorising the SPA, v2 tokens) and SPA (SPA redirect URIs), as code with the Graph Bicep extension in `infra/entra.bicep`. Deployed by a dedicated cloud-only user with only the **Application Developer** role, plus a deployments-only custom role on the resource group.
 4. **Access:** Gary's tenant only; invite household members as guests; "Assignment required" with direct user assignment if available on the free tier.
 5. **Cost:** free.
 
-## Decisions for Gary
+## Decisions (Gary, 2026-10-17)
 
-1. Is the Entra tenant behind your Azure subscription OK to hold the app registrations and the household guests? Is anyone in it who shouldn't use the app?
-2. Is your Azure admin account a **personal Microsoft account** (e.g. signed up with Gmail) or a user created in the tenant? That decides whether the Graph Bicep deployment can run as you, or needs a cloud-only admin user.
-3. Is roughly-daily re-sign-in (usually without a password, if you tick "Stay signed in") acceptable on the phone?
+1. **Tenant:** use Gary's existing tenant.
+2. **Admin account:** Gary's is a personal (Gmail-based) Microsoft account, so the registrations are deployed by a dedicated account **limited to exactly what's needed**: see [Deployment identity](#deployment-identity-least-privilege).
+3. **Re-sign-in:** roughly daily is fine.
 
 ## Suggested follow-up cards (not created)
 
-- **Notes for [Task] Entra ID app registrations** (no new card): build the two registrations above in `infra/entra.bicep` with the Graph extension, in the order given. Test "Assignment required" on the free tier and the deploy as Gary's account type, and record the fallback used, if any.
+- **Notes for [Task] Entra ID app registrations** (no new card): build the two registrations above in `infra/entra.bicep` with the Graph extension, in the order given. Includes Gary's one-off manual steps (create the deployer user with MFA, give it Application Developer, assign the custom deployment role), `deploy/entra.sh`, and confirming the custom role is enough (fallback: an `az ad` script). Test "Assignment required" on the free tier.
 - **Notes for [Task] React UI skeleton** (no new card): MSAL React set up as above, the `VITE_…` config from Bicep outputs, and a strict Content Security Policy in `staticwebapp.config.json`.
 - **[Task] API bearer-token validation middleware:** the middleware, validator, `CurrentUser`, CORS in Bicep, and the tests listed above. It could be part of the first API feature ([Feature] Stock list on the phone) instead of a card of its own.
 
@@ -187,4 +221,6 @@ sequenceDiagram
 - Refresh token lifetimes: https://learn.microsoft.com/en-us/entra/identity-platform/refresh-tokens
 - Group-based app assignment needs P1/P2: https://learn.microsoft.com/en-us/entra/identity/users/groups-saasapps
 - External ID pricing (guests free up to 50,000 MAU): https://learn.microsoft.com/en-us/entra/external-id/external-identities-pricing
+- Application Developer role (create apps as owner, update owned apps only): https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#application-developer
+- Graph Bicep applications reference (personal Microsoft accounts can't deploy Graph resources): https://learn.microsoft.com/en-us/graph/templates/reference/applications?view=graph-bicep-1.0
 - Graph Bicep templates GA: https://devblogs.microsoft.com/identity/bicep-templates-for-microsoft-entra-id-resources-is-ga/ ; reference (e.g. oauth2PermissionGrants, account-type support): https://learn.microsoft.com/en-us/graph/templates/reference/oauth2permissiongrants?view=graph-bicep-1.0
