@@ -14,4 +14,5 @@ public sealed record EmailContent(string Subject, string Html, string PlainText)
 public enum NotificationKind
 {
     OfflineAlert,
+    DailyDigest,
 }

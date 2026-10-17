@@ -18,6 +18,7 @@ var containers = [
   { name: 'inventoryItems', partitionKey: '/productId' }
   { name: 'devices', partitionKey: '/deviceId' }
   { name: 'unmatchedCheckOuts', partitionKey: '/id' }
+  { name: 'sentDigests', partitionKey: '/id' }
   { name: 'leases', partitionKey: '/id' }
 ]
 

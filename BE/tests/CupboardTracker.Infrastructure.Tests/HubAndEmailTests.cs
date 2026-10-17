@@ -102,3 +102,35 @@ public sealed class HubAndEmailTests
         Assert.Null(read.LastHeartbeat.Scanners);
     }
 }
+
+public sealed class DigestInfrastructureTests
+{
+    [Fact]
+    public void Digest_emails_go_to_the_digest_address()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ACS_ENDPOINT"] = "https://acs.example.com",
+            ["EMAIL_SENDER"] = "DoNotReply@example.azurecomm.net",
+            ["ALERT_EMAIL_TO"] = "alerts@example.com",
+            ["DIGEST_EMAIL_TO"] = "digest@example.com",
+        }).Build();
+
+        var options = EmailOptions.FromConfiguration(config);
+
+        Assert.Equal("digest@example.com", options.RecipientFor(NotificationKind.DailyDigest));
+        Assert.Equal("alerts@example.com", options.RecipientFor(NotificationKind.OfflineAlert));
+    }
+
+    [Fact]
+    public void Sent_digest_ids_are_the_date() =>
+        Assert.Equal("2026-10-18", CosmosSentDigestRepository.Id(new DateOnly(2026, 10, 18)));
+
+    [Fact]
+    public void Digest_rows_read_product_and_barcode()
+    {
+        var id = Guid.NewGuid();
+        var unit = CosmosDigestQueries.ToUnit(new System.Text.Json.Nodes.JsonObject { ["productId"] = id.ToString(), ["barcode"] = null });
+        Assert.Equal(new CupboardTracker.Application.Digest.DigestUnit(id, null), unit);
+    }
+}

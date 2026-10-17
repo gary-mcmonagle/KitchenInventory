@@ -127,7 +127,11 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 ## Monitoring & notifications
 
-**Daily digest** – the 9pm email summarising current stock and that day's activity.
+**Daily digest** – the email sent at 21:00 UK time every day, quiet days included: that day's check-ins and check-outs, everything in stock, and unknown items by barcode.
+- In code: `SendDailyDigest`, `BuildDailyDigest`, `NotificationKind.DailyDigest`
+
+**Daily digest window** – the period a digest covers: 21:00 UK time the day before to 21:00 UK time on the digest's date (start inclusive, end exclusive). 23 or 25 hours on clock-change days, so nothing is counted twice or missed.
+- In code: `DigestWindow`
 
 **Error alert** – an email sent when errors occur in Azure.
 

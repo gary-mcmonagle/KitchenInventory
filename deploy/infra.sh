@@ -5,8 +5,8 @@
 #   --yes           deploy without the confirmation prompt
 #   --what-if-only  show the what-if and stop
 #
-# Safe to re-run: the template is idempotent, and the live COMMIT_SHA of each Function app (and the two email
-# addresses, OFF_CONTACT_EMAIL and ALERT_EMAIL_TO, which are never committed) are read first and passed back in,
+# Safe to re-run: the template is idempotent, and the live COMMIT_SHA of each Function app (and the email
+# addresses OFF_CONTACT_EMAIL, ALERT_EMAIL_TO and DIGEST_EMAIL_TO, which are never committed) are read first and passed back in,
 # so a re-run never resets them.
 set -euo pipefail
 
@@ -81,6 +81,19 @@ if [[ -z "${ALERT_EMAIL_TO:-}" ]]; then
   read -r -p "Email address for the offline alert (stored as an app setting, not committed): " ALERT_EMAIL_TO
 fi
 export ALERT_EMAIL_TO
+
+# The daily digest recipient (#46): same rule.
+if [[ -z "${DIGEST_EMAIL_TO:-}" ]]; then
+  DIGEST_EMAIL_TO=$(current_setting api DIGEST_EMAIL_TO)
+fi
+if [[ -z "${DIGEST_EMAIL_TO:-}" ]]; then
+  if $YES; then
+    echo "DIGEST_EMAIL_TO isn't set on the API app; pass it in the environment when using --yes." >&2
+    exit 1
+  fi
+  read -r -p "Email address for the 9pm daily digest (stored as an app setting, not committed): " DIGEST_EMAIL_TO
+fi
+export DIGEST_EMAIL_TO
 
 INGEST_COMMIT_SHA=$(current_sha ingest); export INGEST_COMMIT_SHA
 API_COMMIT_SHA=$(current_sha api); export API_COMMIT_SHA

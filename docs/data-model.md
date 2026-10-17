@@ -9,7 +9,7 @@ All decisions in this document are agreed with Gary. They're listed under [Decis
 ## Overview
 
 - **Cosmos DB serverless**, one account, **one database**.
-- **Five data containers** plus one infrastructure container for the change feed. The Bicep baseline creates all six.
+- **Six data containers** plus one infrastructure container for the change feed. The Bicep creates all seven (`sentDigests` was added by #46).
 - Single environment, and it is the live household system.
 - Volumes are tiny: one household, tens of scans a day, a few hundred units in stock. Partition keys are therefore chosen for **simple, cheap point reads and idempotent writes**, not for scale. Cross-partition queries over this much data are cheap and acceptable.
 - **A product's identity is its own `productId`, not a barcode.** Loose items (fruit, bakery, deli) are products with no barcode, and one product can have several barcodes. Barcodes are an optional way to find a product, through [barcode lookup](#barcode-lookup-document) documents.
@@ -24,6 +24,7 @@ All decisions in this document are agreed with Gary. They're listed under [Decis
 | `inventoryItems` | One document per unit | `/productId` | Updated in place; soft-deleted (status), never deleted |
 | `devices` | One document per scanner's logical device, plus one per hub (`kind: "hub"`) | `/deviceId` | Updated in place |
 | `unmatchedCheckOuts` | Check-out scans with no unit in stock | `/id` | Created once; updated only to dismiss |
+| `sentDigests` | One record per daily digest sent (or being sent) | `/id` | Created once per day; deleted only if that day's send fails |
 | `leases` | Change-feed processor bookkeeping | `/id` | Managed by the Functions Cosmos DB trigger |
 
 ### Who writes and reads what
@@ -35,7 +36,7 @@ All decisions in this document are agreed with Gary. They're listed under [Decis
 | API Function: HTTP (BFF) | read | read / create (loose items) / update (name a product) | read / create (loose items) / update (check out, undo) | read | read / update (dismiss) |
 | API Function: lookup-retry timer | – | read / update | – | – | – |
 | API Function: offline-alert timer | – | – | – | read hubs / update (`offlineAlertSentAt`) | – |
-| API Function: daily-digest timer | read | read | read | read | read |
+| API Function: daily-digest timer (also creates its `sentDigests` record) | – | read | read | – | – |
 
 Ingest only writes scan events, devices and hubs. It never looks up products or creates units.
 
@@ -368,6 +369,27 @@ A hub that has never sent a heartbeat has no document, so it never alerts.
 
 ---
 
+## Container: `sentDigests`
+
+**Purpose:** stops a second daily digest for the same day (#46). The timer runs twice an evening (20:00 and 21:00 UTC), and a retry or a double fire must not send twice.
+
+**Written by:** the daily-digest timer. It **creates** the day's record before sending (a claim: a conflict means already sent), and deletes it only if that send fails, so the retry can send. **Read by:** nobody else.
+
+```json
+{
+  "id": "2026-10-18",
+  "windowStart": "2026-10-17T20:00:00.000Z",
+  "windowEnd": "2026-10-18T20:00:00.000Z",
+  "claimedAt": "2026-10-18T20:00:01.234Z"
+}
+```
+
+**Partition key: `/id`** (the [daily digest window](domain-language.md)'s end date, UK time). Point reads and creates only.
+
+**Lifecycle:** one document per day, kept (a few hundred bytes a day).
+
+---
+
 ## Container: `leases` (infrastructure)
 
 Used by the Azure Functions Cosmos DB trigger to track its position in the `scanEvents` change feed. Not a domain container; no application code reads or writes it.
@@ -466,7 +488,7 @@ Note this means a *genuine* second scan is never mistaken for a resend, because 
 | Stock list (grouped by product) | All `inStock` units; their products by id | Cross-partition (both) |
 | Item detail | The product; its `inStock` units | Single |
 | Name a product / edit details | Product point read and replace | Single |
-| Daily digest | Units checked in or out in the window; their products; unmatched check-outs in the window | Cross-partition |
+| Daily digest | All in-stock units; units checked in (`checkedInAt`) or out (`checkedOutAt`) in the window; their products by id | Cross-partition (units), point reads (products) |
 | Scanners screen | Undismissed unmatched check-outs; in-stock units whose product is `noMatch` / `lookupFailed`; devices | Cross-partition |
 | Lookup-retry timer | Products with `status = lookupFailed` | Cross-partition |
 | Offline alert | Hubs (`kind = 'hub'`) | Cross-partition (one document) |

@@ -34,6 +34,10 @@ param openFoodFactsMaxRequestsPerMinute int = 12
 @secure()
 param alertEmailTo string = ''
 
+@description('Who receives the 9pm daily digest. Supplied at deploy time by deploy/infra.sh; never committed.')
+@secure()
+param digestEmailTo string = ''
+
 @description('Minutes a hub may be silent before the offline alert email (#44).')
 @minValue(1)
 param offlineThresholdMinutes int = 20
@@ -139,6 +143,7 @@ module api 'modules/functionApp.bicep' = {
       ACS_ENDPOINT: communication.outputs.endpoint
       EMAIL_SENDER: communication.outputs.senderAddress
       ALERT_EMAIL_TO: alertEmailTo
+      DIGEST_EMAIL_TO: digestEmailTo
       OFFLINE_THRESHOLD_MINUTES: string(offlineThresholdMinutes)
     }
   }
