@@ -137,3 +137,17 @@ The stock list (#49): every product with units in stock, grouped and sorted so t
 | `status` | `known`, `noMatch` or `lookupFailed`. |
 
 `Cache-Control: no-store`.
+
+### `POST /api/products/{productId}/check-out`
+
+Check out **one** unit of the product from the stock list (#50): the same unit a check-out scan would take (soonest estimated expiry, then oldest check-in), ETag-guarded so the app and a scanner never take the same unit. No body. The unit gets `status: checkedOut`, `checkedOutAt` = now, `checkOutSource: "ui"` and `checkedOutBy` = the caller's object ID.
+
+- **200** `{ "unitId": "…", "productId": "…", "displayName": "Beef Gravy", "remainingCount": 1 }`
+- **409** `{ "error": "Nothing of that product is in stock." }`: nothing changed.
+
+### `POST /api/units/{unitId}/undo-check-out`
+
+Put a checked-out unit back in stock, clearing its check-out details. **Idempotent:** a unit already in stock is left alone. No body.
+
+- **200** `{ "unitId": "…", "productId": "…", "count": 2, "restored": true }`: `count` is the product's in-stock units now; `restored` is `false` if it was already in stock.
+- **404** `{ "error": "No such unit." }`

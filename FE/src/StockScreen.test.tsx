@@ -41,7 +41,10 @@ test("named products in one section, in the API's order, with counts and meta li
     const section = await screen.findByRole("region", { name: /In stock/ });
     expect(within(section).getByText("2 items")).toBeInTheDocument();
     const rows = within(section).getAllByRole("listitem");
-    expect(rows.map((r) => r.textContent)).toEqual(["BBeef GravyBisto · 230g · ×2", "Wwalnut halves200g"]);
+    expect(rows.map((r) => r.textContent)).toEqual([
+        "BBeef GravyBisto · 230g · ×2Check out",
+        "Wwalnut halves200gCheck out",
+    ]);
     expect(screen.getByText("3 items")).toBeInTheDocument(); // header summary: units
     expect(screen.queryByRole("region", { name: /Waiting for a name/ })).not.toBeInTheDocument();
 });
@@ -76,14 +79,18 @@ test("unnamed products wait for a name, with the grouped barcode and scan date",
     expect(within(rows[1]).getByText("Barcode 2005 5363 · ×2")).toBeInTheDocument();
 });
 
-test("nothing tappable that belongs to later cards", async () => {
+test("only Check out on named rows; nothing tappable that belongs to later cards", async () => {
     const { api } = fakeApi(
         stockOf(product({}), product({ status: "noMatch", displayName: "Unknown item (1)" })),
     );
     render(<StockScreen api={api} />);
 
     await screen.findByRole("region", { name: /In stock/ });
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+        "Check out one Beef Gravy",
+    ]);
+    const unnamed = screen.getByRole("region", { name: /Waiting for a name/ });
+    expect(within(unnamed).queryAllByRole("button")).toHaveLength(0);
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();

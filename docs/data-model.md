@@ -231,6 +231,7 @@ Each retry ends in `known` (found), `noMatch` (not found; final) or `lookupFaile
   "checkedOutAt": null,
   "checkOutScanId": null,
   "checkOutSource": null,
+  "checkedOutBy": null,
 
   "estimatedExpiryDate": null,
   "expiryIsApproximate": null
@@ -245,14 +246,15 @@ Each retry ends in `known` (found), `noMatch` (not found; final) or `lookupFaile
 | `status` | `inStock` or `checkedOut`. |
 | `checkInScanId`, `checkInDeviceId` | The scan and device that checked it in. `null` for units added in the app. |
 | `checkedInAt` | The scan's `scannedAt` (or the time it was added in the app). **This is the bought date**; there is no separate field. |
-| `checkedOutAt`, `checkOutScanId` | Set when checked out (the check-out scan's `scannedAt` and ID). |
-| `checkOutSource` | `scanner` (check-out scans) or `ui` (later: check-out from the stock list). |
+| `checkedOutAt`, `checkOutScanId` | Set when checked out: the check-out scan's `scannedAt` and ID, or for a check-out in the app the time it happened and `checkOutScanId: null`. |
+| `checkOutSource` | `scanner` (check-out scans) or `ui` (check-out from the stock list, #50). |
+| `checkedOutBy` | For `ui` check-outs, the user's Entra object ID (`oid`); `null` for scanner check-outs. |
 
 The unit doesn't copy the product's status or name: the product is always one point read away. (The earlier `productStatus` field is gone, because every unit now has a product, including `lookupFailed` ones.)
 
 **Reserved, not used yet:** `estimatedExpiryDate` and `expiryIsApproximate` (stock-take units), set by the expiry feature.
 
-**Undo check-out** (later feature): set `status` back to `inStock` and clear `checkedOutAt`, `checkOutScanId`, `checkOutSource`.
+**Undo check-out** (#50, `POST /api/units/{unitId}/undo-check-out`): set `status` back to `inStock` and clear `checkedOutAt`, `checkOutScanId`, `checkOutSource` and `checkedOutBy`, so the unit is exactly as before. ETag-guarded; undoing a unit already in stock changes nothing. Check-out from the app uses the same selection rule and ETag handling as a check-out scan, so the app and a scanner never take the same unit.
 
 **Partition key: `/productId`.**
 - The hot queries are per product: "in-stock units of product X" (check-out selection, item detail, counts). Single-partition.

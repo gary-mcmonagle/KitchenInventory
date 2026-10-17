@@ -4,6 +4,16 @@ import type { AppConfig } from "./config";
 /** The API refused this user (403): signed in, but not allowed. */
 export class NoAccessError extends Error {}
 
+/** The API answered with an error status (other than 401/403). */
+export class ApiError extends Error {
+    constructor(
+        readonly status: number,
+        message: string,
+    ) {
+        super(message);
+    }
+}
+
 /** Sign-in is needed again (the user is being redirected). */
 export class SignInRequiredError extends Error {}
 
@@ -32,6 +42,20 @@ export interface Stock {
     products: StockProduct[];
 }
 
+export interface CheckedOut {
+    unitId: string;
+    productId: string;
+    displayName: string;
+    remainingCount: number;
+}
+
+export interface UndoneCheckOut {
+    unitId: string;
+    productId: string;
+    count: number;
+    restored: boolean;
+}
+
 export interface Ping {
     status: string;
     commit: string;
@@ -57,6 +81,16 @@ export class ApiClient {
         return this.get<Stock>("/api/stock");
     }
 
+    /** Checks out one unit (409 → ApiError: nothing in stock). */
+    checkOut(productId: string): Promise<CheckedOut> {
+        return this.send<CheckedOut>("POST", `/api/products/${encodeURIComponent(productId)}/check-out`);
+    }
+
+    /** Puts a checked-out unit back in stock (idempotent). */
+    undoCheckOut(unitId: string): Promise<UndoneCheckOut> {
+        return this.send<UndoneCheckOut>("POST", `/api/units/${encodeURIComponent(unitId)}/undo-check-out`);
+    }
+
     /** Public: no token needed. */
     async ping(): Promise<Ping> {
         const response = await this.fetcher(`${this.config.apiBaseUrl}/api/ping`);
@@ -64,18 +98,22 @@ export class ApiClient {
         return (await response.json()) as Ping;
     }
 
-    async get<T>(path: string): Promise<T> {
+    get<T>(path: string): Promise<T> {
+        return this.send<T>("GET", path);
+    }
+
+    async send<T>(method: "GET" | "POST", path: string): Promise<T> {
         const token = await this.token();
-        const response = await this.fetcher(`${this.config.apiBaseUrl}${path}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
+        const init: RequestInit = { headers: { Authorization: `Bearer ${token}` } };
+        if (method !== "GET") init.method = method;
+        const response = await this.fetcher(`${this.config.apiBaseUrl}${path}`, init);
         if (response.status === 401) {
             await this.reauthenticate();
         }
         if (response.status === 403) {
             throw new NoAccessError("You're signed in, but this account can't use Cupboard Tracker.");
         }
-        if (!response.ok) throw new Error(`${path} failed: HTTP ${response.status}`);
+        if (!response.ok) throw new ApiError(response.status, `${path} failed: HTTP ${response.status}`);
         return (await response.json()) as T;
     }
 

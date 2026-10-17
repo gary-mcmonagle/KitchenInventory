@@ -20,6 +20,7 @@
     --danger-fg: #8e1f17;
     --pending-bg: #ecefed; /* unnamed items: tile and "No name yet" badge */
     --pending-fg: #4a5851; /* unnamed items: tile text */
+    --toast-action: #a8e0c2; /* Undo on the dark toast */
 
     --radius-input: 14px; /* inputs, toasts, feed rows */
     --radius-card: 16px; /* stock cards */

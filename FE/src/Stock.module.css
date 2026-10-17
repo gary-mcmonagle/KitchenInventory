@@ -241,3 +241,65 @@
         animation: none;
     }
 }
+
+.actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-left: 56px;
+}
+
+.checkOut {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: var(--radius-button);
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.checkOut:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* The dark toast at the bottom, as in the mockup (no bottom nav yet, so it sits lower). */
+.toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 24px;
+    max-width: calc(var(--design-width) - 32px);
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 6px 6px 16px;
+    min-height: 52px;
+    background: var(--ink);
+    color: #ffffff;
+    border-radius: var(--radius-input);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.undo {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    color: var(--toast-action);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
