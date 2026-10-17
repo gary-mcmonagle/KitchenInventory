@@ -462,7 +462,7 @@ None of these are written or read yet. They are listed so the first features lea
 
 ## Decisions
 
-All agreed with Gary (card #29's comment, card #57 and spike #28).
+All agreed with Gary (card #29's comment, card #57, spike #28, and Gary's approval of the new terms on 2026-10-17).
 
 1. **Unit selection on check-out:** soonest estimated expiry, then oldest `checkedInAt`, then `id`. **Confirmed.**
 2. **Scan ID:** Pi-generated UUID v4, used as the scan event `id` and the check-in unit `id`. **Confirmed.**
@@ -473,4 +473,4 @@ All agreed with Gary (card #29's comment, card #57 and spike #28).
 7. **Containers:** six (`scanEvents`, `products`, `inventoryItems`, `devices`, `unmatchedCheckOuts`, `leases`). The Bicep baseline creates all six. **Confirmed.**
 8. **Hub:** defined by the offline alert card (#44). **Confirmed.**
 9. **Display names:** used exactly as Open Food Facts returns them (spike #28). **Confirmed.**
-10. **Product statuses:** `known`, `noMatch`, `lookupFailed`, with `source` (`openFoodFacts`, `manual`, `photo`) saying where a known product's name came from. This matches the feature cards (#45 Check-in adds to stock, #51 Name an unknown item, #53 Item detail).
+10. **Product statuses:** `known`, `noMatch`, `lookupFailed`, with `source` (`openFoodFacts`, `manual`, `photo`) saying where a known product's name came from, as the feature cards use them (#45 Check-in adds to stock, #51 Name an unknown item, #53 Item detail). Replaces the earlier `matched` / `named` / `identified`. **Confirmed.**
