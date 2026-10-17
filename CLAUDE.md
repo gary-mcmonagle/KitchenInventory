@@ -117,8 +117,9 @@ Never pick from Gathering Requirements. Tell the user which card you picked and 
 
 1. Read the card's acceptance criteria and verification steps, plus the implementation comment.
 2. Test against the **deployed** system, not local code. Exercise each acceptance criterion.
-3. Comment with evidence: the steps you ran, relevant log excerpts (Application Insights / Function logs / Pi logs), and screenshots of the UI where the Trello tools allow attaching them — otherwise describe what you saw.
-4. Outcome:
+3. **Verification runs against live household data.** Anything you change to test it (a check-out, a name, a dismissal) must be undone before you finish, unless Gary did it for real. Record what you changed and how you restored it in your comment. **Never type a password or other credential** (password, one-time code, temporary access pass, key or token) into any sign-in page or script. The test user signs in **passwordless**: if its session has expired, enter its **username only**, then ask Gary to approve on his phone, giving him the number shown on screen. If a password field appears, stop and ask Gary.
+4. Comment with evidence: the steps you ran, relevant log excerpts (Application Insights / Function logs / Pi logs), and screenshots of the UI where the Trello tools allow attaching them — otherwise describe what you saw.
+5. Outcome:
    - **All criteria pass** → move to **Done**.
    - **Anything fails** → move back to **In Progress** with a comment saying exactly what failed, how to reproduce it, and the evidence.
 
