@@ -39,6 +39,10 @@ resource spaServicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
   appId: spa.appId
   // Only users assigned to the app (in the Entra admin center) can sign in.
   appRoleAssignmentRequired: true
+  // Shows it under the portal's default "Enterprise Applications" filter, where users are assigned.
+  tags: [
+    'WindowsAzureActiveDirectoryIntegratedApp'
+  ]
 }
 
 resource api 'Microsoft.Graph/applications@v1.0' = {
@@ -81,6 +85,9 @@ resource api 'Microsoft.Graph/applications@v1.0' = {
 
 resource apiServicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
   appId: api.appId
+  tags: [
+    'WindowsAzureActiveDirectoryIntegratedApp'
+  ]
 }
 
 // Not secrets: they go to the API app settings and the UI build as plain values.
