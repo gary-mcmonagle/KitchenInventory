@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 
-from cupboard_pi.__main__ import deployed_sha, main
+from cupboard_pi.__main__ import deployed_sha, log_format, main
 
 ENV = {
     "INGEST_URL": "https://ingest.example.net",
@@ -85,3 +85,8 @@ def test_sigterm_stops_the_service_cleanly(tmp_path):
     _, rest = proc.communicate(timeout=10)
     assert proc.returncode == 0
     assert "cupboard-pi stopping" in rest
+
+
+def test_no_timestamp_in_logs_under_systemd():
+    assert "asctime" not in log_format({"JOURNAL_STREAM": "8:12345"})
+    assert "asctime" in log_format({})

@@ -36,8 +36,16 @@ def deployed_sha(package_dir: Path | None = None) -> str:
     return "local"
 
 
+def log_format(env: dict[str, str] | None = None) -> str:
+    """Under systemd (JOURNAL_STREAM is set) the journal adds the timestamp, so don't log a second one."""
+    env = os.environ if env is None else env
+    if env.get("JOURNAL_STREAM"):
+        return "%(levelname)s %(name)s %(message)s"
+    return "%(asctime)s %(levelname)s %(name)s %(message)s"
+
+
 def main(argv: list[str] | None = None, stop: threading.Event | None = None) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format=log_format())
     try:
         config = Config.from_env()
     except ConfigError as e:
