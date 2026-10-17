@@ -168,6 +168,7 @@ There is **one environment, and it's the live household system**. Treat it with 
 Azure Monitor emails `ALERT_EMAIL_TO` when either Function app has an **exception**, a trace at **Error or above**, or a **5xx** request. 4xx validation failures and warnings don't count, so log real failures that need a person at Error, and anything retried or expected at Warning or below. It's in Bicep (`infra/modules/errorAlert.bicep`): the log search rule `alert-cupboard-errors` on the Log Analytics workspace, and the action group `ag-cupboard-alerts`. No app code is involved.
 
 - **When:** every 15 minutes over the last 15 minutes; fires on 1 or more. Allow up to about 20 minutes, because ingestion lags.
+- **New addresses must be verified:** when the action group is created, or `ALERT_EMAIL_TO` changes, Azure emails "Action required: Verify your email" to the address. **Alerts aren't delivered there until Gary clicks it** (found on #48: the first alert fired before verification and its email was dropped).
 - **Noise:** the rule is stateless (no auto-resolve, so no "resolved" emails) and **mutes its actions for 1 hour** after firing. A continuing problem emails at most once an hour.
 - **What failed:** the email has the rule's description. Then run `deploy/verify/logs.sh ingest 30` (or `api`).
 - **Mute it temporarily** (e.g. during planned work): `az monitor scheduled-query update -g rg-cupboard-tracker -n alert-cupboard-errors --disabled true`, then `--disabled false` afterwards. A re-run of `deploy/infra.sh` re-enables it.
