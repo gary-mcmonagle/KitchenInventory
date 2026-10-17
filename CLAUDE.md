@@ -182,7 +182,7 @@ Azure Monitor emails `ALERT_EMAIL_TO` when either Function app has an **exceptio
 - **Look:** design tokens in `FE/src/tokens.css`, from the mockups (a test checks them). Phone-first, 390 px design width.
 - **Sign-in:** MSAL React, auth code + PKCE, redirect flow, single-tenant authority, `localStorage` cache, `acquireTokenSilent` for the API scope. When silent renewal fails (about daily) or the API says 401, the user signs in again and returns to the page they were on; a 403 shows "no access".
 - **Footer:** "Signed in as <name> · API <commit> · UI <commit>", for verification.
-- **Run locally against the deployed API:** `cd FE && cp .env.example .env.local`, fill it in (`az deployment group show -g rg-cupboard-tracker -n cupboard-entra --query properties.outputs` and the API hostname), `npm run dev`.
+- **Run locally against the deployed API:** `cd FE && cp .env.example .env.local`, fill it in (`az deployment group show -g rg-cupboard-tracker -n cupboard-entra --query properties.outputs` and the API hostname), `npm run dev`. In Claude Code, `.claude/launch.json` has a `ui` configuration for the Browser pane's preview (`preview_start` with name `ui`). The test user signs in on `localhost:5173` from the same browser session without a new phone approval; Microsoft first asks "Are you trying to sign in to Cupboard Tracker?" (its standard check for localhost redirects): choose Continue.
 
 ### Sign-in (Entra ID, #36, spike #35)
 
