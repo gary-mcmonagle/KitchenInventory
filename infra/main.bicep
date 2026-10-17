@@ -19,6 +19,9 @@ param ingestCommitSha string = 'not-deployed'
 @description('Commit SHA currently deployed to the API Function app. deploy/infra.sh passes the live value so a re-run never resets it.')
 param apiCommitSha string = 'not-deployed'
 
+@description('Object ID of the person who verifies cards (read-only access: Reader on the group, Log Analytics Reader, Cosmos data reader). Empty skips it.')
+param verifierPrincipalId string = ''
+
 @description('Maximum Flex Consumption instances per Function app (a cost guard; household load is tiny).')
 @minValue(1)
 @maxValue(1000)
@@ -118,6 +121,18 @@ module cosmosDataAccess 'modules/cosmosDataAccess.bicep' = {
   }
 }
 
+module verifierAccess 'modules/verifierAccess.bicep' = if (!empty(verifierPrincipalId)) {
+  scope: rg
+  name: 'verifier-access'
+  params: {
+    principalId: verifierPrincipalId
+    workspaceName: 'log-${appName}-tracker'
+    cosmosAccountName: cosmos.outputs.accountName
+    databaseName: cosmos.outputs.databaseName
+  }
+  dependsOn: [monitoring]
+}
+
 output resourceGroupName string = rg.name
 output ingestFunctionAppName string = ingest.outputs.name
 output ingestFunctionAppHostname string = ingest.outputs.defaultHostname
@@ -127,3 +142,4 @@ output cosmosEndpoint string = cosmos.outputs.endpoint
 output cosmosAccountName string = cosmos.outputs.accountName
 output cosmosDatabaseName string = cosmos.outputs.databaseName
 output appInsightsName string = monitoring.outputs.appInsightsName
+output logAnalyticsWorkspaceName string = 'log-${appName}-tracker'
