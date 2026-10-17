@@ -55,6 +55,10 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Role** – what a device's scans mean: `in` (check-in) or `out` (check-out).
 - In code: `Role`
 
+**Scan ID** – the UUID the hub mints for a scan the moment it reads the barcode. It stays the same when the scan is resent, so ingest stores each scan once.
+- Not to be confused with: **Barcode**. Scanning the same tin twice gives two scan IDs and two units.
+- In code: `scanId` (wire), the scan event's `id` (stored), `ScanEvent.ScanId`
+
 **Scan event** – a single raw scan sent from the Pi: barcode, deviceId, timestamp. Append-only; never edited or deleted.
 - Not to be confused with: **Check-in** / **Check-out**, which are the stock changes a scan event leads to.
 - In code: `ScanEvent`
