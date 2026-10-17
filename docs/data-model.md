@@ -22,7 +22,7 @@ All decisions in this document are agreed with Gary. They're listed under [Decis
 | `scanEvents` | Raw scans from the Pi | `/deviceId` | Append-only |
 | `products` | Products (the product cache), plus barcode lookup documents | `/id` | Products updated in place; barcode lookups create-once |
 | `inventoryItems` | One document per unit | `/productId` | Updated in place; soft-deleted (status), never deleted |
-| `devices` | One document per logical device | `/deviceId` | Updated in place |
+| `devices` | One document per scanner's logical device, plus one per hub (`kind: "hub"`) | `/deviceId` | Updated in place |
 | `unmatchedCheckOuts` | Check-out scans with no unit in stock | `/id` | Created once; updated only to dismiss |
 | `leases` | Change-feed processor bookkeeping | `/id` | Managed by the Functions Cosmos DB trigger |
 
@@ -30,13 +30,14 @@ All decisions in this document are agreed with Gary. They're listed under [Decis
 
 | Component | `scanEvents` | `products` | `inventoryItems` | `devices` | `unmatchedCheckOuts` |
 |---|---|---|---|---|---|
-| Ingest Function | **write** (create) | – | – | **write** (upsert) | – |
+| Ingest Function | **write** (create) | – | – | **write** (upsert on scans; hub on heartbeats) | – |
 | API Function: change-feed processor | read (change feed) | read / create / update (lookup retry) | read / create / update | – | create |
 | API Function: HTTP (BFF) | read | read / create (loose items) / update (name a product) | read / create (loose items) / update (check out, undo) | read | read / update (dismiss) |
 | API Function: lookup-retry timer | – | read / update | – | – | – |
-| API Function: other timers (offline alert, daily digest) | read | read | read | read | read |
+| API Function: offline-alert timer | – | – | – | read hubs / update (`offlineAlertSentAt`) | – |
+| API Function: daily-digest timer | read | read | read | read | read |
 
-Ingest only writes scan events and devices. It never looks up products or creates units.
+Ingest only writes scan events, devices and hubs. It never looks up products or creates units.
 
 ---
 
@@ -294,7 +295,36 @@ The unit doesn't copy the product's status or name: the product is always one po
 
 **Lifecycle:** **updated in place** (upsert). Not deleted.
 
-**Heartbeats and the hub:** defined by the offline alert card (#44), which may add a `kind` field or a separate document type for the Pi itself.
+### Hub documents (`kind: "hub"`)
+
+The hub (the Pi) is stored in the same container with `kind: "hub"` (#44); scanner devices have no `kind`. Its id is the Pi's `HUB_ID`, which must not equal a scanner's `deviceId`.
+
+**Written by:** Ingest (each heartbeat replaces it: `lastSeenAt`, `lastHeartbeat`, and clears `offlineAlertSentAt`) and the offline-alert timer (sets `offlineAlertSentAt`). Both use **ETag-conditional** writes, so a heartbeat and the timer racing can't lose each other's change. **Read by:** the offline-alert timer (`SELECT * FROM c WHERE c.kind = 'hub'`), later the scanners screen.
+
+```json
+{
+  "id": "cupboard-pi",
+  "deviceId": "cupboard-pi",
+  "kind": "hub",
+  "lastSeenAt": "2026-10-17T18:00:00.123Z",
+  "offlineAlertSentAt": null,
+  "lastHeartbeat": {
+    "sentAt": "2026-10-17T17:59:59.870Z",
+    "clientSha": "24d5e5b",
+    "uptimeSeconds": 3600,
+    "usbInputDevices": ["USB Adapter USB Device"],
+    "scanners": [{ "deviceId": "scanner-in", "present": true }, { "deviceId": "scanner-out", "present": true }]
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `lastSeenAt` | **Server** receive time of the latest heartbeat, never the Pi's clock, so a wrong clock can't hide an outage. |
+| `offlineAlertSentAt` | Set when the offline alert for the current outage is sent; `null` while online. The next heartbeat clears it (no email), so each outage sends one alert. |
+| `lastHeartbeat` | The latest heartbeat's details, as sent. `scanners` appears only when the hub sends it (#67, #68). |
+
+A hub that has never sent a heartbeat has no document, so it never alerts.
 
 ---
 
@@ -439,7 +469,7 @@ Note this means a *genuine* second scan is never mistaken for a resend, because 
 | Daily digest | Units checked in or out in the window; their products; unmatched check-outs in the window | Cross-partition |
 | Scanners screen | Undismissed unmatched check-outs; in-stock units whose product is `noMatch` / `lookupFailed`; devices | Cross-partition |
 | Lookup-retry timer | Products with `status = lookupFailed` | Cross-partition |
-| Offline alert | Devices | Cross-partition (two documents) |
+| Offline alert | Hubs (`kind = 'hub'`) | Cross-partition (one document) |
 
 All cross-partition queries touch at most a few hundred documents, so they're fine at household volume.
 

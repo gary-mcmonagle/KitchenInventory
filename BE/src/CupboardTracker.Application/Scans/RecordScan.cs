@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using CupboardTracker.Domain;
 using Microsoft.Extensions.Logging;
@@ -63,7 +62,7 @@ public sealed partial class RecordScan(
             errors.Add("role must be 'in' or 'out'.");
         }
 
-        if (!TryParseTimestamp(command.ScannedAt, out var scannedAt))
+        if (!Timestamps.TryParseWithOffset(command.ScannedAt, out var scannedAt))
         {
             errors.Add("scannedAt must be an ISO 8601 timestamp with a timezone (e.g. 2026-10-16T18:42:07.123Z).");
         }
@@ -115,18 +114,6 @@ public sealed partial class RecordScan(
         await devices.UpsertAsync(
             new Device(scanEvent.DeviceId, scanEvent.Role, scanEvent.ReceivedAt, lastScanAt), cancellationToken);
     }
-
-    private static bool TryParseTimestamp(string? value, out DateTimeOffset timestamp)
-    {
-        timestamp = default;
-        // Require an explicit offset or Z: a bare local time would be ambiguous.
-        return !string.IsNullOrEmpty(value)
-            && (value.EndsWith('Z') || value.EndsWith('z') || HasOffset(value))
-            && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out timestamp);
-    }
-
-    private static bool HasOffset(string value) =>
-        value.Length > 6 && (value[^6] is '+' or '-') && value[^3] == ':';
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Scan {ScanId} was already recorded (resend); storing nothing new.")]
     private partial void LogResend(Guid scanId);

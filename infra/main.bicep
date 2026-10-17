@@ -30,6 +30,14 @@ param openFoodFactsContactEmail string = ''
 @maxValue(15)
 param openFoodFactsMaxRequestsPerMinute int = 12
 
+@description('Who receives the offline alert email. Supplied at deploy time by deploy/infra.sh; never committed.')
+@secure()
+param alertEmailTo string = ''
+
+@description('Minutes a hub may be silent before the offline alert email (#44).')
+@minValue(1)
+param offlineThresholdMinutes int = 20
+
 @description('Maximum Flex Consumption instances per Function app (a cost guard; household load is tiny).')
 @minValue(1)
 @maxValue(1000)
@@ -76,6 +84,16 @@ module cosmos 'modules/cosmos.bicep' = {
   }
 }
 
+module communication 'modules/communication.bicep' = {
+  scope: rg
+  name: 'communication'
+  params: {
+    tags: tags
+    emailServiceName: 'ecs-${appName}-${suffix}'
+    communicationServiceName: 'acs-${appName}-${suffix}'
+  }
+}
+
 module ingest 'modules/functionApp.bicep' = {
   scope: rg
   name: 'func-ingest'
@@ -117,6 +135,11 @@ module api 'modules/functionApp.bicep' = {
       OFF_BASE_URL: 'https://world.openfoodfacts.org'
       OFF_CONTACT_EMAIL: openFoodFactsContactEmail
       OFF_MAX_REQUESTS_PER_MINUTE: string(openFoodFactsMaxRequestsPerMinute)
+      // Offline alert email (#44): ACS with the managed identity, so no key or connection string.
+      ACS_ENDPOINT: communication.outputs.endpoint
+      EMAIL_SENDER: communication.outputs.senderAddress
+      ALERT_EMAIL_TO: alertEmailTo
+      OFFLINE_THRESHOLD_MINUTES: string(offlineThresholdMinutes)
     }
   }
 }
@@ -131,6 +154,15 @@ module cosmosDataAccess 'modules/cosmosDataAccess.bicep' = {
       { name: ingest.outputs.name, principalId: ingest.outputs.principalId }
       { name: api.outputs.name, principalId: api.outputs.principalId }
     ]
+  }
+}
+
+module communicationAccess 'modules/communicationAccess.bicep' = {
+  scope: rg
+  name: 'communication-access'
+  params: {
+    communicationServiceName: communication.outputs.communicationServiceName
+    principalId: api.outputs.principalId
   }
 }
 
@@ -155,4 +187,6 @@ output cosmosEndpoint string = cosmos.outputs.endpoint
 output cosmosAccountName string = cosmos.outputs.accountName
 output cosmosDatabaseName string = cosmos.outputs.databaseName
 output appInsightsName string = monitoring.outputs.appInsightsName
+output communicationServiceName string = communication.outputs.communicationServiceName
+output emailSender string = communication.outputs.senderAddress
 output logAnalyticsWorkspaceName string = 'log-${appName}-tracker'

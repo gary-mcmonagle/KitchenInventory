@@ -5,8 +5,9 @@
 #   --yes           deploy without the confirmation prompt
 #   --what-if-only  show the what-if and stop
 #
-# Safe to re-run: the template is idempotent, and the live COMMIT_SHA of each Function app is
-# read first and passed back in, so a re-run never resets it.
+# Safe to re-run: the template is idempotent, and the live COMMIT_SHA of each Function app (and the two email
+# addresses, OFF_CONTACT_EMAIL and ALERT_EMAIL_TO, which are never committed) are read first and passed back in,
+# so a re-run never resets them.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -67,6 +68,19 @@ if [[ -z "${OFF_CONTACT_EMAIL:-}" ]]; then
   read -r -p "Contact email for the Open Food Facts User-Agent (stored as an app setting, not committed): " OFF_CONTACT_EMAIL
 fi
 export OFF_CONTACT_EMAIL
+
+# The offline alert recipient (#44) is never committed either: same rule.
+if [[ -z "${ALERT_EMAIL_TO:-}" ]]; then
+  ALERT_EMAIL_TO=$(current_setting api ALERT_EMAIL_TO)
+fi
+if [[ -z "${ALERT_EMAIL_TO:-}" ]]; then
+  if $YES; then
+    echo "ALERT_EMAIL_TO isn't set on the API app; pass it in the environment when using --yes." >&2
+    exit 1
+  fi
+  read -r -p "Email address for the offline alert (stored as an app setting, not committed): " ALERT_EMAIL_TO
+fi
+export ALERT_EMAIL_TO
 
 INGEST_COMMIT_SHA=$(current_sha ingest); export INGEST_COMMIT_SHA
 API_COMMIT_SHA=$(current_sha api); export API_COMMIT_SHA
