@@ -27,7 +27,11 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Stock** – all units currently in the house (checked in and not checked out).
 
-**Stock list** – the UI's first screen, showing current stock grouped by product.
+**Stock list** – the UI's first screen, showing current stock grouped by product: named products under **In stock**, then unnamed ones under **Waiting for a name**. Reloads when opened, when you return to the app, and on pull-to-refresh.
+- In code: `GetStock`, `GET /api/stock`, `StockScreen`
+
+**Waiting for a name** – the stock list section for in-stock products that have no name yet (a no-match or a lookup failure), each shown as **Unknown item** with its barcode in groups of four and the date it was scanned.
+- Not to be confused with: **No-match**, the lookup outcome; a lookup failure also waits for a name until a retry finds it.
 
 **Stock-take** – a one-off bulk check-in of everything already in the house. Expiry dates for these units are approximate.
 

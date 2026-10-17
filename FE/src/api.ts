@@ -12,6 +12,26 @@ export interface Me {
     objectId: string;
 }
 
+export type StockStatus = "known" | "noMatch" | "lookupFailed";
+
+export interface StockProduct {
+    productId: string;
+    barcode: string | null;
+    displayName: string;
+    brand: string | null;
+    size: string | null;
+    count: number;
+    latestCheckedInAt: string;
+    status: StockStatus;
+}
+
+/** GET /api/stock: grouped and sorted by the API (named A–Z, then unnamed, newest first). */
+export interface Stock {
+    generatedAt: string;
+    totalUnits: number;
+    products: StockProduct[];
+}
+
 export interface Ping {
     status: string;
     commit: string;
@@ -31,6 +51,10 @@ export class ApiClient {
 
     me(): Promise<Me> {
         return this.get<Me>("/api/me");
+    }
+
+    stock(): Promise<Stock> {
+        return this.get<Stock>("/api/stock");
     }
 
     /** Public: no token needed. */
