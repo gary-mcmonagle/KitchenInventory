@@ -16,7 +16,7 @@ Use the terms defined in `docs/domain-language.md` in code, comments, commits an
 | Ingest Function | .NET Azure Functions | HTTP, function-key auth. Writes append-only scan events to Cosmos. |
 | API / BFF Function | .NET Azure Functions | Entra ID bearer-token auth from the UI. Also hosts change-feed processing and timer functions unless a card says otherwise. |
 | UI | React on Azure Static Web Apps (free tier) | Phone-first, calm and clean. Entra ID sign-in. Live scan feed via Azure SignalR (free tier). |
-| Data | Cosmos DB **serverless** | Containers: scan events (append-only), products (cache keyed by barcode), inventory items (one per physical unit), devices (role: in / out). |
+| Data | Cosmos DB **serverless** | Containers: scan events (append-only), products (each with its own `productId`; barcodes are optional lookups, so loose items work), inventory items (one per physical unit, partitioned by product), devices (role: in / out), unmatched check-outs, plus the change-feed leases container. |
 | External | Open Food Facts, Azure Document Intelligence (Read), Jev (TypeSafe AI System One) | Product lookup → OCR for photo ID → Jev for decisions over extracted text and estimated expiry dates. |
 | Infra | Bicep | Single environment. Follow Bicep best practices (modules, parameters, no hard-coded names/secrets). |
 
