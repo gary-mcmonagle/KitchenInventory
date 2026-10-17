@@ -70,20 +70,23 @@ publish_and_deploy() {
   dotnet publish "BE/src/$project/$project.csproj" -c Release -o "$WORK/$project" --nologo -v quiet \
     || fail "Publish failed for $project."
   (cd "$WORK/$project" && zip -qr "$WORK/$project.zip" .)
-  az functionapp deployment source config-zip -g "$RG" -n "$app" --src "$WORK/$project.zip" -o none \
-    || fail "Deploying $project to $app failed."
-  # 4. Record the deployed commit (infra.sh preserves it on re-runs).
+  # 4. Record the commit first, so the code deploy rolls out code and setting together
+  #    (setting it afterwards causes a second roll-out, briefly serving the old value).
+  #    infra.sh preserves COMMIT_SHA on re-runs.
   az functionapp config appsettings set -g "$RG" -n "$app" --settings "COMMIT_SHA=$SHA" -o none \
     || fail "Couldn't set COMMIT_SHA on $app."
+  az functionapp deployment source config-zip -g "$RG" -n "$app" --src "$WORK/$project.zip" -o none \
+    || fail "Deploying $project to $app failed."
   echo
 }
 publish_and_deploy CupboardTracker.Functions.Ingest "$INGEST_APP"
 publish_and_deploy CupboardTracker.Functions.Api "$API_APP"
 
-# 5. Smoke check: /api/ping must report the deployed SHA. Retries for ~2 minutes (cold start, settings restart).
+# 5. Smoke check: /api/ping must report the deployed SHA 3 times in a row (so a roll-out in progress, with an
+#    old instance still answering, doesn't pass). Retries for ~2 minutes to allow for cold start.
 ping_until_sha() {
   local name=$1 url=$2 key=${3:-}
-  local deadline=$((SECONDS + 120)) body=""
+  local deadline=$((SECONDS + ${SMOKE_TIMEOUT_SECONDS:-120})) body="" streak=0
   while (( SECONDS < deadline )); do
     if [[ -n "$key" ]]; then
       body=$(printf 'x-functions-key: %s\n' "$key" | curl -s --max-time 20 -H @- "$url" || true)
@@ -91,9 +94,15 @@ ping_until_sha() {
       body=$(curl -s --max-time 20 "$url" || true)
     fi
     if [[ "$body" == *"\"commit\":\"$SHA\""* ]]; then
-      echo "  $name: OK $body"
-      return 0
+      streak=$((streak + 1))
+      if (( streak >= 3 )); then
+        echo "  $name: OK $body"
+        return 0
+      fi
+      sleep 2
+      continue
     fi
+    streak=0
     sleep 5
   done
   echo "  $name: FAILED (last response: ${body:-none})"
