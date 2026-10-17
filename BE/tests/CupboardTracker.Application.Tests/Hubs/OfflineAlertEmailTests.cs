@@ -56,6 +56,7 @@ public sealed class OfflineAlertEmailTests
             Assert.Contains("23 minutes", body, StringComparison.Ordinal);
             Assert.Contains("Saturday 17 October 2026 at 19:42 BST", body, StringComparison.Ordinal);
             Assert.Contains("power", body, StringComparison.Ordinal);
+            Assert.Contains("kept on the Pi", body, StringComparison.Ordinal);
         }
 
         Assert.DoesNotContain("<", email.PlainText, StringComparison.Ordinal);
