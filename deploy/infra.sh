@@ -47,6 +47,12 @@ current_sha() {
 }
 INGEST_COMMIT_SHA=$(current_sha ingest); export INGEST_COMMIT_SHA
 API_COMMIT_SHA=$(current_sha api); export API_COMMIT_SHA
+# Read-only verification access goes to whoever runs this (Gary's az login on the MacBook), unless set explicitly.
+if [[ -z "${VERIFIER_PRINCIPAL_ID:-}" ]]; then
+  VERIFIER_PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)
+fi
+export VERIFIER_PRINCIPAL_ID
+echo "Verifier (read-only access): ${VERIFIER_PRINCIPAL_ID:-none}"
 INGEST_COMMIT_SHA=${INGEST_COMMIT_SHA:-not-deployed}
 API_COMMIT_SHA=${API_COMMIT_SHA:-not-deployed}
 

@@ -160,6 +160,20 @@ There is **one environment, and it's the live household system**. Treat it with 
   - Pi client: _TBD_
 - Never delete or overwrite Cosmos data, containers or resources outside what a card asks for. Anything destructive or irreversible: stop and ask in a card comment.
 
+### Verification toolkit
+
+Read-only scripts in `deploy/verify/` for checking cards against the **live** system. They run as your `az login`; deploy/infra.sh grants that account read-only access (Reader on the group, Log Analytics Reader, Cosmos DB Built-in Data Reader). None of them can write or delete anything.
+
+| Script | Use it to |
+|---|---|
+| `deploy/verify/ping.sh` | See both Function apps answer `/api/ping`, and which commit each runs. |
+| `deploy/verify/logs.sh <ingest\|api> [minutes=30] [rows=50]` | Read recent requests, traces and exceptions for one app (newest first). It queries the Log Analytics workspace behind App Insights; ingestion lags 1–3 minutes. |
+| `deploy/verify/cosmos.sh <container> ["SELECT ..."]` | Read documents from a container (default `SELECT * FROM c`, at most 100 shown). Only `SELECT` is allowed. Cross-partition `TOP`, `ORDER BY`, `GROUP BY` and aggregates aren't supported: filter on the partition key instead. |
+
+- When querying App Insights yourself, query the **workspace** (`az monitor log-analytics query`, tables `AppRequests`, `AppTraces`, `AppExceptions`, `AppDependencies`); `az monitor app-insights query` returned nothing here. `last` and `kind` are reserved words in KQL.
+- **Evidence pasted into Trello must have keys, tokens and personal data redacted.** The scripts never print the function key, but check anything you paste.
+- UI screenshots come with the first UI feature (via a browser tool). Pi logs (`pi-logs.sh`) and the Pi's status in `ping.sh` come with the Pi deployment card (#33).
+
 ### Azure resources and naming
 
 Everything lives in **`rg-cupboard-tracker`** in **UK South** (the subscription holds other projects; never touch anything outside this group). Names are `<type>-cupboard-<role>[-<suffix>]`, using the Azure abbreviations, with a 6-character `suffix` (from `uniqueString(subscription, resource group)`) only where a name must be globally unique:
