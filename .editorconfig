@@ -26,5 +26,5 @@ dotnet_sort_system_directives_first = true
 indent_size = 4
 
 # Test names read as sentences (Method_does_thing), so allow underscores there only.
-[tests/**.cs]
+[BE/tests/**.cs]
 dotnet_diagnostic.CA1707.severity = none

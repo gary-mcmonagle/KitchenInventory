@@ -28,22 +28,23 @@ The Cosmos data model (containers, partition keys, change-feed flow, idempotency
 - **Clean architecture.** Domain and application layers have no dependency on Azure SDKs, HTTP clients or third-party types. Every external service (Cosmos, Open Food Facts, Jev, Document Intelligence, email, SignalR) sits behind an interface with its implementation in the infrastructure layer.
 - Every behaviour change ships with **unit tests**. Tests must pass before merging.
 - Configuration via app settings / env vars. Key Vault is not used yet — it's added when the first real secret appears.
-- **.NET 10 (LTS)**, Azure Functions **isolated worker** (Functions host v4), on the Flex Consumption plan. Pinned in `global.json`. Shared build settings in `Directory.Build.props` (nullable, warnings as errors, recommended analysers); package versions only in `Directory.Packages.props` (central package management).
-- **Pi client: Python 3.11+**, standard library only at runtime (lean thin client); `pytest` and `ruff` for development. The simulator (`tools/simulator/`, card #66) imports the Pi package's ingest client and payload models, so keep them free of Pi-only dependencies.
+- **.NET 10 (LTS)**, Azure Functions **isolated worker** (Functions host v4), on the Flex Consumption plan. Everything .NET lives in `BE/`: pinned in `BE/global.json`, shared build settings in `BE/Directory.Build.props` (nullable, warnings as errors, recommended analysers); package versions only in `BE/Directory.Packages.props` (central package management).
+- **Local scanner (Pi client), in `LocalScanner/`: Python 3.11+**, standard library only at runtime (lean thin client); `pytest` and `ruff` for development. The simulator (card #66) imports the `cupboard_pi` package's ingest client and payload models, so keep them free of Pi-only dependencies.
 
 ### Build and test
 
 ```bash
-# .NET (from the repo root)
+# Backend (.NET), from BE/
+cd BE
 dotnet build                      # 0 warnings expected: warnings are errors
-dotnet test                       # xUnit v3 on Microsoft.Testing.Platform (opted in via global.json)
+dotnet test                       # xUnit v3 on Microsoft.Testing.Platform (opted in via BE/global.json)
 
-# Run a Function app locally (needs Azure Functions Core Tools v4 and Azurite or a storage connection)
+# Run a Function app locally (needs Azure Functions Core Tools v4), from BE/
 cp src/CupboardTracker.Functions.Api/local.settings.example.json src/CupboardTracker.Functions.Api/local.settings.json
 cd src/CupboardTracker.Functions.Api && func start   # GET http://localhost:7071/api/ping
 
-# Pi client
-cd pi
+# Local scanner (Pi client), from LocalScanner/
+cd LocalScanner
 python3.11 -m venv .venv && . .venv/bin/activate && pip install -e '.[dev]'
 pytest && ruff check . && ruff format --check .
 ```
@@ -166,28 +167,30 @@ There is **one environment, and it's the live household system**. Treat it with 
 _Update as the structure lands._
 
 ```
-CupboardTracker.sln              # the one .NET solution (build and test from the repo root)
-global.json                      # .NET SDK pin, test runner
-Directory.Build.props            # shared .NET build settings
-Directory.Packages.props         # all NuGet package versions
+BE/                              # backend: the one .NET solution (build and test from here)
+  CupboardTracker.sln
+  global.json                    # .NET SDK pin, test runner
+  Directory.Build.props          # shared .NET build settings
+  Directory.Packages.props       # all NuGet package versions
+  src/
+    CupboardTracker.Domain/              # entities and value objects; no package references
+    CupboardTracker.Application/         # use cases and interfaces for external services
+    CupboardTracker.Infrastructure/      # implementations (Cosmos, HTTP clients, ...) and DI wiring
+    CupboardTracker.Functions.Ingest/    # Function app: ingest (function-key auth)
+    CupboardTracker.Functions.Api/       # Function app: API/BFF, change feed, timers
+  tests/
+    CupboardTracker.Domain.Tests/
+    CupboardTracker.Application.Tests/
+FE/                              # frontend: React app (not yet)
+LocalScanner/                    # local scanner: the Python Pi client (package cupboard_pi, src/ layout)
 docs/
   domain-language.md
   data-model.md
   spikes/
 deploy/                          # deployment scripts (not yet)
 infra/                           # Bicep (not yet)
-src/
-  CupboardTracker.Domain/              # entities and value objects; no package references
-  CupboardTracker.Application/         # use cases and interfaces for external services
-  CupboardTracker.Infrastructure/      # implementations (Cosmos, HTTP clients, ...) and DI wiring
-  CupboardTracker.Functions.Ingest/    # Function app: ingest (function-key auth)
-  CupboardTracker.Functions.Api/       # Function app: API/BFF, change feed, timers
-tests/
-  CupboardTracker.Domain.Tests/
-  CupboardTracker.Application.Tests/
-pi/                              # Python Pi client (package cupboard_pi, src/ layout)
-tools/                           # e.g. simulator (not yet)
-ui/                              # React app (not yet)
 ```
+
+Older cards may say `src/`, `pi/` or `ui/`: read those as `BE/src/`, `LocalScanner/` and `FE/`. Where a card names a new top-level folder (e.g. `tools/simulator/`), check with Gary which of the three it belongs in.
 
 Dependencies point inwards: Functions → Infrastructure → Application → Domain.
