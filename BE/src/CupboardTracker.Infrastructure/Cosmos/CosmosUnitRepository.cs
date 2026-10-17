@@ -53,6 +53,13 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         return true;
     }
 
+    public async Task<Versioned<Unit>?> FindAsync(Guid unitId, CancellationToken cancellationToken)
+    {
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.id = @id").WithParameter("@id", unitId.ToString("D"));
+        var documents = await CosmosJson.QueryAsync(Items, query, partitionKey: null, max: 1, cancellationToken);
+        return documents is [var d, ..] ? new Versioned<Unit>(ToUnit(d), CosmosJson.Text(d["_etag"])!) : null;
+    }
+
     public async Task<bool> IsCheckedOutByScanAsync(Guid productId, Guid scanId, CancellationToken cancellationToken)
     {
         var query = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.checkOutScanId = @scanId")
@@ -81,6 +88,7 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         document["checkedOutAt"] = CosmosJson.Timestamp(unit.CheckedOutAt);
         document["checkOutScanId"] = unit.CheckOutScanId?.ToString("D");
         document["checkOutSource"] = unit.CheckOutSource;
+        document["checkedOutBy"] = unit.CheckedOutBy?.ToString("D");
         if (unit.EstimatedExpiryDate is { } expiry)
         {
             document["estimatedExpiryDate"] = expiry.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -101,7 +109,8 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         Guid.TryParse(CosmosJson.Text(d["checkOutScanId"]), out var outScan) ? outScan : null,
         CosmosJson.Text(d["checkOutSource"]),
         DateOnly.TryParseExact(CosmosJson.Text(d["estimatedExpiryDate"]), "yyyy-MM-dd", CultureInfo.InvariantCulture,
-            DateTimeStyles.None, out var date) ? date : null);
+            DateTimeStyles.None, out var date) ? date : null,
+        Guid.TryParse(CosmosJson.Text(d["checkedOutBy"]), out var by) ? by : null);
 }
 
 /// <summary>Unmatched check-outs (id = scan ID), partitioned by /id (docs/data-model.md).</summary>

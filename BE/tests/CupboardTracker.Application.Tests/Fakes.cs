@@ -144,6 +144,11 @@ internal sealed class FakeUnits : IUnitRepository
         return Task.FromResult(true);
     }
 
+    public Task<Versioned<Unit>?> FindAsync(Guid unitId, CancellationToken cancellationToken) =>
+        Task.FromResult(Units.TryGetValue(unitId, out var v)
+            ? new Versioned<Unit>(v.Unit, v.Version.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            : null);
+
     public Task<bool> IsCheckedOutByScanAsync(Guid productId, Guid scanId, CancellationToken cancellationToken) =>
         Task.FromResult(Units.Values.Any(v => v.Unit.ProductId == productId && v.Unit.CheckOutScanId == scanId));
 }

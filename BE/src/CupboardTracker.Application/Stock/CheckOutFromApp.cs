@@ -1,0 +1,62 @@
+using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Users;
+using CupboardTracker.Domain.Stock;
+using Microsoft.Extensions.Logging;
+
+namespace CupboardTracker.Application.Stock;
+
+public abstract record CheckOutFromAppResult
+{
+    public sealed record CheckedOut(Guid UnitId, Guid ProductId, string DisplayName, int RemainingCount) : CheckOutFromAppResult;
+
+    /// <summary>Nothing of that product in stock (409): nothing changed.</summary>
+    public sealed record NothingInStock(Guid ProductId) : CheckOutFromAppResult;
+}
+
+/// <summary>
+/// Check out one unit from the stock list (#50): the same unit a check-out scan would take (<see cref="UnitSelection"/>),
+/// ETag-guarded so the app and a scanner never take the same unit, recorded as <c>checkOutSource: "ui"</c> with the user.
+/// </summary>
+public sealed partial class CheckOutFromApp(
+    IProductRepository products,
+    IUnitRepository units,
+    TimeProvider clock,
+    ILogger<CheckOutFromApp> logger)
+{
+    private const int MaxRounds = 5;
+
+    public async Task<CheckOutFromAppResult> ExecuteAsync(Guid productId, CurrentUser user, CancellationToken cancellationToken)
+    {
+        for (var round = 0; round < MaxRounds; round++)
+        {
+            var inStock = await units.GetInStockAsync(productId, cancellationToken);
+            if (inStock.Count == 0)
+            {
+                return new CheckOutFromAppResult.NothingInStock(productId);
+            }
+
+            var byId = inStock.ToDictionary(v => v.Value.UnitId);
+            foreach (var candidate in UnitSelection.InCheckOutOrder(inStock.Select(v => v.Value)))
+            {
+                var checkedOut = candidate.CheckOutByUser(user.ObjectId, clock.GetUtcNow());
+                if (await units.TryReplaceAsync(byId[candidate.UnitId], checkedOut, cancellationToken))
+                {
+                    var product = await products.GetAsync(productId, cancellationToken);
+                    var name = product?.DisplayName ?? "Unknown item";
+                    LogCheckedOut(candidate.UnitId, productId, user.ObjectId);
+                    return new CheckOutFromAppResult.CheckedOut(candidate.UnitId, productId, name, inStock.Count - 1);
+                }
+
+                LogConflict(candidate.UnitId); // taken by a scanner or another tap meanwhile: try the next one
+            }
+        }
+
+        throw new InvalidOperationException($"Couldn't check out a unit of {productId} after {MaxRounds} rounds of conflicts.");
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Checked out unit {UnitId} of product {ProductId} from the app (user {UserId}).")]
+    private partial void LogCheckedOut(Guid unitId, Guid productId, Guid userId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Unit {UnitId} changed under an app check-out; trying the next unit.")]
+    private partial void LogConflict(Guid unitId);
+}

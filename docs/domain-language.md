@@ -46,7 +46,8 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Check-in** – adding a unit to stock: a scan on the `in` device, or a manual add in the UI.
 - Not to be confused with: **Scan event**. A scan event is the raw record of a scan; a check-in is the stock change it causes.
 
-**Check-out** – removing a unit from stock: a scan on the `out` device, or the check-out action in the stock list.
+**Check-out** – removing a unit from stock: a scan on the `out` device, or the check-out action in the stock list. Both take the same unit (soonest estimated expiry, then oldest check-in) and are recorded on it as `checkOutSource` `scanner` or `ui`.
+- In code: `CheckOutScan`, `CheckOutFromApp`
 
 **Device** – the logical identity the Pi gives a scanner, and its role.
 - In code: `Device`, `deviceId`
@@ -83,7 +84,8 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Scanner port** – the Pi USB port a scanner's dongle is plugged into, named by its `/dev/input/by-path` link (e.g. `platform-3f980000.usb-usb-0:1.5:1.0`). The Pi maps each scanner port to a device. Moving a dongle to another port moves its scans to another device.
 - In code: `scanner_port` (Pi client config)
 
-**Undo check-out** – reversing a check-out, returning the unit to stock.
+**Undo check-out** – reversing a check-out, returning the unit to stock with its check-out details cleared. Offered for 6 seconds after a check-out in the stock list (the toast's Undo).
+- In code: `UndoCheckOut`, `POST /api/units/{unitId}/undo-check-out`
 
 **Unmatched check-out** – a check-out scan with no unit in stock to remove: either a barcode we've never seen, or a known product with nothing in stock. Shown on the scanners screen until dismissed. Replaces the older term "no-match check-out".
 - Not to be confused with: **No-match**, which is about product lookup, not stock.

@@ -1,9 +1,46 @@
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
-import { NoAccessError, SignInRequiredError, type ApiClient, type Stock, type StockProduct } from "./api";
+import {
+    ApiError,
+    NoAccessError,
+    SignInRequiredError,
+    type ApiClient,
+    type Stock,
+    type StockProduct,
+} from "./api";
 import { groupBarcode, initial, itemsLabel, metaLine, scannedLabel, todayLine } from "./format";
 import styles from "./Stock.module.css";
 
 const PULL_TO_REFRESH = 70; // px
+export const TOAST_MS = 6000; // as in the mockup
+
+type Toast =
+    | { kind: "checkedOut"; unitId: string; product: StockProduct; name: string }
+    | { kind: "error"; text: string };
+
+/** The stock with one product's count set (the row is removed at 0, put back if missing), and the total recomputed. */
+export function withCount(stock: Stock, product: StockProduct, count: number): Stock {
+    const others = stock.products.filter((p) => p.productId !== product.productId);
+    let products = others;
+    if (count > 0) {
+        const index = stock.products.findIndex((p) => p.productId === product.productId);
+        const updated = { ...product, count };
+        products =
+            index >= 0
+                ? stock.products.map((p) => (p.productId === product.productId ? updated : p))
+                : insertSorted(others, updated);
+    }
+    return { ...stock, products, totalUnits: products.reduce((n, p) => n + p.count, 0) };
+}
+
+/** Back where the API would put it: named products A–Z ignoring case, before the unnamed ones. */
+function insertSorted(products: StockProduct[], product: StockProduct): StockProduct[] {
+    const at = products.findIndex(
+        (p) =>
+            p.status !== "known" ||
+            p.displayName.localeCompare(product.displayName, "en", { sensitivity: "base" }) > 0,
+    );
+    return at < 0 ? [...products, product] : [...products.slice(0, at), product, ...products.slice(at)];
+}
 
 type Phase = "loading" | "ready" | "error" | "noAccess";
 
@@ -16,6 +53,63 @@ export function StockScreen({ api }: { api: ApiClient }) {
     const [pull, setPull] = useState(0);
     const pullStart = useRef<number | null>(null);
     const live = useRef(true);
+    const [inFlight, setInFlight] = useState<ReadonlySet<string>>(new Set());
+    const [toast, setToast] = useState<Toast | null>(null);
+    const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+    const showToast = useCallback((next: Toast) => {
+        clearTimeout(toastTimer.current);
+        setToast(next);
+        toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+    }, []);
+    useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+    const setBusy = (productId: string, busy: boolean) =>
+        setInFlight((current) => {
+            const next = new Set(current);
+            if (busy) next.add(productId);
+            else next.delete(productId);
+            return next;
+        });
+
+    const checkOut = async (product: StockProduct) => {
+        if (inFlight.has(product.productId)) return; // no double check-outs from quick taps
+        setBusy(product.productId, true);
+        setStock((s) => s && withCount(s, product, product.count - 1)); // optimistic
+        try {
+            const result = await api.checkOut(product.productId);
+            setStock((s) => s && withCount(s, product, result.remainingCount));
+            showToast({ kind: "checkedOut", unitId: result.unitId, product, name: product.displayName });
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return;
+            setStock((s) => s && withCount(s, product, product.count)); // revert
+            showToast({
+                kind: "error",
+                text:
+                    error instanceof ApiError && error.status === 409
+                        ? `There's no ${product.displayName} left to check out.`
+                        : "Couldn't check that out. Try again.",
+            });
+            if (error instanceof ApiError && error.status === 409) void load();
+        } finally {
+            setBusy(product.productId, false);
+        }
+    };
+
+    const undo = async (done: Extract<Toast, { kind: "checkedOut" }>) => {
+        clearTimeout(toastTimer.current);
+        setToast(null);
+        const before = stock?.products.find((p) => p.productId === done.product.productId)?.count ?? 0;
+        setStock((s) => s && withCount(s, done.product, before + 1)); // optimistic
+        try {
+            const result = await api.undoCheckOut(done.unitId);
+            setStock((s) => s && withCount(s, done.product, result.count));
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return;
+            setStock((s) => s && withCount(s, done.product, before)); // revert
+            showToast({ kind: "error", text: "Couldn't undo that. Try again." });
+        }
+    };
 
     const load = useCallback(async () => {
         if (!navigator.onLine) {
@@ -131,7 +225,12 @@ export function StockScreen({ api }: { api: ApiClient }) {
                 {known.length > 0 && (
                     <Section title="In stock" count={known.length}>
                         {known.map((p) => (
-                            <KnownRow key={p.productId} product={p} />
+                            <KnownRow
+                                key={p.productId}
+                                product={p}
+                                busy={inFlight.has(p.productId)}
+                                onCheckOut={() => void checkOut(p)}
+                            />
                         ))}
                     </Section>
                 )}
@@ -144,6 +243,17 @@ export function StockScreen({ api }: { api: ApiClient }) {
                     </Section>
                 )}
             </div>
+
+            {toast && (
+                <div className={styles.toast} role="status">
+                    <span>{toast.kind === "checkedOut" ? `Checked out ${toast.name}` : toast.text}</span>
+                    {toast.kind === "checkedOut" && (
+                        <button type="button" className={styles.undo} onClick={() => void undo(toast)}>
+                            Undo
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -161,7 +271,15 @@ function Section({ title, count, children }: { title: string; count: number; chi
     );
 }
 
-function KnownRow({ product }: { product: StockProduct }) {
+function KnownRow({
+    product,
+    busy,
+    onCheckOut,
+}: {
+    product: StockProduct;
+    busy: boolean;
+    onCheckOut: () => void;
+}) {
     const meta = metaLine(product.brand, product.size, product.count);
     return (
         <li className={styles.row}>
@@ -173,6 +291,30 @@ function KnownRow({ product }: { product: StockProduct }) {
                     <span className={styles.name}>{product.displayName}</span>
                     {meta && <span className={styles.meta}>{meta}</span>}
                 </div>
+            </div>
+            <div className={styles.actions}>
+                <button
+                    type="button"
+                    className={styles.checkOut}
+                    onClick={onCheckOut}
+                    disabled={busy}
+                    aria-label={`Check out one ${product.displayName}`}
+                >
+                    <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M5 12.5l4.5 4.5L19 7.5" />
+                    </svg>
+                    Check out
+                </button>
             </div>
         </li>
     );

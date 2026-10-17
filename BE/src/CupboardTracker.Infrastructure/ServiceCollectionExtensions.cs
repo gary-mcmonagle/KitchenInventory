@@ -59,6 +59,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<RetryFailedLookups>();
         services.AddSingleton<IStockQueries, CosmosStockQueries>();
         services.AddTransient<GetStock>();
+        services.AddTransient<CheckOutFromApp>();
+        services.AddTransient<UndoCheckOut>();
 
         // Hubs: heartbeats (ingest) and the offline alert (API timer), emailed through ACS with the managed identity.
         // Settings are read lazily, so the ingest app needs none of the email settings.
