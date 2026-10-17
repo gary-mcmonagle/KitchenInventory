@@ -122,6 +122,10 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Scan feed** – the live list of toasts in the UI, newest on top, one per scan event.
 
+**Scan feed event** – a live message pushed to every open app about one scan event, keyed by its scan ID: received (grey toast), identified (green), needs identification (yellow), unmatched check-out, or skipped. A hint only; the API is the source of truth.
+- Not to be confused with: **Scan event**, the stored record of the scan itself.
+- In code: `ScanFeedEvent` (`ScanReceived`, `ScanIdentified`, `ScanNeedsIdentification`, `CheckOutUnmatched`, `ScanSkipped`), sent through `IScanFeedPublisher`
+
 **Scanners screen** – the UI screen showing devices, no-match check-ins and unmatched check-outs.
 
 **Toast states** – loading (grey), needs identification (yellow, tap to open photo identification), identified (green, shows the product name).
