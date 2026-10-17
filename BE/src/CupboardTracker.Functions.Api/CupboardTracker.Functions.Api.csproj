@@ -4,6 +4,9 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="CupboardTracker.Functions.Api.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\CupboardTracker.Infrastructure\CupboardTracker.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>

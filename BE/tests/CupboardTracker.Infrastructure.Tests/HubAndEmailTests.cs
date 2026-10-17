@@ -134,3 +134,18 @@ public sealed class DigestInfrastructureTests
         Assert.Equal(new CupboardTracker.Application.Digest.DigestUnit(id, null), unit);
     }
 }
+
+public sealed class StockQueryTests
+{
+    [Fact]
+    public void Stock_rows_read_product_barcode_and_check_in_time()
+    {
+        var id = Guid.NewGuid();
+        var unit = CosmosStockQueries.ToUnit(new System.Text.Json.Nodes.JsonObject
+        {
+            ["productId"] = id.ToString(), ["barcode"] = "20055363", ["checkedInAt"] = "2026-10-17T18:26:35.863Z",
+        });
+        Assert.Equal(new CupboardTracker.Application.Stock.StockUnit(id, "20055363",
+            new DateTimeOffset(2026, 10, 17, 18, 26, 35, 863, TimeSpan.Zero)), unit);
+    }
+}

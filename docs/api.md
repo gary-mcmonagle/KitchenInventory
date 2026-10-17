@@ -85,3 +85,55 @@ The body must be a JSON object of at most 16 KB.
 **Responses:** **202** `{ "hubId": "…" }` when recorded; **400** `{ "errors": [ … ] }` (all problems at once) otherwise; **401** without the function key.
 
 **What it does:** creates or replaces the hub document (`kind: "hub"` in `devices`; see [data-model.md](data-model.md)) with `lastSeenAt` = the **server's** receive time and the heartbeat's details. If an offline alert had been sent for the current outage, it clears `offlineAlertSentAt` and logs "Hub … back online after N minutes" (no email).
+
+---
+
+## API Function app (the BFF)
+
+Called by the React app (`FE/`) directly from the browser; CORS allows the Static Web App and `http://localhost:5173`.
+
+Auth: an **Entra ID bearer token** for the API registration (`aud` = the API's client ID, scope `access_as_user`, from the SPA or, for verification, the Azure CLI). Every endpoint needs one unless it's listed as public. **401** for a missing or invalid token, **403** for the wrong client or scope; both have a JSON body `{ "error": "…" }` and a `WWW-Authenticate: Bearer` header. See CLAUDE.md, Sign-in.
+
+### `GET /api/ping` (public)
+
+`200 { "status": "ok", "commit": "<sha>" }`. No token: the deploy smoke check and the UI footer use it.
+
+### `GET /api/me`
+
+`200 { "name": "Cupboard test", "objectId": "<oid>" }`: who the token belongs to.
+
+### `GET /api/stock`
+
+The stock list (#49): every product with units in stock, grouped and sorted so the UI does no aggregation. Only `inStock` units count.
+
+```json
+{
+  "generatedAt": "2026-10-17T22:00:00.000Z",
+  "totalUnits": 30,
+  "products": [
+    {
+      "productId": "bddb7749-2e2b-4ddd-937f-f44bb613eae3",
+      "barcode": "5000354922831",
+      "displayName": "Beef Gravy",
+      "brand": "Bisto",
+      "size": "230g",
+      "count": 2,
+      "latestCheckedInAt": "2026-10-17T18:16:15.743Z",
+      "status": "known"
+    }
+  ]
+}
+```
+
+| Field | Notes |
+|---|---|
+| `totalUnits` | All in-stock units (the header's "n items"). |
+| `products` | Named products (`status: "known"`) first, alphabetical ignoring case; then unnamed ones (`noMatch`, `lookupFailed`), most recently scanned first. |
+| `barcode` | The product's first barcode, else the unit's. `null` for a product without one. |
+| `displayName` | From the product cache; `Unknown item (<barcode>)` for unnamed products (the UI shows "Unknown item"). |
+| `brand`, `size` | From the cached product; `null` when missing. |
+| `count` | In-stock units of this product. |
+| `latestCheckedInAt` | The newest of those units' check-in times (UTC). |
+| `status` | `known`, `noMatch` or `lookupFailed`. |
+
+`Cache-Control: no-store`.
