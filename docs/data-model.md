@@ -148,6 +148,7 @@ A barcode that Open Food Facts couldn't be reached for (`lookupFailed`) looks li
 | `categoryTags` | Optional. From Open Food Facts: `categories_tags` (e.g. `en:gravy`). A hint for the shelf-life estimate later. |
 | `fetchedAt` | When Open Food Facts answered with this product. |
 | `lookupAttempts`, `lastLookupAttemptAt` | How many times product lookup has been tried for this product, and when last. Used by the lookup-retry timer. |
+| `lookupFailedSince` | When the product first became `lookupFailed` (cleared once resolved). The timer logs an **error** if it's still failing 24 hours later. |
 | `namedAt`, `namedBy` | When and by whom (Entra object ID) the product was named by hand. Written by the naming feature. |
 
 **Display name from Open Food Facts** (decided in [spike #28](spikes/28-open-food-facts.md)): `product_name_en`, else `product_name`, trimmed, otherwise **exactly as returned**. No title-casing, no language checks. A product with neither is a no-match.
@@ -201,7 +202,8 @@ Maps one barcode to its product, so "which product is this barcode?" is a single
 When Open Food Facts is down or rate-limited (timeouts, 5xx, 429; see [spike #28](spikes/28-open-food-facts.md#errors)) after the Functions retry policy, check-in still creates the product, with `status: lookupFailed`, and its barcode lookup document, so the unit always has a `productId` and stock is never lost. An error is logged.
 
 `lookupFailed` is **not** a final answer. It's retried by:
-- **The lookup-retry timer**, every **15 minutes**: query products with `status = 'lookupFailed'`, and retry Open Food Facts for each (using the first barcode in `barcodes`). To respect Open Food Facts' 15 reads a minute limit, it retries at most **10 products per run**, oldest `lastLookupAttemptAt` first.
+- **The lookup-retry timer**, every **15 minutes**: query products with `status = 'lookupFailed'`, and retry Open Food Facts for each (using the first barcode in `barcodes`), at most **10 products per run**, oldest `lastLookupAttemptAt` first.
+- **Open Food Facts throttle:** at most `OFF_MAX_REQUESTS_PER_MINUTE` calls a minute (default 10; Open Food Facts allows 15 per IP). The change-feed processor effectively runs as one instance (the small scan-events container has one lease) and the timer is a singleton, so the budget is **split**: the timer gets a fifth (2 a minute at the default) and check-in processing the rest (8). Over budget, a caller **waits** for a slot rather than failing, so a stock-take queues.
 - **The next check-in of that barcode**, which retries once before creating the unit.
 
 Each retry ends in `known` (found), `noMatch` (not found; final) or `lookupFailed` again (`lookupAttempts` + 1). **Naming by hand also resolves it**, and a named product is never retried. `noMatch` and named products are final and never re-fetched.
@@ -241,8 +243,8 @@ Each retry ends in `known` (found), `noMatch` (not found; final) or `lookupFaile
 | `status` | `inStock` or `checkedOut`. |
 | `checkInScanId`, `checkInDeviceId` | The scan and device that checked it in. `null` for units added in the app. |
 | `checkedInAt` | The scan's `scannedAt` (or the time it was added in the app). **This is the bought date**; there is no separate field. |
-| `checkedOutAt`, `checkOutScanId` | Set when checked out. Written by the check-out feature. |
-| `checkOutSource` | `scanner` or `ui`. Written by the check-out feature. |
+| `checkedOutAt`, `checkOutScanId` | Set when checked out (the check-out scan's `scannedAt` and ID). |
+| `checkOutSource` | `scanner` (check-out scans) or `ui` (later: check-out from the stock list). |
 
 The unit doesn't copy the product's status or name: the product is always one point read away. (The earlier `productStatus` field is gone, because every unit now has a product, including `lookupFailed` ones.)
 
@@ -445,13 +447,12 @@ All cross-partition queries touch at most a few hundred documents, so they're fi
 
 ## Fields reserved for later features
 
-None of these are written or read yet. They are listed so the first features leave room for them.
+None of these are used yet. They are listed so the first features leave room for them. (Check-in and check-out, #45 and #47, now write the products, units, barcode lookups and unmatched check-outs described above, including the check-out fields.)
 
 | Field | Container | For |
 |---|---|---|
 | `estimatedExpiryDate`, `expiryIsApproximate` | `inventoryItems` | Estimated expiry (Jev), stock-take |
-| `checkedOutAt`, `checkOutScanId`, `checkOutSource` | `inventoryItems` | Check-out, undo check-out, digest activity |
-| `dismissed`, `dismissedAt` | `unmatchedCheckOuts` | Scanners screen, dismiss |
+| `dismissed`, `dismissedAt` | `unmatchedCheckOuts` | Scanners screen, dismiss (written as `false` / `null` by check-out) |
 | `shelfLifeDays` | `products` | Shelf life estimate (Jev) |
 | `icon` | `products` | Stock list icon |
 | `namedAt`, `namedBy`; `source` values `manual`, `photo` | `products` | Name a product, photo identification, loose items |

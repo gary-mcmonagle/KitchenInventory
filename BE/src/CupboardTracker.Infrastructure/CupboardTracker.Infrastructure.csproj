@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Infrastructure: implementations of Application interfaces (Cosmos, HTTP clients, email, SignalR). -->
   <ItemGroup>
+    <InternalsVisibleTo Include="CupboardTracker.Infrastructure.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\CupboardTracker.Application\CupboardTracker.Application.csproj" />
   </ItemGroup>
   <ItemGroup>
@@ -9,5 +12,6 @@
     <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Newtonsoft.Json" /> <!-- required explicitly by the Cosmos SDK -->
     <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 </Project>

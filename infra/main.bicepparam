@@ -9,5 +9,8 @@ param appName = 'cupboard'
 param ingestCommitSha = readEnvironmentVariable('INGEST_COMMIT_SHA', 'not-deployed')
 param apiCommitSha = readEnvironmentVariable('API_COMMIT_SHA', 'not-deployed')
 
+// Open Food Facts User-Agent contact: deploy/infra.sh sets OFF_CONTACT_EMAIL from the live app (or asks), never committed.
+param openFoodFactsContactEmail = readEnvironmentVariable('OFF_CONTACT_EMAIL', '')
+
 // The verifier's object ID: set by deploy/infra.sh to the signed-in user unless VERIFIER_PRINCIPAL_ID is already set.
 param verifierPrincipalId = readEnvironmentVariable('VERIFIER_PRINCIPAL_ID', '')

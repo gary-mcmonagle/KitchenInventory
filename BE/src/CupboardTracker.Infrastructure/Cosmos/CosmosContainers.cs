@@ -8,4 +8,10 @@ public sealed class CosmosContainers(CosmosClient client, string databaseName)
     public Container ScanEvents { get; } = client.GetContainer(databaseName, "scanEvents");
 
     public Container Devices { get; } = client.GetContainer(databaseName, "devices");
+
+    public Container Products { get; } = client.GetContainer(databaseName, "products");
+
+    public Container InventoryItems { get; } = client.GetContainer(databaseName, "inventoryItems");
+
+    public Container UnmatchedCheckOuts { get; } = client.GetContainer(databaseName, "unmatchedCheckOuts");
 }
