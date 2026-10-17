@@ -16,11 +16,14 @@ If you need a term that isn't here, add it as part of the card that introduces i
 - Not to be confused with: the brand and size, which are shown separately.
 - In code: `displayName`
 
-**Product** – a kind of item, identified by its barcode (e.g. "Heinz Baked Beans 415g").
-- Not to be confused with: **Unit**. A product is the kind of thing; a unit is one physical tin.
-- In code: `Product`
+**Loose item** – a product with no barcode, such as fruit, bakery bread or deli food. Added from the app, not scanned.
+- Not to be confused with: **Store label**. A store-labelled item has a barcode, but one printed in the shop.
 
-**Product cache** – our stored copy of product details, keyed by barcode, so we only look each barcode up once.
+**Product** – a kind of item, identified by its own product ID (e.g. "Heinz Baked Beans 415g"). It can have no barcode (a loose item), one barcode, or several.
+- Not to be confused with: **Unit**. A product is the kind of thing; a unit is one physical tin.
+- In code: `Product`, `productId`
+
+**Product cache** – our stored products and their details, found by barcode through barcode lookups, so we only look each barcode up on Open Food Facts once.
 
 **Stock** – all units currently in the house (checked in and not checked out).
 
@@ -61,21 +64,37 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Undo check-out** – reversing a check-out, returning the unit to stock.
 
+**Unmatched check-out** – a check-out scan with no unit in stock to remove: either a barcode we've never seen, or a known product with nothing in stock. Shown on the scanners screen until dismissed. Replaces the older term "no-match check-out".
+- Not to be confused with: **No-match**, which is about product lookup, not stock.
+- In code: `UnmatchedCheckOut` (stored in the unmatched check-outs container)
+
 ---
 
 ## Identification
 
-**Dismiss** – clearing a no-match check-out from the scanners screen without identifying it.
+**Barcode lookup** – the stored link from one barcode, exactly as scanned, to its product. Lets a scan find its product with one read, and stops two scans of a new barcode creating two products.
+- Not to be confused with: **Product lookup**, which resolves a barcode, including asking Open Food Facts.
+- In code: `BarcodeLookup`
+
+**Dismiss** – clearing an unmatched check-out from the scanners screen.
+
+**Lookup failed** – product lookup couldn't reach Open Food Facts (down, rate-limited or timing out). Not a final answer: it's retried until it becomes a match or a no-match, or the product is named. Shown as `Unknown item (<barcode>)` meanwhile.
+- Not to be confused with: **No-match**, which is final.
+- In code: product status `lookupFailed`
 
 **Match** – a barcode that product lookup resolved to a product.
+- In code: product status `known` (with `source: openFoodFacts`)
 
-**Name a product** – manually entering product details for a no-match barcode.
+**Name a product** – manually entering product details for a no-match or lookup-failed product.
 
-**No-match** – a scanned barcode that product lookup couldn't resolve. It needs naming or photo identification.
+**No-match** – a scanned barcode that Open Food Facts doesn't know. Final: it's never looked up again, and needs naming or photo identification.
+- In code: product status `noMatch`
 
 **Photo identification** – identifying a no-match product from a photo of the pack: OCR (Document Intelligence) extracts the text, then Jev decides the product from that text.
 
-**Product lookup** – resolving a barcode to product details: product cache first, then Open Food Facts.
+**Product lookup** – resolving a barcode to product details: product cache first (through its barcode lookup), then Open Food Facts.
+
+**Store label** – a barcode printed in the shop for deli or weighed items: an **EAN-13 starting 20–29**. Not looked up on Open Food Facts. 8-digit barcodes starting with 2 (e.g. Lidl's own-brand) are normal product barcodes, not store labels.
 
 ---
 
@@ -103,6 +122,6 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Scan feed** – the live list of toasts in the UI, newest on top, one per scan event.
 
-**Scanners screen** – the UI screen showing devices and no-match check-ins and check-outs.
+**Scanners screen** – the UI screen showing devices, no-match check-ins and unmatched check-outs.
 
 **Toast states** – loading (grey), needs identification (yellow, tap to open photo identification), identified (green, shows the product name).
