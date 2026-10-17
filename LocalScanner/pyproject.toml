@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "build>=1.2"]  # build: deploy/pi.sh builds the wheel
 
 [project.scripts]
 cupboard-pi = "cupboard_pi.__main__:main"

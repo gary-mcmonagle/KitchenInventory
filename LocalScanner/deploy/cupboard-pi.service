@@ -1,0 +1,32 @@
+# Cupboard Tracker Pi client. Installed to /etc/systemd/system/ by install-service.sh (Gary, as root);
+# deploy/pi.sh only switches /opt/cupboard-tracker/current and restarts it.
+[Unit]
+Description=Cupboard Tracker Pi client (reads the scanners, sends scans and heartbeats)
+Wants=network-online.target
+After=network-online.target
+# Never give up restarting: scans must not be lost after a crash or a slow network at boot.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=gary
+Group=gary
+# Reads the scanners' input devices (spike #27).
+SupplementaryGroups=input
+# Read by systemd as root, so pi.env stays root-only. Never in the repo.
+EnvironmentFile=/etc/cupboard-tracker/pi.env
+ExecStart=/opt/cupboard-tracker/current/venv/bin/cupboard-pi
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+# Logs go to the journal: journalctl -u cupboard-pi (deploy/verify/pi-logs.sh).
+
+# Hardening: the client only reads its release and the scanners, and writes the scan queue.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cupboard-tracker
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

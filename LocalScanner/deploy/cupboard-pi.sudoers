@@ -1,0 +1,3 @@
+# Cupboard Tracker: lets deploy/pi.sh (run as gary over SSH, no password) restart the client and check that
+# its env file exists. Exactly these two commands, nothing else. Installed by install-service.sh.
+gary ALL=(root) NOPASSWD: /usr/bin/systemctl restart cupboard-pi.service, /usr/bin/test -f /etc/cupboard-tracker/pi.env
