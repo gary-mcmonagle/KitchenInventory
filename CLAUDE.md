@@ -163,6 +163,16 @@ There is **one environment, and it's the live household system**. Treat it with 
     - **It never reads, writes or prints `pi.env`.** If it's missing, it stops and lists the variable names from `LocalScanner/.env.example` for Gary to add.
 - Never delete or overwrite Cosmos data, containers or resources outside what a card asks for. Anything destructive or irreversible: stop and ask in a card comment.
 
+### Error alert ("Cupboard Tracker errors", #48)
+
+Azure Monitor emails `ALERT_EMAIL_TO` when either Function app has an **exception**, a trace at **Error or above**, or a **5xx** request. 4xx validation failures and warnings don't count, so log real failures that need a person at Error, and anything retried or expected at Warning or below. It's in Bicep (`infra/modules/errorAlert.bicep`): the log search rule `alert-cupboard-errors` on the Log Analytics workspace, and the action group `ag-cupboard-alerts`. No app code is involved.
+
+- **When:** every 15 minutes over the last 15 minutes; fires on 1 or more. Allow up to about 20 minutes, because ingestion lags.
+- **Noise:** the rule is stateless (no auto-resolve, so no "resolved" emails) and **mutes its actions for 1 hour** after firing. A continuing problem emails at most once an hour.
+- **What failed:** the email has the rule's description. Then run `deploy/verify/logs.sh ingest 30` (or `api`).
+- **Mute it temporarily** (e.g. during planned work): `az monitor scheduled-query update -g rg-cupboard-tracker -n alert-cupboard-errors --disabled true`, then `--disabled false` afterwards. A re-run of `deploy/infra.sh` re-enables it.
+- **Test it:** `POST /api/diagnostics/test-error` on either app, with its function key. It logs one Error tagged `diagnosticTest=true` and changes nothing. It's an Azure call and sends Gary an email, so only do it when a card says so.
+
 ### Verification toolkit
 
 Read-only scripts in `deploy/verify/` for checking cards against the **live** system. They run as your `az login`; deploy/infra.sh grants that account read-only access (Reader on the group, Log Analytics Reader, Cosmos DB Built-in Data Reader). None of them can write or delete anything.
@@ -212,6 +222,7 @@ Everything lives in **`rg-cupboard-tracker`** in **UK South** (the subscription 
 | Log Analytics / Application Insights | `log-cupboard-tracker` / `appi-cupboard-tracker` |
 | Cosmos DB (serverless), database `cupboard` | `cosmos-cupboard-<suffix>` |
 | Function apps (Flex Consumption, one plan each) | `func-cupboard-ingest-<suffix>`, `func-cupboard-api-<suffix>`; plans `plan-cupboard-ingest`, `plan-cupboard-api` |
+| Error alert (log search rule) / action group | `alert-cupboard-errors` (display name "Cupboard Tracker errors") / `ag-cupboard-alerts` |
 | Communication Services / Email Communication Service (location `global`, data in the UK) | `acs-cupboard-<suffix>` / `ecs-cupboard-<suffix>`, domain `AzureManagedDomain` (sender `DoNotReply@<random>.azurecomm.net`, the `emailSender` output) |
 | Storage (one per Function app; no dashes allowed) | `stcupboarding<suffix>`, `stcupboardapi<suffix>` |
 

@@ -171,6 +171,18 @@ module communicationAccess 'modules/communicationAccess.bicep' = {
   }
 }
 
+module errorAlert 'modules/errorAlert.bicep' = {
+  scope: rg
+  name: 'error-alert'
+  params: {
+    location: location
+    tags: tags
+    workspaceName: 'log-${appName}-tracker'
+    alertEmailTo: alertEmailTo
+  }
+  dependsOn: [monitoring]
+}
+
 module verifierAccess 'modules/verifierAccess.bicep' = if (!empty(verifierPrincipalId)) {
   scope: rg
   name: 'verifier-access'
@@ -194,4 +206,5 @@ output cosmosDatabaseName string = cosmos.outputs.databaseName
 output appInsightsName string = monitoring.outputs.appInsightsName
 output communicationServiceName string = communication.outputs.communicationServiceName
 output emailSender string = communication.outputs.senderAddress
+output errorAlertRuleName string = errorAlert.outputs.ruleName
 output logAnalyticsWorkspaceName string = 'log-${appName}-tracker'
