@@ -10,7 +10,7 @@ Which email service should the Function apps use to send the **offline alert**, 
 
 - **Error alerts go through Azure Monitor**, not our code: a log search alert rule plus an action group that emails Gary. No email service is needed for them, and they still work when our app is the thing that's broken.
 - **The offline alert and the daily digest go through our `INotifier`**, with **Azure Communication Services (ACS) Email on an Azure-managed domain**: no domain to buy, **no secrets** (managed identity), defined in Bicep, and about a penny a month.
-- **Big caveat: Microsoft is retiring ACS Email on 30 September 2028.** It's in maintenance mode, and Microsoft recommends against onboarding new workloads. We'd get about two years from it. `INotifier` keeps the swap to a different provider to one Infrastructure class and some Bicep. This is a **decision for Gary** (see [Decisions](#decisions-for-gary)); the alternative is Resend with a domain Gary owns.
+- **Big caveat: Microsoft is retiring ACS Email on 30 September 2028.** It's in maintenance mode, and Microsoft recommends against onboarding new workloads. We'd get about two years from it. `INotifier` keeps the swap to a different provider to one Infrastructure class and some Bicep. **Gary chose ACS Email on 2026-10-17** (see [Decisions](#decisions-gary-2026-10-17)).
 - **`WEBSITE_TIME_ZONE` isn't supported on Linux Flex Consumption.** Schedule the digest timer at **20:00 and 21:00 UTC**, and let only the run where it's 21:00 in `Europe/London` send.
 - Deliverability from the Azure-managed domain wasn't tested (no proof of concept in the live subscription). The first email feature checks it.
 
@@ -117,18 +117,18 @@ For #44 to build. None of it is a secret.
 ## Recommendation
 
 1. **Error alerts:** Azure Monitor log search alert + action group, in Bicep, no app code (#48 as written).
-2. **Offline alert and daily digest:** `INotifier` → **ACS Email on an Azure-managed domain**, managed identity, no secrets. Accept the 30 Sep 2028 retirement, and plan the move (to Resend with Gary's own domain, or whatever is best then) well before it. *Needs Gary's confirmation.*
+2. **Offline alert and daily digest:** `INotifier` → **ACS Email on an Azure-managed domain**, managed identity, no secrets. Accept the 30 Sep 2028 retirement, and plan the move (to Resend with Gary's own domain, or whatever is best then) well before it. **Confirmed by Gary.**
 3. **Digest schedule:** timer at 20:00 and 21:00 UTC; only the run at 21:00 UK time sends; sent-digest record for duplicates; retry attribute plus an Error log on final failure.
 4. **Templates:** a pure C# builder with `WebUtility.HtmlEncode`, inline styles and a plain-text version.
 
-## Decisions for Gary
+## Decisions (Gary, 2026-10-17)
 
-1. **Provider:** ACS Email (free, no secrets, no domain, retiring Sep 2028), or Resend (free, long-lived, but needs a domain you own and the Key Vault card first)?
-2. **If ACS:** is a sender address like `DoNotReply@<random>.azurecomm.net` acceptable? (It can't be changed on the Azure-managed domain.)
+1. **Provider:** **ACS Email on an Azure-managed domain**, accepting the 30 Sep 2028 retirement.
+2. **Sender:** the fixed `DoNotReply@<random>.azurecomm.net` address is fine.
 
 ## Suggested follow-up cards (not created)
 
-- **[Task] Move email off Azure Communication Services before 30 September 2028**, only if Gary chooses ACS: a replacement `INotifier` (e.g. Resend with Gary's domain), Key Vault for its key, and removal of the ACS resources. Pick it up in 2027.
+- **[Task] Move email off Azure Communication Services before 30 September 2028**, since Gary chose ACS: a replacement `INotifier` (e.g. Resend with Gary's domain), Key Vault for its key, and removal of the ACS resources. Pick it up in 2027.
 - **Note for #44 (no new card):** its verification should record whether the first email reached the inbox or Spam, and if needed walk Gary through a "Never send it to Spam" filter for the sender.
 
 ## Sources
