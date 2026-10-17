@@ -29,7 +29,7 @@ The Cosmos data model (containers, partition keys, change-feed flow, idempotency
 - Every behaviour change ships with **unit tests**. Tests must pass before merging.
 - Configuration via app settings / env vars. Key Vault is not used yet — it's added when the first real secret appears.
 - **.NET 10 (LTS)**, Azure Functions **isolated worker** (Functions host v4), on the Flex Consumption plan. Everything .NET lives in `BE/`: pinned in `BE/global.json`, shared build settings in `BE/Directory.Build.props` (nullable, warnings as errors, recommended analysers); package versions only in `BE/Directory.Packages.props` (central package management).
-- **Local scanner (Pi client), in `LocalScanner/`: Python 3.11+**, standard library only at runtime (lean thin client); `pytest` and `ruff` for development. The simulator (card #66) imports the `cupboard_pi` package's ingest client and payload models, so keep them free of Pi-only dependencies. The shared ingest contract lives in `cupboard_pi.payloads` (scan event, heartbeat, barcode validation) and `cupboard_pi.identity` (`HUB_ID`, `SCANNERS=deviceId=in|out,...`).
+- **Local scanner (Pi client), in `LocalScanner/`: Python 3.11+**, standard library only at runtime (lean thin client); `pytest` and `ruff` for development. The simulator (card #66) imports the `cupboard_pi` package's ingest client and payload models, so keep them free of Pi-only dependencies. The shared ingest contract lives in `cupboard_pi.payloads` (scan event, heartbeat, barcode validation) and `cupboard_pi.identity` (`HUB_ID`, `SCANNERS=deviceId=in|out[@<scanner port>],...`; the Pi needs the scanner port on every entry, the simulator ignores it). The Pi client reads the scanners (`cupboard_pi.scanners`), writes each valid scan to a SQLite **scan queue** (`cupboard_pi.scan_queue`) and a separate sender posts it to ingest (`cupboard_pi.sender`), so reading never waits on the network.
 
 ### Build and test
 
@@ -179,7 +179,7 @@ Read-only scripts in `deploy/verify/` for checking cards against the **live** sy
 **Rules for simulating against the live system:**
 - There's **one live environment**, so simulated scans create **real** stock. Only simulate items Gary **actually has**, with their real barcodes (from Gary, or his phone scanner app), unless a card says otherwise.
 - Anything sent only to test must be **undone** (e.g. checked out again) and recorded in the card comment.
-- Until [Feature] Pi reads both scanners and sends scans (#67) is Done, a verification step saying "Gary scans X" means: get the barcode from Gary and send it with the simulator.
+- **"Gary scans X" now means Gary scans it on the real scanner** (the Pi sends it, #67). The simulator is no longer the default; use it only when a card says so, or when Gary isn't at the scanners and agrees.
 
 - When querying App Insights yourself, query the **workspace** (`az monitor log-analytics query`, tables `AppRequests`, `AppTraces`, `AppExceptions`, `AppDependencies`); `az monitor app-insights query` returned nothing here. `last` and `kind` are reserved words in KQL.
 - **Evidence pasted into Trello must have keys, tokens and personal data redacted.** The scripts never print the function key, but check anything you paste.
@@ -195,7 +195,8 @@ Headless Raspberry Pi 3, managed over SSH from the MacBook. No secrets here: the
 | OS | Raspberry Pi OS 13 "trixie" Lite, 32-bit (`armv7l`), Python 3.13, timezone Europe/London, NTP on |
 | Packages | `git` (installed but unused: deployment is by file copy), `python3`, `python3-venv`, `python3-pip`, `evtest` (scanner spike), `unattended-upgrades` (security updates, on) |
 | App directory | `/opt/cupboard-tracker` (owned by `gary`, 755): releases of the client, each with its own venv, **copied over SSH** by `deploy/pi.sh` (#33; no git clone on the Pi) |
-| Data directory | `/var/lib/cupboard-tracker` (owned by `gary`, 750): the scan queue. Outside the releases, so deploys never wipe it |
+| Data directory | `/var/lib/cupboard-tracker` (owned by `gary`, 750): the scan queue, `scan-queue.sqlite3` (table `scans`: waiting to send; `rejected`: scans ingest refused as invalid, kept for a person to look at). Outside the releases, so deploys never wipe it. **Never delete it**: queued scans exist nowhere else |
+| Scanners | Two Tera 5100s, told apart by **scanner port** (spike #27): scanner 1's dongle in the **bottom-right** USB port is `platform-3f980000.usb-usb-0:1.5:1.0`, scanner 2's in the **top-left** is `platform-3f980000.usb-usb-0:1.2:1.0`. `SCANNERS` in `pi.env` maps each port to its device and role. Both scanners are set to the UK keyboard layout |
 | Config directory | `/etc/cupboard-tracker/` (root, 750): `pi.env` (root, 600) with the ingest URL and function key. **Never in the repo**, never printed. Only systemd (as root) reads it |
 | Service | `cupboard-pi` (systemd, unit in `LocalScanner/deploy/cupboard-pi.service`): runs `/opt/cupboard-tracker/current/venv/bin/cupboard-pi` as `gary` (with the `input` group), `Restart=always`, enabled at boot, logs to the journal. `/opt/cupboard-tracker/current` → `releases/<sha>/`, `previous` → the one before |
 
@@ -241,7 +242,7 @@ BE/                              # backend: the one .NET solution (build and tes
 FE/                              # frontend: React app (not yet)
 LocalScanner/                    # local scanner: the Python Pi client (package cupboard_pi, src/ layout)
   deploy/                        # systemd unit, sudoers rule and install-service.sh (Gary, root) for the Pi
-tools/                           # command-line tools, e.g. simulator/ (#66; not yet)
+tools/                           # command-line tools, e.g. simulator/ (#66)
 docs/
   domain-language.md
   data-model.md

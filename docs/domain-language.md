@@ -68,6 +68,9 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Scanner** – a physical barcode scanner. There are two of the same model, told apart by the **scanner port** their dongle is plugged into.
 - Not to be confused with: **Device**, the logical identity the Pi assigns to a scanner.
 
+**Scan queue** – the Pi's local, durable list of scans waiting to be sent to ingest (SQLite under `/var/lib/cupboard-tracker/`). Every scan is written here before it's sent, and removed only once ingest accepts it, so an outage or a reboot loses nothing.
+- In code: `ScanQueue`
+
 **Scanner port** – the Pi USB port a scanner's dongle is plugged into, named by its `/dev/input/by-path` link (e.g. `platform-3f980000.usb-usb-0:1.5:1.0`). The Pi maps each scanner port to a device. Moving a dongle to another port moves its scans to another device.
 - In code: `scanner_port` (Pi client config)
 
