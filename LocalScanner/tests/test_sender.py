@@ -1,3 +1,5 @@
+import logging
+import re
 import threading
 import time
 
@@ -50,6 +52,14 @@ def run_sender(queue, transport, until, waits=None):
 
 def bodies(transport):
     return [r.body.decode() for r in transport.sent]
+
+
+def test_logs_how_long_each_send_took(tmp_path, caplog):
+    q = ScanQueue(tmp_path / "q.sqlite3")
+    q.add("id-1", {"scanId": "id-1"})
+    with caplog.at_level(logging.INFO):
+        run_sender(q, FakeTransport([202]), lambda: q.depth() == 0)
+    assert re.search(r"Sent scan id-1 \(HTTP 202 in \d+\.\d\d s\)", caplog.text)
 
 
 def test_sends_in_order_and_deletes_after_2xx(tmp_path):
