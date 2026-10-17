@@ -5,7 +5,7 @@ namespace CupboardTracker.Infrastructure.OpenFoodFacts;
 /// <summary>From app settings: OFF_BASE_URL, OFF_CONTACT_EMAIL (deploy-time, never committed), OFF_MAX_REQUESTS_PER_MINUTE.</summary>
 public sealed record OpenFoodFactsOptions(Uri BaseUrl, string ContactEmail, int MaxRequestsPerMinute)
 {
-    public const int DefaultMaxRequestsPerMinute = 10; // Open Food Facts allows 15/min per IP (spike #28)
+    public const int DefaultMaxRequestsPerMinute = 12; // Open Food Facts allows 15/min per IP (spike #28); Gary chose 12
 
     public int AttemptsPerLookup { get; init; } = 3;
 

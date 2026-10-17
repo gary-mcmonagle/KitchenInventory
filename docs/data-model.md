@@ -203,7 +203,7 @@ When Open Food Facts is down or rate-limited (timeouts, 5xx, 429; see [spike #28
 
 `lookupFailed` is **not** a final answer. It's retried by:
 - **The lookup-retry timer**, every **15 minutes**: query products with `status = 'lookupFailed'`, and retry Open Food Facts for each (using the first barcode in `barcodes`), at most **10 products per run**, oldest `lastLookupAttemptAt` first.
-- **Open Food Facts throttle:** at most `OFF_MAX_REQUESTS_PER_MINUTE` calls a minute (default 10; Open Food Facts allows 15 per IP). The change-feed processor effectively runs as one instance (the small scan-events container has one lease) and the timer is a singleton, so the budget is **split**: the timer gets a fifth (2 a minute at the default) and check-in processing the rest (8). Over budget, a caller **waits** for a slot rather than failing, so a stock-take queues.
+- **Open Food Facts throttle:** at most `OFF_MAX_REQUESTS_PER_MINUTE` calls a minute (default **12**, Gary's choice; Open Food Facts allows 15 per IP). The change-feed processor effectively runs as one instance (the small scan-events container has one lease) and the timer is a singleton, so the budget is **split**: the timer gets a fifth (2 a minute at the default) and check-in processing the rest (10). Over budget, a caller **waits** for a slot rather than failing, so a stock-take queues.
 - **The next check-in of that barcode**, which retries once before creating the unit.
 
 Each retry ends in `known` (found), `noMatch` (not found; final) or `lookupFailed` again (`lookupAttempts` + 1). **Naming by hand also resolves it**, and a named product is never retried. `noMatch` and named products are final and never re-fetched.
