@@ -13,7 +13,7 @@ What is the simplest robust way for the React app (Azure Static Web Apps, **free
 - **Validate the token in our own code** in the API Function app (a small worker middleware using Microsoft's `Microsoft.IdentityModel` libraries), not App Service built-in auth ("Easy Auth"). Easy Auth's support on Flex Consumption is unclear, and code validation behaves the same locally and in Azure and is unit-testable.
 - **Two single-tenant app registrations** in Gary's own Entra tenant: an **API** registration exposing `access_as_user` that pre-authorises the **SPA** registration, which has SPA redirect URIs for localhost and the Static Web App.
 - **Only invited people can sign in:** the registrations are single-tenant, household members are **invited as guests**, and the API also checks the tenant and calling app.
-- **Registrations as code** with the **Microsoft Graph Bicep extension** (GA since August 2025), deployed by `deploy/infra.sh`.
+- **Registrations as code** with the **Microsoft Graph Bicep extension** (GA since August 2025), deployed by `deploy/entra.sh` as a dedicated least-privilege account (Application Developer role only).
 - **Everything here is free.**
 
 ## 1. Linked backends on the Free plan
