@@ -1,0 +1,16 @@
+# Secrets and local settings: never commit (the repo is public)
+local.env
+.env
+.env.*
+!.env.example
+local.settings.json
+
+# Spike script output
+off-results/
+jev-results/
+
+# Build output
+bin/
+obj/
+node_modules/
+dist/
