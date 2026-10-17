@@ -199,6 +199,7 @@ BE/                              # backend: the one .NET solution (build and tes
     CupboardTracker.Application.Tests/
 FE/                              # frontend: React app (not yet)
 LocalScanner/                    # local scanner: the Python Pi client (package cupboard_pi, src/ layout)
+tools/                           # command-line tools, e.g. simulator/ (#66; not yet)
 docs/
   domain-language.md
   data-model.md
@@ -207,6 +208,6 @@ deploy/                          # deployment scripts (infra.sh)
 infra/                           # Bicep: main.bicep, main.bicepparam, modules/
 ```
 
-Older cards may say `src/`, `pi/` or `ui/`: read those as `BE/src/`, `LocalScanner/` and `FE/`. Where a card names a new top-level folder (e.g. `tools/simulator/`), check with Gary which of the three it belongs in.
+Older cards may say `src/`, `pi/` or `ui/`: read those as `BE/src/`, `LocalScanner/` and `FE/`. Command-line tools that aren't part of a component (e.g. the scan and heartbeat simulator, `tools/simulator/`) go in a top-level **`tools/`** folder (Gary, 2026-10-17). For any other new top-level folder, check with Gary first.
 
 Dependencies point inwards: Functions → Infrastructure → Application → Domain.
