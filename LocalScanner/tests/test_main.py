@@ -9,7 +9,9 @@ import time
 from conftest import PORT_IN, PORT_OUT
 
 from cupboard_pi.__main__ import deployed_sha, log_format, main, make_scan_handler
+from cupboard_pi.config import Config
 from cupboard_pi.identity import Identity
+from cupboard_pi.ingest_client import IngestClient, IngestResponse
 from cupboard_pi.scan_queue import ScanQueue
 
 ENV = {
@@ -19,6 +21,11 @@ ENV = {
     "HUB_ID": "cupboard-pi",
     "SCANNERS": f"scanner-in=in@{PORT_IN},scanner-out=out@{PORT_OUT}",
 }
+
+
+def fake_client():
+    config = Config(ENV["INGEST_URL"], ENV["INGEST_AUTH_HEADER_NAME"], ENV["INGEST_AUTH_HEADER_VALUE"])
+    return IngestClient(config, lambda request, timeout: IngestResponse(202, "{}"))
 
 
 def _set_env(monkeypatch, tmp_path):
@@ -33,7 +40,7 @@ def test_logs_startup_with_sha_and_stops_when_asked(monkeypatch, caplog, tmp_pat
     stop = threading.Event()
     stop.set()
     with caplog.at_level(logging.INFO):
-        assert main(stop=stop, by_path=by_path) == 0
+        assert main(stop=stop, by_path=by_path, client=fake_client()) == 0
     assert "cupboard-pi starting: sha=abc1234" in caplog.text
     assert f"scanner-in=in@{PORT_IN}" in caplog.text
     assert "cupboard-pi stopping" in caplog.text
@@ -44,7 +51,9 @@ def test_keeps_running_until_stopped(monkeypatch, tmp_path, by_path):
     _set_env(monkeypatch, tmp_path)
     stop = threading.Event()
     result = []
-    worker = threading.Thread(target=lambda: result.append(main(stop=stop, by_path=by_path)))
+    worker = threading.Thread(
+        target=lambda: result.append(main(stop=stop, by_path=by_path, client=fake_client()))
+    )
     worker.start()
     time.sleep(0.3)
     assert worker.is_alive()
@@ -132,7 +141,14 @@ def test_no_timestamp_in_logs_under_systemd():
 
 
 def test_sigterm_stops_the_service_cleanly(tmp_path):
-    env = {**os.environ, **ENV, "DEPLOYED_SHA": "sigtest", "SCAN_QUEUE_PATH": str(tmp_path / "q.sqlite3")}
+    # A closed local port: the startup heartbeat fails at once, with no network involved.
+    env = {
+        **os.environ,
+        **ENV,
+        "INGEST_URL": "http://127.0.0.1:9",
+        "DEPLOYED_SHA": "sigtest",
+        "SCAN_QUEUE_PATH": str(tmp_path / "q.sqlite3"),
+    }
     proc = subprocess.Popen([sys.executable, "-m", "cupboard_pi"], env=env, stderr=subprocess.PIPE, text=True)
     deadline = time.monotonic() + 10
     line = ""
@@ -143,3 +159,10 @@ def test_sigterm_stops_the_service_cleanly(tmp_path):
     _, rest = proc.communicate(timeout=10)
     assert proc.returncode == 0
     assert "cupboard-pi stopping" in rest
+
+
+def test_bad_heartbeat_interval_refuses_to_start(monkeypatch, caplog, tmp_path):
+    _set_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("HEARTBEAT_INTERVAL_SECONDS", "1")
+    assert main() == 2
+    assert "HEARTBEAT_INTERVAL_SECONDS" in caplog.text

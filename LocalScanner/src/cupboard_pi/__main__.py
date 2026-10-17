@@ -15,11 +15,12 @@ import threading
 from pathlib import Path
 
 from cupboard_pi.config import Config, ConfigError
+from cupboard_pi.heartbeat import HeartbeatLoop, heartbeat_interval
 from cupboard_pi.identity import Identity
 from cupboard_pi.ingest_client import IngestClient
 from cupboard_pi.payloads import ScanEvent, is_valid_barcode
 from cupboard_pi.scan_queue import DEFAULT_PATH, WARN_DEPTH, ScanQueue
-from cupboard_pi.scanners import BY_PATH, ScannerReader
+from cupboard_pi.scanners import BY_PATH, ScannerReader, scanner_presence
 from cupboard_pi.sender import Sender
 
 DEPLOYED_SHA_FILENAME = "DEPLOYED_SHA"
@@ -84,11 +85,13 @@ def main(
     stop: threading.Event | None = None,
     by_path: Path = BY_PATH,
     grab=None,
+    client: IngestClient | None = None,
 ) -> int:
     logging.basicConfig(level=logging.INFO, format=log_format())
     try:
         config = Config.from_env()
         identity = Identity.from_env(require_ports=True)
+        interval = heartbeat_interval()
     except ConfigError as e:
         log.error("%s", e)
         return 2
@@ -108,12 +111,13 @@ def main(
     sha = deployed_sha()
     log.info("cupboard-pi starting: sha=%s ingest=%s", sha, config.ingest_url)
     log.info(
-        "Scanners: %s; queue %s (%d waiting)",
+        "Scanners: %s; queue %s (%d waiting); heartbeat every %d s",
         ", ".join(
             f"{d}={identity.devices[d]}@{p}" for p, d in sorted(identity.ports.items(), key=lambda i: i[1])
         ),
         queue_path,
         queue.depth(),
+        interval,
     )
     crashed: list[str] = []
 
@@ -130,7 +134,15 @@ def main(
 
     handler = make_scan_handler(identity, queue, sha)
     reader = ScannerReader(identity.ports, handler, by_path, **({"grab": grab} if grab else {}))
-    threads = [guard("scanner", reader.run), guard("sender", Sender(queue, IngestClient(config)).run)]
+    client = client or IngestClient(config)
+    heartbeat = HeartbeatLoop(
+        identity, client, sha, interval, presence=lambda: scanner_presence(identity.ports, by_path)
+    )
+    threads = [
+        guard("scanner", reader.run),
+        guard("sender", Sender(queue, client).run),
+        guard("heartbeat", heartbeat.run),
+    ]
     for t in threads:
         t.start()
     stop.wait()
