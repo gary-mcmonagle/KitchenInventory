@@ -15,7 +15,9 @@ public static class OfflineAlertEmail
     {
         var lastSeen = FormatLocal(lastSeenAt, homeTimeZone);
         var silentFor = FormatDuration(now - lastSeenAt);
-        const string hint = "Check that it has power and that its Wi-Fi is working. Scans can't be recorded while it's offline.";
+        const string hint = "Check that it has power and that its Wi-Fi is working.";
+        const string scans = "Scans made while its Wi-Fi is down are kept on the Pi and sent when it reconnects, "
+            + "but nothing can be scanned while it has no power.";
         const string once = "You'll get one email per outage, and none when it comes back.";
 
         var plain = $"""
@@ -23,7 +25,7 @@ public static class OfflineAlertEmail
 
             Last seen: {lastSeen}
 
-            {hint}
+            {hint} {scans}
 
             {once}
             """;
@@ -33,7 +35,7 @@ public static class OfflineAlertEmail
             <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:16px;line-height:1.5;color:#1C2A24;max-width:560px">
             <p style="margin:0 0 12px"><strong>The Pi ({e(hubId)}) hasn't been in touch for {e(silentFor)}.</strong></p>
             <p style="margin:0 0 12px">Last seen: {e(lastSeen)}</p>
-            <p style="margin:0 0 12px">{e(hint)}</p>
+            <p style="margin:0 0 12px">{e(hint)} {e(scans)}</p>
             <p style="margin:0;color:#5B6B63;font-size:14px">{e(once)}</p>
             </div>
             """;
