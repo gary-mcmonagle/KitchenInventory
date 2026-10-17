@@ -28,7 +28,7 @@ param openFoodFactsContactEmail string = ''
 @description('Open Food Facts calls per minute across all callers (they allow 15 per IP).')
 @minValue(2)
 @maxValue(15)
-param openFoodFactsMaxRequestsPerMinute int = 10
+param openFoodFactsMaxRequestsPerMinute int = 12
 
 @description('Maximum Flex Consumption instances per Function app (a cost guard; household load is tiny).')
 @minValue(1)
