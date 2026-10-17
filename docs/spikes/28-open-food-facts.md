@@ -8,7 +8,7 @@ How well does Open Food Facts identify the products in our house, and what exact
 
 ## Summary
 
-- **Coverage is excellent.** 27 of 27 sample barcodes are a match; **26 of 27 (96%)** have a name we can show. The no-match path is an edge case, not the main path. No alternative source is needed.
+- **Coverage is excellent.** 27 of 27 sample barcodes are a match; **26 of 27 (96%)** have a readable English name, and the other one is in Bulgarian. The no-match path is an edge case, not the main path. No alternative source is needed.
 - **Use the v3 product endpoint**, look up the barcode exactly as scanned, and build the display name from `product_name_en`, falling back to `product_name`.
 - **The rate limit is tight: 15 product reads a minute per IP.** Normal use (tens of scans a day) is fine, but a stock-take burst will hit it. Treat 429 as transient and back off.
 - A 404 with `product_not_found` is a **no-match**. Everything else that isn't a 200 (429, 5xx, timeouts, non-JSON) is **transient** and should end as `lookupFailed` after retries.
@@ -23,9 +23,9 @@ The category for each barcode is my call from the brand. "Fresh" here means chil
 
 Looked up on 2026-10-16 with [`28-open-food-facts-lookup.py`](28-open-food-facts-lookup.py).
 
-| Barcode | Category | Match? | Display name (proposed) | Brand | Quantity | Notes |
+| Barcode | Category | Match? | Display name | Brand | Quantity | Notes |
 |---|---|---|---|---|---|---|
-| 049733830119 | Branded | Yes | Chipotle Hot Sauce | McCormick & Company Inc. | 150 ml | UPC-A; OFF returns the code as `0049733830119`. All-caps name. |
+| 049733830119 | Branded | Yes | CHIPOTLE HOT SAUCE | McCormick & Company Inc. | 150 ml | UPC-A; OFF returns the code as `0049733830119`. Shown in capitals, as OFF has it. |
 | 5000354922831 | Branded | Yes | Beef Gravy | Bisto | 230g | |
 | 5032457717533 | Branded | Yes | Guinness Spicy Chipotle Rub | Guinness | – | No categories. |
 | 5060040110010 | Branded | Yes | Clarks Original Maple Syrup 180Ml | Clarks | 180 ml | Main language `fr`, but `product_name_en` present. Size is repeated in the name. |
@@ -42,22 +42,22 @@ Looked up on 2026-10-16 with [`28-open-food-facts-lookup.py`](28-open-food-facts
 | 20719395 | Own-brand (Lidl) | Yes | Whole Chia Seeds | Alesto | 200g | EAN-8. |
 | 4335619399235 | Own-brand (Lidl) | Yes | Walnut halves | Alesto | 200g | |
 | 4088600478425 | Own-brand (Aldi) | Yes | Chopped Tomatoes in a Rich Tomato Juice | Cucina | 400 g | |
-| 4056489879305 | Own-brand (Lidl) | Yes, **not usable** | – | taste of deutschland | 250 | Only name is `горчица` (Bulgarian for "mustard"), with no English name. |
-| 4335619013537 | Own-brand (Lidl) | Yes | Mild Peri Peri Mayo V | BATTS | – | All-caps name with a stray "V". |
+| 4056489879305 | Own-brand (Lidl) | Yes, **not readable** | горчица | taste of deutschland | 250 | Only name is Bulgarian ("mustard"), with no English name. Shown as-is for now. |
+| 4335619013537 | Own-brand (Lidl) | Yes | MILD PERI PERI MAYO V | BATTS | – | Capitals, with a stray "V". |
 | 5051140150785 | Own-brand (Tesco) | Yes | 50% Less Sodium Salt | Tesco | – | |
 | 4056489901105 | Own-brand (Lidl) | Yes | Crunchy Peanut Butter | Maribel | 1 kg | |
 | 4056489825586 | Own-brand (Lidl) | Yes | Swiss style museli | Brownfield | 1 kg | Typo in OFF data. |
 | 4056489903703 | Own-brand (Lidl) | Yes | Chickpeas in Water | Freshona | 400g | |
 | 20590093 | Fresh (Lidl) | Yes | Easy Peelers | Deluxe | – | EAN-8. Packed fruit. |
-| 20055363 | Fresh (Lidl) | Yes | Plain Naan Breads | Taste of | 2 x 130 g | EAN-8. All-caps name; brand truncated in OFF. |
-| 4056489899112 | Fresh (Lidl) | Yes | Semi-Skimmed British Milk | Dairy Manor | – | All-caps name; no image or categories. Scanned twice. |
+| 20055363 | Fresh (Lidl) | Yes | PLAIN NAAN BREADS | Taste of | 2 x 130 g | EAN-8. Capitals; brand truncated in OFF. |
+| 4056489899112 | Fresh (Lidl) | Yes | SEMI-SKIMMED BRITISH MILK | Dairy Manor | – | Capitals; no image or categories. Scanned twice. |
 | 4088600060880 | Fresh (Aldi) | Yes | Greek 10% fat authentic yogurt | Brooklea | 500g | |
 | `https://lwvk.st4.ch/…` | – | n/a | – | – | – | QR code, not a product barcode. Not looked up. |
 | `https://1nk.uk/…` | – | n/a | – | – | – | QR code, not a product barcode. Not looked up. |
 
 ## Hit rate
 
-| Category | Sample | Match | Usable name |
+| Category | Sample | Match | Readable English name |
 |---|---|---|---|
 | Branded | 14 | 14 (100%) | 14 (100%) |
 | Own-brand | 9 | 9 (100%) | 8 (89%) |
@@ -96,11 +96,11 @@ Match the field names already reserved in [`docs/data-model.md`](../data-model.m
 
 ### Building the display name
 
-1. Take the first non-empty of `product_name_en`, then `product_name`.
-2. Trim it and collapse runs of whitespace.
-3. If it's **all capitals**, convert it to title case ("SEMI-SKIMMED BRITISH MILK" → "Semi-Skimmed British Milk"). Otherwise keep OFF's casing.
-4. If the result isn't mostly **Latin script** (as with "горчица"), or step 1 finds nothing, treat the barcode as a **no-match** and use `Unknown item (<barcode>)`. Still cache brand, quantity and image, since they help with naming. *Needs Gary's confirmation; see Decisions.*
-5. **Don't** add the brand or size to the display name. The mockups show them separately (`brand · size`). Some OFF names already include the brand ("Knorr All Purpose…") or size ("…180Ml"); leave those alone rather than guessing.
+**Decision (Gary, 2026-10-17): use OFF's name exactly as returned, with no clean-up or language checks for now.** Checking and tidying names (capitals, foreign-language names, typos) is a separate spike: #61 (https://trello.com/c/UYc6A2Wr).
+
+1. Take the first non-empty of `product_name_en`, then `product_name`, trimmed. Otherwise use it exactly as returned, so "SEMI-SKIMMED BRITISH MILK" and "горчица" are shown as they are.
+2. If neither has a name, it's a **no-match**: use `Unknown item (<barcode>)`, and still cache brand, quantity and image, since they help with naming.
+3. **Don't** add the brand or size to the display name. The mockups show them separately (`brand · size`). Some OFF names already include the brand ("Knorr All Purpose…") or size ("…180Ml"); leave those alone rather than guessing.
 
 ## API usage
 
@@ -110,11 +110,11 @@ Match the field names already reserved in [`docs/data-model.md`](../data-model.m
   - Typical response time from here: ~100 ms.
 - **Barcode format:** send it **exactly as scanned**. OFF accepts 8-digit EAN-8, 12-digit UPC-A and 13-digit EAN-13. For UPC-A it returns the code zero-padded to 13 digits (`049733830119` → `0049733830119`), so **key the product cache on the scanned barcode, not on OFF's `code`**.
 - **Auth:** none for reads, only a custom `User-Agent`.
-- **User-Agent:** `AppName/Version (ContactEmail)`, e.g. `CupboardTracker/1.0 (<contact email>)`. The contact must be an **app setting**, never committed, because the repo is public. The spike script used the repo URL instead.
+- **User-Agent:** `AppName/Version (ContactEmail)`, e.g. `CupboardTracker/1.0 (<contact email>)`. **Decision (Gary):** the contact is Gary's email, held in an **app setting** and supplied at deploy time. It's never committed, because the repo is public. The spike script used the repo URL instead.
 - **Rate limits (from OFF's API docs):** **15 product reads a minute per IP**, 10 searches a minute. There's also a global limit that returns **503**. Abuse can lead to an IP ban. At 1 read a second, the script was getting 429s after 14 reads.
   - Function apps share outbound IPs with other tenants, so we may see 429s even at low volume. Retry with back-off rather than assuming our own traffic caused them.
   - A **stock-take** (dozens of check-ins in a few minutes) will exceed 15 a minute. The retry policy plus the `lookupFailed` retry on the next check-in covers it, but it's better to spread the lookups out (see Follow-ups).
-- **Terms:** data under ODbL (attribution required if we display it), images under CC BY-SA, and no accuracy guarantee. OFF also asks integrators to fill in their API usage form and to send *test* traffic to staging (`world.openfoodfacts.net`, basic auth `off`/`off`). Unit tests should mock the HTTP client. An integration test, if we add one, should point the base URL setting at staging.
+- **Terms:** data under ODbL (attribution required if we display it), images under CC BY-SA, and no accuracy guarantee. OFF also asks integrators to fill in their API usage form (**Gary: not doing this**) and to send *test* traffic to staging (`world.openfoodfacts.net`, basic auth `off`/`off`). Unit tests should mock the HTTP client. An integration test, if we add one, should point the base URL setting at staging.
 
 ## Errors
 
@@ -122,7 +122,7 @@ What each case looked like on 2026-10-16:
 
 | Case | HTTP | Body | Treat as |
 |---|---|---|---|
-| Found | 200 | v3: `"status":"success"`, `result.id: "product_found"`, `product: {…}` | **Match** (if the display name rule gives a name; otherwise no-match). |
+| Found | 200 | v3: `"status":"success"`, `result.id: "product_found"`, `product: {…}` | **Match** (if it has a name; otherwise no-match). |
 | Not found | 404 | v3: `"status":"failure"`, `result.id: "product_not_found"`. v2: `"status":0,"status_verbose":"product not found"` | **No-match** (final). |
 | Exists, but not food (e.g. a beauty product) | 404 | v2: `"status_verbose":"product found with a different product type: beauty"` | **No-match**. |
 | Invalid code (`abc`, all zeros) | 200 | `"status":0,"status_verbose":"no code or invalid code"` | **No-match**. The Pi and ingest already validate barcodes, so this shouldn't happen. |
@@ -130,7 +130,7 @@ What each case looked like on 2026-10-16:
 | Global limit / server error | 503 / 5xx | Not observed in this spike | **Transient**. |
 | Timeout, connection error, non-JSON 200 | – | – | **Transient**. |
 
-Rule of thumb: **only a 404 (or a 200 without a usable name) is a no-match. Anything else that isn't a successful 200 is a retry**, and `lookupFailed` after the retry policy gives up. Check the HTTP status before parsing the body, because 429s aren't JSON.
+Rule of thumb: **only a 404 (or a 200 with no name at all) is a no-match. Anything else that isn't a successful 200 is a retry**, and `lookupFailed` after the retry policy gives up. Check the HTTP status before parsing the body, because 429s aren't JSON.
 
 ## Alternatives
 
@@ -144,16 +144,17 @@ Not needed, since the hit rate is 96%. For the record, the UK options worth a lo
 
 ## Recommendation
 
-Go ahead with the agreed product lookup: product cache first, then Open Food Facts v3. Build the display name as above, cache `displayName`, `brand`, `quantity`, `imageUrl` and `categoryTags`, and classify responses using the Errors table. Keep the no-match path (naming, photo identification) as planned, but it's an edge case: about 1 in 25 products in this sample.
+Go ahead with the agreed product lookup: product cache first, then Open Food Facts v3. Build the display name as above, cache `displayName`, `brand`, `quantity`, `imageUrl` and `categoryTags`, and classify responses using the Errors table. Keep the no-match path (naming, photo identification) as planned, but it's an edge case: none of the 27 products in this sample were a no-match.
 
-## Decisions for Gary
+## Decisions (Gary, 2026-10-17)
 
-1. **Non-English-only names.** When OFF only has a name in a non-Latin script (e.g. "горчица"), treat the product as a **no-match** so it gets named? Or show the foreign name as it is?
-2. **User-Agent contact.** OFF wants a contact email in the User-Agent. Which address should the app setting hold? It won't be committed.
-3. **OFF API usage form.** OFF asks integrators to register their usage. Do you want to fill it in?
+1. **Names:** show OFF's name exactly as returned, including non-English names, for now. Validating names with Jev is its own spike: [#61 Spike] Jev validation of Open Food Facts names (https://trello.com/c/UYc6A2Wr).
+2. **User-Agent contact:** Gary's email, as an app setting supplied at deploy time, never committed.
+3. **OFF API usage form:** not filling it in.
 
-## Suggested follow-up cards (not created)
+## Follow-up cards
 
-- **[Task] Amend the data model with the Open Food Facts fields:** add `categoryTags`, confirm `brand` / `quantity` / `imageUrl`, and record the display name rule and the non-English rule. This could fold into the existing "[Task] Amend the data model" card.
-- **[Task] Spread out Open Food Facts lookups during a stock-take:** a small throttle (e.g. at most 10 lookups a minute) in the lookup client, so a burst of check-ins doesn't trip the 15/min limit or risk an IP ban. This could also be a note on [Feature] Check-in adds to stock.
-- **[Task] Open Food Facts attribution in the UI:** a "Product data from Open Food Facts (ODbL)" line, e.g. on item detail or a settings/about screen, to meet the licence.
+- **[Task] Amend the data model with the Open Food Facts fields:** add `categoryTags`, confirm `brand` / `quantity` / `imageUrl`, and record the display name rule. Not created; this could fold into the existing "[Task] Amend the data model" card.
+- **[Task] Spread out Open Food Facts lookups during a stock-take:** a small throttle (e.g. at most 10 lookups a minute) in the lookup client, so a burst of check-ins doesn't trip the 15/min limit or risk an IP ban. Not created; this could also be a note on [Feature] Check-in adds to stock.
+- **[Task] Open Food Facts attribution in the UI:** created at Gary's request as #62 (https://trello.com/c/UW6U97xs).
+- **[Spike] Jev validation of Open Food Facts names:** created at Gary's request as #61 (https://trello.com/c/UYc6A2Wr).
