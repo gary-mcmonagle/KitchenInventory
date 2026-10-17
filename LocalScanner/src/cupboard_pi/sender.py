@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 from cupboard_pi.ingest_client import IngestClient, IngestError
 from cupboard_pi.payloads import SCANS_PATH
@@ -39,6 +40,7 @@ class Sender:
             if item is None:
                 self._queue.added.wait(IDLE_POLL_SECONDS)  # wakes as soon as a scan is added
                 continue
+            started = time.monotonic()
             try:
                 response = self._client.post_json(SCANS_PATH, item.payload)
                 failure = None if response.ok or response.status == 400 else f"HTTP {response.status}"
@@ -46,7 +48,13 @@ class Sender:
                 response, failure = None, str(e)
             if response is not None and response.ok:
                 depth = self._queue.remove(item.seq)
-                log.info("Sent scan %s (HTTP %d); queue depth %d", item.scan_id, response.status, depth)
+                log.info(
+                    "Sent scan %s (HTTP %d in %.2f s); queue depth %d",
+                    item.scan_id,
+                    response.status,
+                    time.monotonic() - started,
+                    depth,
+                )
                 delay = 0.0
             elif response is not None and response.status == 400:
                 depth = self._queue.reject(item.seq, response.status, response.body)
@@ -60,9 +68,10 @@ class Sender:
             else:
                 delay = next_delay(delay)
                 log.warning(
-                    "Sending scan %s failed (%s); retrying in %.0f s; queue depth %d",
+                    "Sending scan %s failed (%s after %.2f s); retrying in %.0f s; queue depth %d",
                     item.scan_id,
                     failure,
+                    time.monotonic() - started,
                     delay,
                     self._queue.depth(),
                 )
