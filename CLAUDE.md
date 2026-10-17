@@ -156,6 +156,7 @@ There is **one environment, and it's the live household system**. Treat it with 
 - Each component gets its own deployment script under `deploy/` once its deployment task is done. Document each script here as it lands:
   - **Infra (Bicep): `deploy/infra.sh [--yes] [--what-if-only]`.** Deploys `infra/main.bicep` with `infra/main.bicepparam` at subscription scope (it creates the resource group). It shows the signed-in subscription, prints a **what-if**, and deploys only after confirmation (`--yes` skips the prompt; use it only when Gary has approved the what-if). Safe to re-run: it reads each Function app's live `COMMIT_SHA`, `OFF_CONTACT_EMAIL` (the Open Food Facts User-Agent contact), `ALERT_EMAIL_TO` (who gets the offline alert, #44) and `DIGEST_EMAIL_TO` (who gets the 9pm digest, #46) and passes them back, so infra never resets them. All three addresses are Gary's and are **never committed**: on the first deploy the script takes them from the environment, or asks. `OFFLINE_THRESHOLD_MINUTES` comes from the template (default 20), so a re-run **does** reset a temporary change to it. A re-run with no template changes leaves the live resources **identical** (checked on #31 by snapshotting the group before and after). **What-if still lists some "Modify" entries that are false positives**, not real changes: app settings (what-if can't read them, so they always show as "Create"), role assignments' `principalId` (a managed identity's ID can't be resolved during what-if), and read-only or server-defaulted properties (e.g. Cosmos `sqlEndpoint`, storage blob-service defaults, App Insights `Flow_Type`). Look for anything else. Prints the outputs (app names, hostnames, Cosmos endpoint, App Insights name).
   - **Function apps: `deploy/functions.sh [--force]`.** Deploys **both** apps together from a clean, pushed `main` (or a checkout of exactly `origin/main`'s commit); `--force` overrides those checks and is for emergencies only. It runs `dotnet test` (stops on failure), publishes both apps in Release, zip-deploys them to the apps named in the infra deployment's outputs, sets `COMMIT_SHA` to the short commit, then smoke-checks `/api/ping` on both (ingest with its function key, fetched at runtime and passed to curl on stdin: never echoed, logged or written to disk), retrying for ~2 minutes. It prints the apps, the SHA and the smoke result, and exits non-zero if anything fails.
+  - **Entra registrations: `deploy/entra.sh [--swa-host <hostname>] [--yes]`** (#36). Deploys `infra/entra.bicep` (Microsoft Graph Bicep extension: the SPA and API registrations and their service principals) as deployment `cupboard-entra` in `rg-cupboard-tracker`. **Run as `cupboard-deployer` from its own CLI profile, never Gary's**: `AZURE_CONFIG_DIR=~/.azure-cupboard-deployer az login --tenant <tenantId>` (interactive, MFA; Gary does this), then `AZURE_CONFIG_DIR=~/.azure-cupboard-deployer deploy/entra.sh`. The script refuses any other account or profile. Safe to re-run (registrations are matched by `uniqueName`). Only needed when the registrations change (e.g. adding the Static Web App's redirect URI). Afterwards run `deploy/infra.sh`, which reads the client IDs from the `cupboard-entra` deployment's outputs into the API app settings.
   - UI (Static Web Apps): _TBD_
   - Pi setup (one-off, root, run by Gary): `deploy/pi-setup.sh`.
   - **Pi client: `deploy/pi.sh [--force] [--rollback]`** (#33). From a clean, pushed `main` (as `functions.sh`), it runs the `LocalScanner` tests, builds a wheel from a clean copy, and `rsync`s it over SSH with the systemd unit and a `DEPLOYED_SHA` file to `/opt/cupboard-tracker/releases/<sha>/`, where it gets its own venv. It then checks the unit, the sudoers rule and `pi.env` are in place, points `current` at the new release (atomic symlink swap; `previous` points at the old one), restarts `cupboard-pi`, and smoke-checks that this start logged `cupboard-pi starting: sha=<sha>` and is still running 10 s later. **If the check fails, it puts the previous release back** and exits non-zero with the journal. It keeps the newest 3 releases. `--rollback` swaps `current` and `previous` and restarts. `PI_HOST` overrides the SSH target.
@@ -174,6 +175,15 @@ Azure Monitor emails `ALERT_EMAIL_TO` when either Function app has an **exceptio
 - **Mute it temporarily** (e.g. during planned work): `az monitor scheduled-query update -g rg-cupboard-tracker -n alert-cupboard-errors --disabled true`, then `--disabled false` afterwards. A re-run of `deploy/infra.sh` re-enables it.
 - **Test it:** `POST /api/diagnostics/test-error` on either app, with its function key. It logs one Error tagged `diagnosticTest=true` and changes nothing. It's an Azure call and sends Gary an email, so only do it when a card says so.
 
+### Sign-in (Entra ID, #36, spike #35)
+
+- **Tenant:** Gary's "Default Directory" (`CottonWonderhotmail.onmicrosoft.com`). Single-tenant registrations: **Cupboard Tracker** (`cupboard-tracker-spa`, SPA redirect URIs `http://localhost:5173/` plus the Static Web App) and **Cupboard Tracker API** (`cupboard-tracker-api`, identifier `api://<tenantId>/cupboard-tracker-api`, delegated scope `access_as_user`, v2 tokens). The API pre-authorises the SPA (no consent prompt) and the Azure CLI (`04b07795-8ddb-461a-bbee-02f9e1bf7b46`, for verification). No client secrets anywhere.
+- **Who can sign in:** users in the tenant **and assigned** to the SPA's enterprise app (assignment is required). To add a household member, Gary: **Entra ID → Users → Invite external user** (they sign in with their own Microsoft account, or a one-time code by email), then **Enterprise applications → Cupboard Tracker → Users and groups → Add user** (assign people directly; groups need P1). Removing someone = deleting their guest account.
+- **Deployer:** `cupboard-deployer@CottonWonderhotmail.onmicrosoft.com` (cloud-only, MFA, no licence, not assigned to the app). Its only Entra role is **Application Developer**; its only Azure role is the custom **Cupboard Tracker deployment runner** (`infra/roles/deployment-runner.json`: run and read deployments in `rg-cupboard-tracker`, nothing else). Gary created both by hand; never create users or assign roles from code.
+- **API auth (in code, not Easy Auth):** `BearerAuthMiddleware` checks the bearer token's signature, issuer, audience, tenant, client (`azp`: the SPA or the Azure CLI) and scope. 401 for a missing or invalid token, 403 for the wrong client or scope. **Every API HTTP function at platform level Anonymous needs a signed-in user, unless it's marked `[PublicEndpoint]`** (only `/api/ping`). Function-key endpoints (`/api/diagnostics/test-error`) are checked by the platform. Use cases receive a `CurrentUser(ObjectId, DisplayName)` (`context.GetCurrentUser()`), never token types. `GET /api/me` returns the caller.
+- **App settings** (non-secret, from `deploy/infra.sh`): `ENTRA_TENANT_ID`, `ENTRA_API_CLIENT_ID`, `ENTRA_ALLOWED_CLIENT_IDS` (SPA, Azure CLI). Until they're set, every user endpoint answers 401.
+- **Verification without credentials:** for the **API**, `deploy/verify/token.sh` (your az login's API token, claims only) and `deploy/verify/api.sh /api/me` (read-only GETs). For the **UI**, the test user **`cupboard-test@CottonWonderhotmail.onmicrosoft.com`**, which signs in **passwordless**: enter the username only, and Gary approves on his phone (number matching). It's a household-level account against live stock. Never type a password or code for it.
+
 ### Verification toolkit
 
 Read-only scripts in `deploy/verify/` for checking cards against the **live** system. They run as your `az login`; deploy/infra.sh grants that account read-only access (Reader on the group, Log Analytics Reader, Cosmos DB Built-in Data Reader). None of them can write or delete anything.
@@ -181,6 +191,8 @@ Read-only scripts in `deploy/verify/` for checking cards against the **live** sy
 | Script | Use it to |
 |---|---|
 | `deploy/verify/ping.sh` | See both Function apps answer `/api/ping`, and which commit each runs; plus the Pi client's service state and live commit (over SSH). |
+| `deploy/verify/token.sh` | Get an API token from your own `az login` (Azure CLI pre-authorisation) and print its **claims** only. |
+| `deploy/verify/api.sh /api/<path>` | GET an API path as yourself, with that token (never shown). |
 | `deploy/verify/pi-logs.sh [minutes=30]` | Read the Pi client's journal (`journalctl -u cupboard-pi`) over SSH. |
 | `deploy/verify/logs.sh <ingest\|api> [minutes=30] [rows=50]` | Read recent requests, traces and exceptions for one app (newest first). It queries the Log Analytics workspace behind App Insights; ingestion lags 1–3 minutes. |
 | `deploy/verify/cosmos.sh <container> ["SELECT ..."]` | Read documents from a container (default `SELECT * FROM c`, at most 100 shown). Only `SELECT` is allowed. Cross-partition `TOP`, `ORDER BY`, `GROUP BY` and aggregates aren't supported: filter on the partition key instead. |
@@ -252,6 +264,9 @@ BE/                              # backend: the one .NET solution (build and tes
   tests/
     CupboardTracker.Domain.Tests/
     CupboardTracker.Application.Tests/
+    CupboardTracker.Infrastructure.Tests/
+    CupboardTracker.Functions.Ingest.Tests/
+    CupboardTracker.Functions.Api.Tests/          # auth middleware, validator
 FE/                              # frontend: React app (not yet)
 LocalScanner/                    # local scanner: the Python Pi client (package cupboard_pi, src/ layout)
   deploy/                        # systemd unit, sudoers rule and install-service.sh (Gary, root) for the Pi
@@ -261,7 +276,7 @@ docs/
   data-model.md
   spikes/
 deploy/                          # deployment scripts (infra.sh, functions.sh, pi.sh, pi-setup.sh) and verify/ (read-only checks)
-infra/                           # Bicep: main.bicep, main.bicepparam, modules/
+infra/                           # Bicep: main.bicep, main.bicepparam, modules/; entra.bicep (Graph, deploy/entra.sh); roles/
 ```
 
 Older cards may say `src/`, `pi/` or `ui/`: read those as `BE/src/`, `LocalScanner/` and `FE/`. Command-line tools that aren't part of a component (e.g. the scan and heartbeat simulator, `tools/simulator/`) go in a top-level **`tools/`** folder (Gary, 2026-10-17). For any other new top-level folder, check with Gary first.

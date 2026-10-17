@@ -1,3 +1,4 @@
+using CupboardTracker.Functions.Api.Auth;
 using CupboardTracker.Infrastructure;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
@@ -24,5 +25,14 @@ builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
 });
 
 builder.Services.AddCupboardTracker();
+
+// Signed-in users (#36): bearer tokens checked in code for every HTTP function not marked [PublicEndpoint].
+builder.UseMiddleware<BearerAuthMiddleware>();
+builder.Services.AddSingleton(sp => EntraOptions.FromConfiguration(sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>()));
+builder.Services.AddSingleton<ITokenValidator>(sp =>
+{
+    var options = sp.GetRequiredService<EntraOptions>();
+    return new EntraTokenValidator(options, EntraTokenValidator.MetadataFor(options));
+});
 
 builder.Build().Run();

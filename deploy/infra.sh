@@ -95,6 +95,19 @@ if [[ -z "${DIGEST_EMAIL_TO:-}" ]]; then
 fi
 export DIGEST_EMAIL_TO
 
+# The Entra registrations (#36) come from the deployer's 'cupboard-entra' deployment, if it has run.
+entra_output() {
+  az deployment group show -g "$RG" -n cupboard-entra --query "properties.outputs.$1.value" -o tsv 2>/dev/null || true
+}
+if [[ "$(az group exists -n "$RG")" == "true" ]]; then
+  ENTRA_API_CLIENT_ID=$(entra_output apiClientId)
+  spa_client=$(entra_output spaClientId)
+  cli_client=$(entra_output azureCliClientId)
+  ENTRA_ALLOWED_CLIENT_IDS=${spa_client:+$spa_client,$cli_client}
+fi
+export ENTRA_API_CLIENT_ID=${ENTRA_API_CLIENT_ID:-} ENTRA_ALLOWED_CLIENT_IDS=${ENTRA_ALLOWED_CLIENT_IDS:-}
+echo "Entra registrations: ${ENTRA_API_CLIENT_ID:-not deployed yet (deploy/entra.sh)}"
+
 INGEST_COMMIT_SHA=$(current_sha ingest); export INGEST_COMMIT_SHA
 API_COMMIT_SHA=$(current_sha api); export API_COMMIT_SHA
 # Read-only verification access goes to whoever runs this (Gary's az login on the MacBook), unless set explicitly.

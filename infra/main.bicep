@@ -38,6 +38,12 @@ param alertEmailTo string = ''
 @secure()
 param digestEmailTo string = ''
 
+@description('Entra ID API registration client ID (from deploy/entra.sh). Empty until the registrations exist: user endpoints then refuse every request.')
+param entraApiClientId string = ''
+
+@description('Client IDs allowed to call the API with a user token: the SPA, and the Azure CLI for verification (#36).')
+param entraAllowedClientIds string = ''
+
 @description('Minutes a hub may be silent before the offline alert email (#44).')
 @minValue(1)
 param offlineThresholdMinutes int = 20
@@ -145,6 +151,10 @@ module api 'modules/functionApp.bicep' = {
       ALERT_EMAIL_TO: alertEmailTo
       DIGEST_EMAIL_TO: digestEmailTo
       OFFLINE_THRESHOLD_MINUTES: string(offlineThresholdMinutes)
+      // User sign-in (#36): bearer tokens are validated in code against these (not secrets).
+      ENTRA_TENANT_ID: tenant().tenantId
+      ENTRA_API_CLIENT_ID: entraApiClientId
+      ENTRA_ALLOWED_CLIENT_IDS: entraAllowedClientIds
     }
   }
 }
