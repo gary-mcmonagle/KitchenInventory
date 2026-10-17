@@ -42,10 +42,12 @@ public sealed class GetStock(IStockQueries queries, IProductRepository products,
     public async Task<StockView> ExecuteAsync(CancellationToken cancellationToken)
     {
         var units = await queries.GetInStockUnitsAsync(cancellationToken);
+        var groups = units.GroupBy(u => u.ProductId).ToList();
+        // Point reads, all at once: one after another took about a second for 26 products.
+        var found = await Task.WhenAll(groups.Select(g => products.GetAsync(g.Key, cancellationToken)));
         var rows = new List<StockProduct>();
-        foreach (var group in units.GroupBy(u => u.ProductId))
+        foreach (var (group, product) in groups.Zip(found))
         {
-            var product = await products.GetAsync(group.Key, cancellationToken);
             var latest = group.MaxBy(u => u.CheckedInAt)!;
             var barcode = product?.Barcodes is [var first, ..] ? first : latest.Barcode;
             rows.Add(new StockProduct(
