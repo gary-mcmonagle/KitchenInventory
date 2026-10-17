@@ -1,9 +1,13 @@
+using Azure.Communication.Email;
 using Azure.Identity;
+using CupboardTracker.Application.Hubs;
+using CupboardTracker.Application.Notifications;
 using CupboardTracker.Application.Ping;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Scans;
 using CupboardTracker.Application.Stock;
 using CupboardTracker.Infrastructure.Cosmos;
+using CupboardTracker.Infrastructure.Email;
 using CupboardTracker.Infrastructure.OpenFoodFacts;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
@@ -53,6 +57,35 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ProcessScanEvent>();
         services.AddTransient<RetryFailedLookups>();
 
+        // Hubs: heartbeats (ingest) and the offline alert (API timer), emailed through ACS with the managed identity.
+        // Settings are read lazily, so the ingest app needs none of the email settings.
+        services.AddSingleton<IHubRepository, CosmosHubRepository>();
+        services.AddTransient<RecordHeartbeat>();
+        services.AddSingleton(sp => OfflineAlertSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton(sp => EmailOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton(sp => new EmailClient(sp.GetRequiredService<EmailOptions>().Endpoint, new DefaultAzureCredential()));
+        services.AddSingleton<INotifier, AcsEmailNotifier>();
+        services.AddTransient<CheckHubsOffline>();
+
         return services;
+    }
+
+    /// <summary>OFFLINE_THRESHOLD_MINUTES (default 20) and the household's time zone, resolved now so a missing zone
+    /// fails loudly.</summary>
+    internal static OfflineAlertSettings OfflineAlertSettingsFromConfiguration(IConfiguration config)
+    {
+        var threshold = OfflineAlertSettings.DefaultThreshold;
+        if (config["OFFLINE_THRESHOLD_MINUTES"] is { Length: > 0 } text)
+        {
+            if (!int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var minutes)
+                || minutes < 1)
+            {
+                throw new InvalidOperationException("OFFLINE_THRESHOLD_MINUTES must be a whole number of minutes, 1 or more.");
+            }
+
+            threshold = TimeSpan.FromMinutes(minutes);
+        }
+
+        return new OfflineAlertSettings(threshold, TimeZoneInfo.FindSystemTimeZoneById("Europe/London"));
     }
 }

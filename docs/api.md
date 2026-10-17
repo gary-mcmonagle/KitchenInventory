@@ -57,4 +57,31 @@ Idempotency relies on the resend being identical: the same scan ID sent with a *
 
 ### `POST /api/heartbeat`
 
-Not built yet: [Feature] Email alert when the Pi goes offline (#44) adds it. The client model is already in `cupboard_pi.payloads.Heartbeat` (`hubId`, `sentAt`, `clientSha`, `uptimeSeconds`, `usbInputDevices`, optional `scanners: [{deviceId, present}]`); #44 documents it here.
+The hub reporting in (every 2 minutes by default; #44, #68). Sent by the Pi and by the simulator, using `cupboard_pi.payloads.Heartbeat`. Not queued on the Pi: a lost heartbeat is simply followed by the next.
+
+```json
+{
+  "hubId": "cupboard-pi",
+  "sentAt": "2026-10-17T17:59:59.870Z",
+  "clientSha": "24d5e5b",
+  "uptimeSeconds": 3600,
+  "usbInputDevices": ["USB Adapter USB Device"],
+  "scanners": [{ "deviceId": "scanner-in", "present": true }, { "deviceId": "scanner-out", "present": false }]
+}
+```
+
+| Field | Rule |
+|---|---|
+| `hubId` | **Required.** Lowercase letters, digits and dashes. The Pi's `HUB_ID`. |
+| `sentAt` | **Required.** ISO 8601 with a timezone. The Pi's clock: stored for information only. |
+| `clientSha` | **Required.** The client's deployed commit (at most 64 characters). |
+| `uptimeSeconds` | **Required.** A whole number, 0 or more. |
+| `usbInputDevices` | **Required** (may be empty). Names of the USB input devices the Pi sees, for information: at most 32, each at most 200 characters. |
+| `scanners` | **Optional** (absent or `null` is fine). Each scanner's dongle as present or not: `[{ "deviceId", "present": true/false }]`, at most 16. Stored when sent. |
+| anything else | Ignored. |
+
+The body must be a JSON object of at most 16 KB.
+
+**Responses:** **202** `{ "hubId": "…" }` when recorded; **400** `{ "errors": [ … ] }` (all problems at once) otherwise; **401** without the function key.
+
+**What it does:** creates or replaces the hub document (`kind: "hub"` in `devices`; see [data-model.md](data-model.md)) with `lastSeenAt` = the **server's** receive time and the heartbeat's details. If an offline alert had been sent for the current outage, it clears `offlineAlertSentAt` and logs "Hub … back online after N minutes" (no email).

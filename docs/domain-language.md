@@ -47,10 +47,15 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Device** – the logical identity the Pi gives a scanner, and its role.
 - In code: `Device`, `deviceId`
 
-**Heartbeat** – a periodic "I'm alive" message from the Pi. The interval is configurable.
+**Heartbeat** – a periodic "I'm alive" message from the hub. The interval is configurable (2 minutes by default).
+- In code: `Heartbeat` (Pi), `RecordHeartbeat` (ingest), `POST /api/heartbeat`
 
-**Last seen** – when a device last sent a heartbeat or scan.
-- In code: `lastSeen`
+**Hub** – the Raspberry Pi that the scanners connect to. It sends scan events and heartbeats. Stored with the devices, as `kind: "hub"`.
+- Not to be confused with: **Device**, a scanner's logical identity.
+- In code: `Hub`, `hubId` (the Pi's `HUB_ID`, e.g. `cupboard-pi`)
+
+**Last seen** – when the server last heard from a device (a scan) or the hub (a heartbeat). Always the server's receive time, never the Pi's clock.
+- In code: `lastSeenAt`
 
 **Role** – what a device's scans mean: `in` (check-in) or `out` (check-out).
 - In code: `Role`
@@ -126,7 +131,8 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Error alert** – an email sent when errors occur in Azure.
 
-**Offline alert** – an email sent when a device's last seen is older than the configured threshold.
+**Offline alert** – the one email sent when the hub's last seen is older than the threshold (`OFFLINE_THRESHOLD_MINUTES`, 20 by default). One per outage: the next heartbeat ends the outage, with no "back online" email.
+- In code: `CheckHubsOffline`, `offlineAlertSentAt`, `NotificationKind.OfflineAlert`
 
 ---
 

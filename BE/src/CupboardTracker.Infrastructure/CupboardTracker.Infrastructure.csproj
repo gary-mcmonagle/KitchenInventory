@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Newtonsoft.Json" /> <!-- required explicitly by the Cosmos SDK -->
     <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Azure.Communication.Email" />
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 </Project>
