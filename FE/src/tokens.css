@@ -21,6 +21,8 @@
     --pending-bg: #ecefed; /* unnamed items: tile and "No name yet" badge */
     --pending-fg: #4a5851; /* unnamed items: tile text */
     --toast-action: #a8e0c2; /* Undo on the dark toast */
+    --input-border: #b9c8bf; /* text inputs */
+    --warn-border: #c77700; /* an input with a problem */
 
     --radius-input: 14px; /* inputs, toasts, feed rows */
     --radius-card: 16px; /* stock cards */

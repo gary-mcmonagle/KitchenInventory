@@ -109,6 +109,8 @@ If you need a term that isn't here, add it as part of the card that introduces i
 - In code: product status `known` (with `source: openFoodFacts`)
 
 **Name a product** – manually entering product details for a no-match or lookup-failed product.
+- In the app: the **Name it** button on a "Waiting for a name" row opens the "Name this product" screen.
+- In code: `NameProduct`, `PUT /api/products/{productId}/name`, `NameScreen`
 
 **No-match** – a scanned barcode that Open Food Facts doesn't know. Final: it's never looked up again, and needs naming or photo identification.
 - In code: product status `noMatch`

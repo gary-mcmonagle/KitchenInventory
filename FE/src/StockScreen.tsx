@@ -8,6 +8,7 @@ import {
     type StockProduct,
 } from "./api";
 import { groupBarcode, initial, itemsLabel, metaLine, scannedLabel, todayLine } from "./format";
+import { namePath, navigate } from "./router";
 import styles from "./Stock.module.css";
 
 const PULL_TO_REFRESH = 70; // px
@@ -339,7 +340,16 @@ function UnnamedRow({ product }: { product: StockProduct }) {
                 </div>
                 <span className={styles.badge}>No name yet</span>
             </div>
-            <div className={styles.note}>{scannedLabel(product.latestCheckedInAt)}</div>
+            <div className={styles.actions}>
+                <span className={styles.note}>{scannedLabel(product.latestCheckedInAt)}</span>
+                <button
+                    type="button"
+                    className={styles.nameIt}
+                    onClick={() => navigate(namePath(product.productId))}
+                >
+                    Name it
+                </button>
+            </div>
         </li>
     );
 }

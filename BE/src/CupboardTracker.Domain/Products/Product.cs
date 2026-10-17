@@ -36,8 +36,26 @@ public sealed record Product(
     DateTimeOffset? FetchedAt,
     int LookupAttempts,
     DateTimeOffset? LastLookupAttemptAt,
-    DateTimeOffset? LookupFailedSince)
+    DateTimeOffset? LookupFailedSince,
+    DateTimeOffset? NamedAt = null,
+    Guid? NamedBy = null)
 {
+    /// <summary>Unnamed: Open Food Facts had no answer (yet). Shown as "Unknown item" and waiting for a name.</summary>
+    public bool IsUnnamed => Status is ProductStatus.NoMatch or ProductStatus.LookupFailed;
+
+    /// <summary>Named by a person in the app (#51): known from now on, so check-ins never look it up again.</summary>
+    public Product NamedByUser(string name, string? brand, string? size, Guid userId, DateTimeOffset at) =>
+        this with
+        {
+            Status = ProductStatus.Known,
+            Source = ProductSource.Manual,
+            DisplayName = name,
+            Details = new ProductDetails(name, brand, size, Details?.ImageUrl, Details?.CategoryTags ?? []),
+            LookupFailedSince = null,
+            NamedAt = at,
+            NamedBy = userId,
+        };
+
     public static string UnknownName(string barcode) => $"Unknown item ({barcode})";
 
     public static Product Found(Guid productId, string barcode, ProductDetails details, DateTimeOffset at, int attempts) =>

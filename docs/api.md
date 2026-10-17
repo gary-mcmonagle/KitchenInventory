@@ -151,3 +151,37 @@ Put a checked-out unit back in stock, clearing its check-out details. **Idempote
 
 - **200** `{ "unitId": "…", "productId": "…", "count": 2, "restored": true }`: `count` is the product's in-stock units now; `restored` is `false` if it was already in stock.
 - **404** `{ "error": "No such unit." }`
+
+### `GET /api/products/{productId}`
+
+A product (#51; later item detail).
+
+```json
+{
+  "productId": "…",
+  "barcode": "501001234567",
+  "status": "noMatch",
+  "displayName": "Unknown item (501001234567)",
+  "brand": null,
+  "size": null,
+  "inStockCount": 1,
+  "latestCheckedInAt": "2026-10-17T17:42:00.000Z",
+  "latestDeviceRole": "in"
+}
+```
+
+`latestCheckedInAt` and `latestDeviceRole` (`in` / `out`, from the device that checked in the newest in-stock unit) are `null` when nothing's in stock. **404** `{ "error": "No such product." }`.
+
+### `PUT /api/products/{productId}/name`
+
+Name an unknown item (#51): `{ "name": "Smoked paprika", "brand": "Schwartz", "size": "48 g" }` (brand and size optional). Only for `noMatch` or `lookupFailed` products. It sets `status: known`, `source: manual`, `displayName`, `brand`, `size`, `namedAt` and `namedBy` (the caller's object ID), and future check-ins of the barcode use the name with no Open Food Facts call.
+
+| Field | Rule |
+|---|---|
+| `name` | Required; trimmed, 1–100 characters. |
+| `brand`, `size` | Optional; trimmed, at most 60 characters. Empty means none. |
+
+- **200** `{ "productId": "…", "displayName": "Smoked paprika" }`
+- **400** `{ "error": "Check the details.", "errors": { "name": "Enter a name." } }` (per field)
+- **404** `{ "error": "No such product." }`
+- **409** `{ "error": "This product already has a name.", "displayName": "…" }`: it's known (or was named or looked up meanwhile). Renaming known products isn't this endpoint.

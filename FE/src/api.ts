@@ -9,6 +9,7 @@ export class ApiError extends Error {
     constructor(
         readonly status: number,
         message: string,
+        readonly body?: unknown,
     ) {
         super(message);
     }
@@ -56,6 +57,29 @@ export interface UndoneCheckOut {
     restored: boolean;
 }
 
+export interface Product {
+    productId: string;
+    barcode: string | null;
+    status: StockStatus;
+    displayName: string;
+    brand: string | null;
+    size: string | null;
+    inStockCount: number;
+    latestCheckedInAt: string | null;
+    latestDeviceRole: "in" | "out" | null;
+}
+
+export interface NameDetails {
+    name: string;
+    brand?: string;
+    size?: string;
+}
+
+/** A 400 from naming: the message per field (name, brand, size). */
+export interface FieldErrors {
+    errors?: Record<string, string>;
+}
+
 export interface Ping {
     status: string;
     commit: string;
@@ -81,6 +105,18 @@ export class ApiClient {
         return this.get<Stock>("/api/stock");
     }
 
+    product(productId: string): Promise<Product> {
+        return this.get<Product>(`/api/products/${encodeURIComponent(productId)}`);
+    }
+
+    /** Names an unknown item (400 → ApiError with FieldErrors; 409 → already named). */
+    nameProduct(
+        productId: string,
+        details: NameDetails,
+    ): Promise<{ productId: string; displayName: string }> {
+        return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/name`, details);
+    }
+
     /** Checks out one unit (409 → ApiError: nothing in stock). */
     checkOut(productId: string): Promise<CheckedOut> {
         return this.send<CheckedOut>("POST", `/api/products/${encodeURIComponent(productId)}/check-out`);
@@ -102,10 +138,15 @@ export class ApiClient {
         return this.send<T>("GET", path);
     }
 
-    async send<T>(method: "GET" | "POST", path: string): Promise<T> {
+    async send<T>(method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<T> {
         const token = await this.token();
-        const init: RequestInit = { headers: { Authorization: `Bearer ${token}` } };
+        const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+        const init: RequestInit = { headers };
         if (method !== "GET") init.method = method;
+        if (body !== undefined) {
+            headers["Content-Type"] = "application/json";
+            init.body = JSON.stringify(body);
+        }
         const response = await this.fetcher(`${this.config.apiBaseUrl}${path}`, init);
         if (response.status === 401) {
             await this.reauthenticate();
@@ -113,7 +154,10 @@ export class ApiClient {
         if (response.status === 403) {
             throw new NoAccessError("You're signed in, but this account can't use Cupboard Tracker.");
         }
-        if (!response.ok) throw new ApiError(response.status, `${path} failed: HTTP ${response.status}`);
+        if (!response.ok) {
+            const errorBody: unknown = await response.json().catch(() => undefined);
+            throw new ApiError(response.status, `${path} failed: HTTP ${response.status}`, errorBody);
+        }
         return (await response.json()) as T;
     }
 

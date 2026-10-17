@@ -21,6 +21,10 @@ public interface IProductRepository
     /// <summary>Replaces a product only if it's still lookupFailed (anything else is final). False if it changed meanwhile.</summary>
     Task<bool> TryReplaceLookupFailedAsync(Product updated, CancellationToken cancellationToken);
 
+    /// <summary>Replaces a product only if it's still unnamed (noMatch or lookupFailed) and unchanged since read
+    /// (ETag). False if it was named or looked up meanwhile.</summary>
+    Task<bool> TryReplaceUnnamedAsync(Product updated, CancellationToken cancellationToken);
+
     /// <summary>lookupFailed products, oldest last attempt first.</summary>
     Task<IReadOnlyList<Product>> GetLookupFailedAsync(int max, CancellationToken cancellationToken);
 }

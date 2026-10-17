@@ -29,3 +29,14 @@ test("items label and tile initial", () => {
     expect(initial("горчица")).toBe("Г");
     expect(initial("…")).toBe("?");
 });
+
+test("relative times, in UK time", async () => {
+    const { relativeTime } = await import("./format");
+    const now = new Date("2026-10-18T09:00:00Z"); // 10:00 BST
+    expect(relativeTime("2026-10-18T08:59:40Z", now)).toBe("just now");
+    expect(relativeTime("2026-10-18T08:55:00Z", now)).toBe("5 minutes ago");
+    expect(relativeTime("2026-10-18T08:59:00Z", now)).toBe("1 minute ago");
+    expect(relativeTime("2026-10-18T06:30:00Z", now)).toBe("today at 07:30");
+    expect(relativeTime("2026-10-17T17:42:00Z", now)).toBe("yesterday at 18:42");
+    expect(relativeTime("2026-10-12T17:42:00Z", now)).toBe("on 12 Oct at 18:42");
+});

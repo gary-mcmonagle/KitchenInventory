@@ -87,6 +87,28 @@ public sealed class CosmosProductRepository(CosmosContainers containers, TimePro
         return true;
     }
 
+    public async Task<bool> TryReplaceUnnamedAsync(Product updated, CancellationToken cancellationToken)
+    {
+        var id = updated.ProductId.ToString("D");
+        var current = await ReadAsync(updated.ProductId, cancellationToken);
+        if (current is null || CosmosJson.Text(current["status"]) is not ("noMatch" or "lookupFailed"))
+        {
+            return false; // already named or looked up: never overwritten
+        }
+
+        var etag = CosmosJson.Text(current["_etag"]);
+        using var stream = CosmosJson.ToStream(ProductDocument.Write(updated, current));
+        using var response = await Products.ReplaceItemStreamAsync(
+            stream, id, new PartitionKey(id), new ItemRequestOptions { IfMatchEtag = etag }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            return false;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return true;
+    }
+
     public async Task<IReadOnlyList<Product>> GetLookupFailedAsync(int max, CancellationToken cancellationToken)
     {
         var query = new QueryDefinition(
@@ -125,6 +147,12 @@ internal static class ProductDocument
         document["lookupAttempts"] = product.LookupAttempts;
         document["lastLookupAttemptAt"] = CosmosJson.Timestamp(product.LastLookupAttemptAt);
         document["lookupFailedSince"] = CosmosJson.Timestamp(product.LookupFailedSince);
+        if (product.NamedAt is { } namedAt)
+        {
+            document["namedAt"] = CosmosJson.Timestamp(namedAt);
+            document["namedBy"] = product.NamedBy?.ToString("D");
+        }
+
         return document;
     }
 
@@ -155,7 +183,9 @@ internal static class ProductDocument
             CosmosJson.ParseTimestamp(document["fetchedAt"]),
             document["lookupAttempts"]?.GetValue<int>() ?? 0,
             CosmosJson.ParseTimestamp(document["lastLookupAttemptAt"]),
-            CosmosJson.ParseTimestamp(document["lookupFailedSince"]));
+            CosmosJson.ParseTimestamp(document["lookupFailedSince"]),
+            CosmosJson.ParseTimestamp(document["namedAt"]),
+            Guid.TryParse(CosmosJson.Text(document["namedBy"]), out var namedBy) ? namedBy : null);
     }
 
     private static string Status(ProductStatus status) => status switch

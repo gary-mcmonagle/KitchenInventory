@@ -92,6 +92,18 @@ internal sealed class FakeProducts : IProductRepository
         return Task.FromResult(false);
     }
 
+    public Task<bool> TryReplaceUnnamedAsync(Product updated, CancellationToken cancellationToken)
+    {
+        BeforeWrite?.Invoke();
+        if (!Products.TryGetValue(updated.ProductId, out var current) || !current.IsUnnamed)
+        {
+            return Task.FromResult(false);
+        }
+
+        Products[updated.ProductId] = updated;
+        return Task.FromResult(true);
+    }
+
     public Task<IReadOnlyList<Product>> GetLookupFailedAsync(int max, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Product>>(Products.Values
             .Where(p => p.Status == ProductStatus.LookupFailed).OrderBy(p => p.LastLookupAttemptAt).Take(max).ToList());

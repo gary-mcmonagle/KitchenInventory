@@ -79,18 +79,23 @@ test("unnamed products wait for a name, with the grouped barcode and scan date",
     expect(within(rows[1]).getByText("Barcode 2005 5363 · ×2")).toBeInTheDocument();
 });
 
-test("only Check out on named rows; nothing tappable that belongs to later cards", async () => {
+test("Check out on named rows, Name it on unnamed rows, nothing else tappable", async () => {
     const { api } = fakeApi(
         stockOf(product({}), product({ status: "noMatch", displayName: "Unknown item (1)" })),
     );
     render(<StockScreen api={api} />);
 
     await screen.findByRole("region", { name: /In stock/ });
-    expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+    expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
         "Check out one Beef Gravy",
+        "Name it",
     ]);
     const unnamed = screen.getByRole("region", { name: /Waiting for a name/ });
-    expect(within(unnamed).queryAllByRole("button")).toHaveLength(0);
+    expect(
+        within(unnamed)
+            .getAllByRole("button")
+            .map((b) => b.textContent),
+    ).toEqual(["Name it"]);
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
