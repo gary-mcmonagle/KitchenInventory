@@ -1,0 +1,15 @@
+{
+  "Name": "Cupboard Tracker deployment runner",
+  "IsCustom": true,
+  "Description": "Runs and reads ARM deployments in the Cupboard Tracker resource group, and nothing else (#36): lets cupboard-deployer deploy infra/entra.bicep (Microsoft Graph resources only). Can't create, change or delete any Azure resource.",
+  "Actions": [
+    "Microsoft.Resources/deployments/*",
+    "Microsoft.Resources/subscriptions/resourceGroups/read"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/<subscriptionId>/resourceGroups/rg-cupboard-tracker"
+  ]
+}
