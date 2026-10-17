@@ -20,7 +20,7 @@ Use the terms defined in `docs/domain-language.md` in code, comments, commits an
 | External | Open Food Facts, Azure Document Intelligence (Read), Jev (TypeSafe AI System One) | Product lookup → OCR for photo ID → Jev for decisions over extracted text and estimated expiry dates. |
 | Infra | Bicep | Single environment. Follow Bicep best practices (modules, parameters, no hard-coded names/secrets). |
 
-The Cosmos data model (containers, partition keys, change-feed flow, idempotency) is documented in [`docs/data-model.md`](docs/data-model.md). Follow it for document shapes; if a card conflicts with it, ask in a card comment.
+The Cosmos data model (containers, partition keys, change-feed flow, idempotency) is documented in [`docs/data-model.md`](docs/data-model.md). The HTTP contracts (request and response shapes, validation rules, status codes) are in [`docs/api.md`](docs/api.md); the Pi's payload models (`cupboard_pi.payloads`) must stay in step with it. Follow it for document shapes; if a card conflicts with it, ask in a card comment.
 
 ### Code conventions
 
