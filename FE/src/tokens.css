@@ -1,0 +1,49 @@
+/* Design tokens from the Cupboard Tracker UI mockups (project/Main.dc.html). Use these, not raw values. */
+:root {
+    --font: "Figtree", system-ui, sans-serif;
+
+    --ground: #f4f7f3; /* page background */
+    --surface: #ffffff; /* cards, inputs, nav */
+    --ink: #1c2a24; /* text */
+    --ink-strong: #3c4c44; /* section headings */
+    --muted: #5b6b63; /* secondary text */
+    --border: #d5ded8; /* inputs, chips */
+    --border-soft: #e1e8e3; /* cards, nav top */
+
+    --accent: #2f6b4f; /* primary buttons, active chip */
+    --accent-dark: #1f5238; /* pressed, accent text */
+    --accent-tint: #e4f0e9; /* tiles, "later" badges */
+
+    --warn-bg: #ffe9c7;
+    --warn-fg: #7a4300;
+    --danger-bg: #f9e3e1;
+    --danger-fg: #8e1f17;
+
+    --radius-input: 14px; /* inputs, toasts, feed rows */
+    --radius-card: 16px; /* stock cards */
+    --radius-button: 12px;
+    --radius-chip: 22px;
+
+    --touch: 44px; /* minimum touch target */
+    --page-x: 20px; /* page side padding */
+    --design-width: 390px;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font);
+    -webkit-text-size-adjust: 100%;
+}
+
+button {
+    font-family: inherit;
+}

@@ -104,6 +104,15 @@ module communication 'modules/communication.bicep' = {
   }
 }
 
+module staticWebApp 'modules/staticWebApp.bicep' = {
+  scope: rg
+  name: 'static-web-app'
+  params: {
+    tags: union(tags, { component: 'ui' })
+    name: 'stapp-${appName}-tracker'
+  }
+}
+
 module ingest 'modules/functionApp.bicep' = {
   scope: rg
   name: 'func-ingest'
@@ -136,6 +145,11 @@ module api 'modules/functionApp.bicep' = {
     appInsightsName: monitoring.outputs.appInsightsName
     maximumInstanceCount: functionMaximumInstanceCount
     instanceMemoryMB: functionInstanceMemoryMB
+    // The React app calls the API directly from the browser (#37): the Static Web App, and Vite's dev server.
+    corsAllowedOrigins: [
+      'https://${staticWebApp.outputs.defaultHostname}'
+      'http://localhost:5173'
+    ]
     appSettings: {
       COMMIT_SHA: apiCommitSha
       COSMOS_ENDPOINT: cosmos.outputs.endpoint
@@ -214,6 +228,8 @@ output cosmosEndpoint string = cosmos.outputs.endpoint
 output cosmosAccountName string = cosmos.outputs.accountName
 output cosmosDatabaseName string = cosmos.outputs.databaseName
 output appInsightsName string = monitoring.outputs.appInsightsName
+output staticWebAppName string = staticWebApp.outputs.name
+output staticWebAppHostname string = staticWebApp.outputs.defaultHostname
 output communicationServiceName string = communication.outputs.communicationServiceName
 output emailSender string = communication.outputs.senderAddress
 output errorAlertRuleName string = errorAlert.outputs.ruleName
