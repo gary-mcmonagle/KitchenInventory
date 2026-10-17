@@ -157,7 +157,8 @@ There is **one environment, and it's the live household system**. Treat it with 
   - **Infra (Bicep): `deploy/infra.sh [--yes] [--what-if-only]`.** Deploys `infra/main.bicep` with `infra/main.bicepparam` at subscription scope (it creates the resource group). It shows the signed-in subscription, prints a **what-if**, and deploys only after confirmation (`--yes` skips the prompt; use it only when Gary has approved the what-if). Safe to re-run: it reads each Function app's live `COMMIT_SHA` and `OFF_CONTACT_EMAIL` (the Open Food Facts User-Agent contact: Gary's email, **never committed**) and passes them back, so infra never resets them. On the first deploy it takes `OFF_CONTACT_EMAIL` from the environment, or asks. A re-run with no template changes leaves the live resources **identical** (checked on #31 by snapshotting the group before and after). **What-if still lists some "Modify" entries that are false positives**, not real changes: app settings (what-if can't read them, so they always show as "Create"), role assignments' `principalId` (a managed identity's ID can't be resolved during what-if), and read-only or server-defaulted properties (e.g. Cosmos `sqlEndpoint`, storage blob-service defaults, App Insights `Flow_Type`). Look for anything else. Prints the outputs (app names, hostnames, Cosmos endpoint, App Insights name).
   - **Function apps: `deploy/functions.sh [--force]`.** Deploys **both** apps together from a clean, pushed `main` (or a checkout of exactly `origin/main`'s commit); `--force` overrides those checks and is for emergencies only. It runs `dotnet test` (stops on failure), publishes both apps in Release, zip-deploys them to the apps named in the infra deployment's outputs, sets `COMMIT_SHA` to the short commit, then smoke-checks `/api/ping` on both (ingest with its function key, fetched at runtime and passed to curl on stdin: never echoed, logged or written to disk), retrying for ~2 minutes. It prints the apps, the SHA and the smoke result, and exits non-zero if anything fails.
   - UI (Static Web Apps): _TBD_
-  - Pi client: _TBD_
+  - Pi setup (one-off, root, run by Gary): `deploy/pi-setup.sh`.
+  - Pi client: _TBD_ (#33)
 - Never delete or overwrite Cosmos data, containers or resources outside what a card asks for. Anything destructive or irreversible: stop and ask in a card comment.
 
 ### Verification toolkit
@@ -180,6 +181,20 @@ Read-only scripts in `deploy/verify/` for checking cards against the **live** sy
 - When querying App Insights yourself, query the **workspace** (`az monitor log-analytics query`, tables `AppRequests`, `AppTraces`, `AppExceptions`, `AppDependencies`); `az monitor app-insights query` returned nothing here. `last` and `kind` are reserved words in KQL.
 - **Evidence pasted into Trello must have keys, tokens and personal data redacted.** The scripts never print the function key, but check anything you paste.
 - UI screenshots come with the first UI feature (via a browser tool). Pi logs (`pi-logs.sh`) and the Pi's status in `ping.sh` come with the Pi deployment card (#33).
+
+### Raspberry Pi (the hub)
+
+Headless Raspberry Pi 3, managed over SSH from the MacBook. No secrets here: the env file lives only on the Pi.
+
+| | |
+|---|---|
+| Host / user | `cupboard-pi.local` / `gary` (SSH key only: password and keyboard-interactive logins are off, root login off) |
+| OS | Raspberry Pi OS 13 "trixie" Lite, 32-bit (`armv7l`), Python 3.13, timezone Europe/London, NTP on |
+| Packages | `git`, `python3`, `python3-venv`, `python3-pip`, `evtest` (scanner spike), `unattended-upgrades` (security updates, on) |
+| App directory | `/opt/cupboard-tracker` (owned by `gary`, 755): the client and its venv, deployed by git |
+| Config directory | `/etc/cupboard-tracker/` (root, 750): `pi.env` with the ingest URL and function key. **Never in the repo**, never printed |
+
+`deploy/pi-setup.sh` set this up (idempotent; Gary runs it as root because it needs his sudo password: `scp deploy/pi-setup.sh gary@cupboard-pi.local:/tmp/ && ssh -t gary@cupboard-pi.local sudo bash /tmp/pi-setup.sh`). **The agent never types the Pi's sudo password**; anything needing root is a script Gary runs. `gary` is in the `input` group, so scanner input devices can be read without root.
 
 ### Azure resources and naming
 
