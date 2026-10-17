@@ -1,6 +1,8 @@
 # LocalScanner: the Cupboard Tracker Pi client
 
-Python package `cupboard_pi`: the thin client on the Raspberry Pi. For now it loads its config, logs startup and exits; scanner reading and heartbeats come with their features.
+Python package `cupboard_pi`: the thin client on the Raspberry Pi. For now it loads its config, logs startup (with the deployed commit) and runs until stopped; scanner reading and heartbeats come with their features.
+
+Deployed to the Pi by `deploy/pi.sh` (see CLAUDE.md, Deployment). `deploy/` here holds the systemd unit, the deploy's sudoers rule and `install-service.sh`, which Gary runs as root when the unit changes.
 
 ```bash
 cd LocalScanner

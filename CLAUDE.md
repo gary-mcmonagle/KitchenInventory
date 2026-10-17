@@ -158,7 +158,9 @@ There is **one environment, and it's the live household system**. Treat it with 
   - **Function apps: `deploy/functions.sh [--force]`.** Deploys **both** apps together from a clean, pushed `main` (or a checkout of exactly `origin/main`'s commit); `--force` overrides those checks and is for emergencies only. It runs `dotnet test` (stops on failure), publishes both apps in Release, zip-deploys them to the apps named in the infra deployment's outputs, sets `COMMIT_SHA` to the short commit, then smoke-checks `/api/ping` on both (ingest with its function key, fetched at runtime and passed to curl on stdin: never echoed, logged or written to disk), retrying for ~2 minutes. It prints the apps, the SHA and the smoke result, and exits non-zero if anything fails.
   - UI (Static Web Apps): _TBD_
   - Pi setup (one-off, root, run by Gary): `deploy/pi-setup.sh`.
-  - Pi client: _TBD_ (#33)
+  - **Pi client: `deploy/pi.sh [--force] [--rollback]`** (#33). From a clean, pushed `main` (as `functions.sh`), it runs the `LocalScanner` tests, builds a wheel from a clean copy, and `rsync`s it over SSH with the systemd unit and a `DEPLOYED_SHA` file to `/opt/cupboard-tracker/releases/<sha>/`, where it gets its own venv. It then checks the unit, the sudoers rule and `pi.env` are in place, points `current` at the new release (atomic symlink swap; `previous` points at the old one), restarts `cupboard-pi`, and smoke-checks that this start logged `cupboard-pi starting: sha=<sha>` and is still running 10 s later. **If the check fails, it puts the previous release back** and exits non-zero with the journal. It keeps the newest 3 releases. `--rollback` swaps `current` and `previous` and restarts. `PI_HOST` overrides the SSH target.
+    - **No password:** the deploy's only root commands are `systemctl restart cupboard-pi.service` and `test -f /etc/cupboard-tracker/pi.env`, allowed by `LocalScanner/deploy/cupboard-pi.sudoers`. **Installing the unit and that rule is Gary's** (a unit the deploy user could write would run anything as root): when the unit is missing or changed, `pi.sh` stops before switching and prints `ssh -t gary@cupboard-pi.local sudo bash /opt/cupboard-tracker/releases/<sha>/install-service.sh` for Gary to run, then you re-run `pi.sh`.
+    - **It never reads, writes or prints `pi.env`.** If it's missing, it stops and lists the variable names from `LocalScanner/.env.example` for Gary to add.
 - Never delete or overwrite Cosmos data, containers or resources outside what a card asks for. Anything destructive or irreversible: stop and ask in a card comment.
 
 ### Verification toolkit
@@ -167,7 +169,8 @@ Read-only scripts in `deploy/verify/` for checking cards against the **live** sy
 
 | Script | Use it to |
 |---|---|
-| `deploy/verify/ping.sh` | See both Function apps answer `/api/ping`, and which commit each runs. |
+| `deploy/verify/ping.sh` | See both Function apps answer `/api/ping`, and which commit each runs; plus the Pi client's service state and live commit (over SSH). |
+| `deploy/verify/pi-logs.sh [minutes=30]` | Read the Pi client's journal (`journalctl -u cupboard-pi`) over SSH. |
 | `deploy/verify/logs.sh <ingest\|api> [minutes=30] [rows=50]` | Read recent requests, traces and exceptions for one app (newest first). It queries the Log Analytics workspace behind App Insights; ingestion lags 1–3 minutes. |
 | `deploy/verify/cosmos.sh <container> ["SELECT ..."]` | Read documents from a container (default `SELECT * FROM c`, at most 100 shown). Only `SELECT` is allowed. Cross-partition `TOP`, `ORDER BY`, `GROUP BY` and aggregates aren't supported: filter on the partition key instead. |
 
@@ -180,7 +183,7 @@ Read-only scripts in `deploy/verify/` for checking cards against the **live** sy
 
 - When querying App Insights yourself, query the **workspace** (`az monitor log-analytics query`, tables `AppRequests`, `AppTraces`, `AppExceptions`, `AppDependencies`); `az monitor app-insights query` returned nothing here. `last` and `kind` are reserved words in KQL.
 - **Evidence pasted into Trello must have keys, tokens and personal data redacted.** The scripts never print the function key, but check anything you paste.
-- UI screenshots come with the first UI feature (via a browser tool). Pi logs (`pi-logs.sh`) and the Pi's status in `ping.sh` come with the Pi deployment card (#33).
+- UI screenshots come with the first UI feature (via a browser tool). Pi logs (`pi-logs.sh`) and the Pi's status in `ping.sh` need only SSH to the Pi (no Azure login for `pi-logs.sh`).
 
 ### Raspberry Pi (the hub)
 
@@ -193,7 +196,8 @@ Headless Raspberry Pi 3, managed over SSH from the MacBook. No secrets here: the
 | Packages | `git` (installed but unused: deployment is by file copy), `python3`, `python3-venv`, `python3-pip`, `evtest` (scanner spike), `unattended-upgrades` (security updates, on) |
 | App directory | `/opt/cupboard-tracker` (owned by `gary`, 755): releases of the client, each with its own venv, **copied over SSH** by `deploy/pi.sh` (#33; no git clone on the Pi) |
 | Data directory | `/var/lib/cupboard-tracker` (owned by `gary`, 750): the scan queue. Outside the releases, so deploys never wipe it |
-| Config directory | `/etc/cupboard-tracker/` (root, 750): `pi.env` with the ingest URL and function key. **Never in the repo**, never printed |
+| Config directory | `/etc/cupboard-tracker/` (root, 750): `pi.env` (root, 600) with the ingest URL and function key. **Never in the repo**, never printed. Only systemd (as root) reads it |
+| Service | `cupboard-pi` (systemd, unit in `LocalScanner/deploy/cupboard-pi.service`): runs `/opt/cupboard-tracker/current/venv/bin/cupboard-pi` as `gary` (with the `input` group), `Restart=always`, enabled at boot, logs to the journal. `/opt/cupboard-tracker/current` → `releases/<sha>/`, `previous` → the one before |
 
 `deploy/pi-setup.sh` set this up (idempotent; Gary runs it as root because it needs his sudo password: `scp deploy/pi-setup.sh gary@cupboard-pi.local:/tmp/ && ssh -t gary@cupboard-pi.local sudo bash /tmp/pi-setup.sh`). **The agent never types the Pi's sudo password**; anything needing root is a script Gary runs. `gary` is in the `input` group, so scanner input devices can be read without root. Scanners are told apart by the USB port their dongle is in (spike #27, `docs/spikes/27-scanner-input.md`).
 
@@ -236,12 +240,13 @@ BE/                              # backend: the one .NET solution (build and tes
     CupboardTracker.Application.Tests/
 FE/                              # frontend: React app (not yet)
 LocalScanner/                    # local scanner: the Python Pi client (package cupboard_pi, src/ layout)
+  deploy/                        # systemd unit, sudoers rule and install-service.sh (Gary, root) for the Pi
 tools/                           # command-line tools, e.g. simulator/ (#66; not yet)
 docs/
   domain-language.md
   data-model.md
   spikes/
-deploy/                          # deployment scripts (infra.sh)
+deploy/                          # deployment scripts (infra.sh, functions.sh, pi.sh, pi-setup.sh) and verify/ (read-only checks)
 infra/                           # Bicep: main.bicep, main.bicepparam, modules/
 ```
 
