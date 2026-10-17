@@ -14,6 +14,7 @@ bin/
 obj/
 node_modules/
 dist/
+*.tsbuildinfo
 
 # Python
 .venv/

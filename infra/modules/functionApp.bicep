@@ -27,6 +27,9 @@ param instanceMemoryMB int
 @description('Extra app settings (non-secret).')
 param appSettings object = {}
 
+@description('Browser origins allowed to call this app (CORS). Empty: no CORS rules.')
+param corsAllowedOrigins array = []
+
 var deploymentContainerName = 'app-package'
 
 // Built-in Azure role IDs.
@@ -87,7 +90,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
   identity: {
     type: 'SystemAssigned'
   }
-  properties: {
+  properties: union({
     serverFarmId: plan.id
     httpsOnly: true
     functionAppConfig: {
@@ -110,7 +113,14 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         version: '10.0'
       }
     }
-  }
+  }, empty(corsAllowedOrigins) ? {} : {
+    siteConfig: {
+      cors: {
+        allowedOrigins: corsAllowedOrigins
+        supportCredentials: false
+      }
+    }
+  })
 }
 
 resource settings 'Microsoft.Web/sites/config@2024-04-01' = {
