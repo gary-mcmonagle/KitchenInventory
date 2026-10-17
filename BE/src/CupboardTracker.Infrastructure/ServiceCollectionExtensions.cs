@@ -61,6 +61,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<GetStock>();
         services.AddTransient<CheckOutFromApp>();
         services.AddTransient<UndoCheckOut>();
+        services.AddTransient<GetProduct>();
+        services.AddTransient<NameProduct>();
 
         // Hubs: heartbeats (ingest) and the offline alert (API timer), emailed through ACS with the managed identity.
         // Settings are read lazily, so the ingest app needs none of the email settings.

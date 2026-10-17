@@ -155,7 +155,6 @@
 }
 
 .note {
-    padding-left: 56px;
     font-size: 12px;
     color: var(--muted);
     line-height: 1.35;
@@ -245,13 +244,14 @@
 .actions {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
     gap: 8px;
     padding-left: 56px;
 }
 
 .checkOut {
     flex: none;
+    margin-left: auto; /* bottom right, as in the mockup */
     min-height: var(--touch);
     padding: 0 14px;
     display: flex;
@@ -299,6 +299,20 @@
     border: 0;
     background: transparent;
     color: var(--toast-action);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.nameIt {
+    flex: none;
+    margin-left: auto;
+    min-height: var(--touch);
+    padding: 0 16px;
+    border: 0;
+    border-radius: var(--radius-button);
+    background: var(--accent);
+    color: #ffffff;
     font-size: 14px;
     font-weight: 700;
     cursor: pointer;

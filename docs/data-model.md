@@ -151,7 +151,7 @@ A barcode that Open Food Facts couldn't be reached for (`lookupFailed`) looks li
 | `fetchedAt` | When Open Food Facts answered with this product. |
 | `lookupAttempts`, `lastLookupAttemptAt` | How many times product lookup has been tried for this product, and when last. Used by the lookup-retry timer. |
 | `lookupFailedSince` | When the product first became `lookupFailed` (cleared once resolved). The timer logs an **error** if it's still failing 24 hours later. |
-| `namedAt`, `namedBy` | When and by whom (Entra object ID) the product was named by hand. Written by the naming feature. |
+| `namedAt`, `namedBy` | When and by whom (Entra object ID) the product was named by hand. Written by naming an unknown item (#51, `PUT /api/products/{id}/name`): only while the product is still `noMatch` / `lookupFailed`, with an ETag-guarded replace, so it and the lookup-retry timer can't overwrite each other. Once named it's `known`, so check-ins never look it up again. |
 
 **Display name from Open Food Facts** (decided in [spike #28](spikes/28-open-food-facts.md)): `product_name_en`, else `product_name`, trimmed, otherwise **exactly as returned**. No title-casing, no language checks. A product with neither is a no-match.
 
