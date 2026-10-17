@@ -1,0 +1,1 @@
+"""Cupboard Tracker Pi client."""
