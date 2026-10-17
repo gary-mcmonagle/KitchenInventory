@@ -63,8 +63,13 @@ If you need a term that isn't here, add it as part of the card that introduces i
 - Not to be confused with: **Check-in** / **Check-out**, which are the stock changes a scan event leads to.
 - In code: `ScanEvent`
 
-**Scanner** – a physical barcode scanner. There are two of the same model, told apart by a configured prefix/suffix.
+**Dongle** – the USB wireless receiver a scanner is paired to. The Pi sees the dongle (as a USB keyboard), not the scanner. Both dongles are identical (same USB ID, no serial number).
+
+**Scanner** – a physical barcode scanner. There are two of the same model, told apart by the **scanner port** their dongle is plugged into.
 - Not to be confused with: **Device**, the logical identity the Pi assigns to a scanner.
+
+**Scanner port** – the Pi USB port a scanner's dongle is plugged into, named by its `/dev/input/by-path` link (e.g. `platform-3f980000.usb-usb-0:1.5:1.0`). The Pi maps each scanner port to a device. Moving a dongle to another port moves its scans to another device.
+- In code: `scanner_port` (Pi client config)
 
 **Undo check-out** – reversing a check-out, returning the unit to stock.
 
