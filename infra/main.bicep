@@ -22,6 +22,14 @@ param apiCommitSha string = 'not-deployed'
 @description('Object ID of the person who verifies cards (read-only access: Reader on the group, Log Analytics Reader, Cosmos data reader). Empty skips it.')
 param verifierPrincipalId string = ''
 
+@description('Contact email for the Open Food Facts User-Agent (required by their API). Supplied at deploy time by deploy/infra.sh; never committed.')
+param openFoodFactsContactEmail string = ''
+
+@description('Open Food Facts calls per minute across all callers (they allow 15 per IP).')
+@minValue(2)
+@maxValue(15)
+param openFoodFactsMaxRequestsPerMinute int = 10
+
 @description('Maximum Flex Consumption instances per Function app (a cost guard; household load is tiny).')
 @minValue(1)
 @maxValue(1000)
@@ -104,6 +112,11 @@ module api 'modules/functionApp.bicep' = {
       COMMIT_SHA: apiCommitSha
       COSMOS_ENDPOINT: cosmos.outputs.endpoint
       COSMOS_DATABASE: cosmos.outputs.databaseName
+      // The scan-events change-feed trigger's identity-based connection (connection name COSMOS).
+      COSMOS__accountEndpoint: cosmos.outputs.endpoint
+      OFF_BASE_URL: 'https://world.openfoodfacts.org'
+      OFF_CONTACT_EMAIL: openFoodFactsContactEmail
+      OFF_MAX_REQUESTS_PER_MINUTE: string(openFoodFactsMaxRequestsPerMinute)
     }
   }
 }

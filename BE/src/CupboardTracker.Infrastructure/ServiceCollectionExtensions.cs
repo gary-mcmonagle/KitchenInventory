@@ -1,7 +1,10 @@
 using Azure.Identity;
 using CupboardTracker.Application.Ping;
+using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Scans;
+using CupboardTracker.Application.Stock;
 using CupboardTracker.Infrastructure.Cosmos;
+using CupboardTracker.Infrastructure.OpenFoodFacts;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +38,20 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IScanEventRepository, CosmosScanEventRepository>();
         services.AddSingleton<IDeviceRepository, CosmosDeviceRepository>();
         services.AddTransient<RecordScan>();
+
+        // Stock: check-in, check-out, and product lookup through Open Food Facts (options read lazily, so the
+        // ingest app, which never looks products up, doesn't need the OFF settings).
+        services.AddSingleton<IProductRepository, CosmosProductRepository>();
+        services.AddSingleton<IUnitRepository, CosmosUnitRepository>();
+        services.AddSingleton<IUnmatchedCheckOutRepository, CosmosUnmatchedCheckOutRepository>();
+        services.AddSingleton(sp => OpenFoodFactsOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<OpenFoodFactsThrottles>();
+        services.AddHttpClient<IProductLookup, OpenFoodFactsProductLookup>();
+        services.AddTransient<ProductResolver>();
+        services.AddTransient<CheckInScan>();
+        services.AddTransient<CheckOutScan>();
+        services.AddTransient<ProcessScanEvent>();
+        services.AddTransient<RetryFailedLookups>();
 
         return services;
     }

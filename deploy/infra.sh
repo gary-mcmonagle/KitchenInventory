@@ -45,6 +45,29 @@ current_sha() {
   [[ -n "$app" ]] || { echo "not-deployed"; return; }
   az functionapp config appsettings list -g "$RG" -n "$app" --query "[?name=='COMMIT_SHA'].value | [0]" -o tsv 2>/dev/null || echo "not-deployed"
 }
+current_setting() {
+  local component=$1 name=$2
+  [[ "$(az group exists -n "$RG")" == "true" ]] || return 0
+  local app
+  app=$(az functionapp list -g "$RG" --query "[?tags.component=='$component'].name | [0]" -o tsv 2>/dev/null || true)
+  [[ -n "$app" ]] || return 0
+  az functionapp config appsettings list -g "$RG" -n "$app" --query "[?name=='$name'].value | [0]" -o tsv 2>/dev/null || true
+}
+
+# The Open Food Facts contact email is never committed: keep the live value, or take OFF_CONTACT_EMAIL from the
+# environment, or ask once.
+if [[ -z "${OFF_CONTACT_EMAIL:-}" ]]; then
+  OFF_CONTACT_EMAIL=$(current_setting api OFF_CONTACT_EMAIL)
+fi
+if [[ -z "${OFF_CONTACT_EMAIL:-}" ]]; then
+  if $YES; then
+    echo "OFF_CONTACT_EMAIL isn't set on the API app; pass it in the environment when using --yes." >&2
+    exit 1
+  fi
+  read -r -p "Contact email for the Open Food Facts User-Agent (stored as an app setting, not committed): " OFF_CONTACT_EMAIL
+fi
+export OFF_CONTACT_EMAIL
+
 INGEST_COMMIT_SHA=$(current_sha ingest); export INGEST_COMMIT_SHA
 API_COMMIT_SHA=$(current_sha api); export API_COMMIT_SHA
 # Read-only verification access goes to whoever runs this (Gary's az login on the MacBook), unless set explicitly.
