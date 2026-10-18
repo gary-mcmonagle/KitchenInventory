@@ -24,3 +24,7 @@ param entraAllowedClientIds = readEnvironmentVariable('ENTRA_ALLOWED_CLIENT_IDS'
 
 // The verifier's object ID: set by deploy/infra.sh to the signed-in user unless VERIFIER_PRINCIPAL_ID is already set.
 param verifierPrincipalId = readEnvironmentVariable('VERIFIER_PRINCIPAL_ID', '')
+
+// Who can set secrets with deploy/secrets.sh (#42): set by deploy/infra.sh to the signed-in user (Gary) unless
+// VAULT_OFFICER_PRINCIPAL_ID is already set.
+param vaultOfficerPrincipalId = readEnvironmentVariable('VAULT_OFFICER_PRINCIPAL_ID', '')
