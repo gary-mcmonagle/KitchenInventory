@@ -156,6 +156,7 @@ test("Name it in the stock list opens the naming screen for that product", async
         stock: async () => ({
             generatedAt: "",
             totalUnits: 1,
+            useFirstCount: 0,
             products: [
                 {
                     productId: "p 1",
@@ -166,6 +167,10 @@ test("Name it in the stock list opens the naming screen for that product", async
                     count: 1,
                     latestCheckedInAt: "2026-10-17T18:00:00.000Z",
                     status: "noMatch",
+                    section: "waitingForName",
+                    soonestEstimatedExpiryDate: null,
+                    daysUntilSoonest: null,
+                    shelfLifeDays: null,
                 },
             ],
         }),

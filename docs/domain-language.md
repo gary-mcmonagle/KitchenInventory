@@ -27,7 +27,7 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Stock** – all units currently in the house (checked in and not checked out).
 
-**Stock list** – the UI's first screen, showing current stock grouped by product: named products under **In stock**, then unnamed ones under **Waiting for a name**. Reloads when opened, when you return to the app, and on pull-to-refresh.
+**Stock list** – the UI's first screen, showing current stock grouped by product in three sections: **Use first**, **Later** and **Waiting for a name**. Reloads when opened, when you return to the app, and on pull-to-refresh.
 - In code: `GetStock`, `GET /api/stock`, `StockScreen`
 
 **Waiting for a name** – the stock list section for in-stock products that have no name yet (a no-match or a lookup failure), each shown as **Unknown item** with its barcode in groups of four and the date it was scanned.
@@ -125,17 +125,23 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 ## Expiry
 
-**Bought date** – the date a unit was checked in.
+**Bought date** – the date a unit was checked in, as a UK calendar date.
 
-**Estimated expiry date** – shelf life plus the bought date (the check-in date). Always an estimate; never scanned or read from the pack.
+**Estimated expiry date** – shelf life plus the bought date (the check-in date). Always an estimate; never scanned or read from the pack. Shown as a badge: "Est. tomorrow", "Est. 4 days", "Est. 2 Nov".
 
-**Shelf life** – the typical duration a product lasts, estimated by Jev.
+**Later** – the stock list section for named products that aren't in Use first, including those with no estimate yet.
+
+**Shelf life** – how long a product usually keeps after it's bought, unopened and in its usual storage. Estimated once per product by Jev; a cautious estimate is used when Jev isn't confident.
+
+**Usual storage** – where a product is normally kept before it's opened: cupboard, fridge or freezer. Jev chooses it with the shelf life, and the estimate is for that storage.
+
+**Use first** – the stock list section (and the digest's first section) for products whose soonest unit is estimated to be expired or due within 3 days (`USE_FIRST_DAYS`).
 
 ---
 
 ## Monitoring & notifications
 
-**Daily digest** – the email sent at 21:00 UK time every day, quiet days included: that day's check-ins and check-outs, everything in stock, and unknown items by barcode.
+**Daily digest** – the email sent at 21:00 UK time every day, quiet days included: what to use first (when there's anything), that day's check-ins and check-outs, everything in stock, and unknown items by barcode.
 - In code: `SendDailyDigest`, `BuildDailyDigest`, `NotificationKind.DailyDigest`
 
 **Daily digest window** – the period a digest covers: 21:00 UK time the day before to 21:00 UK time on the digest's date (start inclusive, end exclusive). 23 or 25 hours on clock-change days, so nothing is counted twice or missed.

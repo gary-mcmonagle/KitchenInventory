@@ -25,6 +25,12 @@ public interface IProductRepository
     /// (ETag). False if it was named or looked up meanwhile.</summary>
     Task<bool> TryReplaceUnnamedAsync(Product updated, CancellationToken cancellationToken);
 
+    /// <summary>Known products with no shelf life yet (#52).</summary>
+    Task<IReadOnlyList<Product>> GetNeedingShelfLifeAsync(int max, CancellationToken cancellationToken);
+
+    /// <summary>Stores a shelf life, only if the product is still known with none (ETag-guarded). False otherwise.</summary>
+    Task<bool> TrySetShelfLifeAsync(Product updated, CancellationToken cancellationToken);
+
     /// <summary>lookupFailed products, oldest last attempt first.</summary>
     Task<IReadOnlyList<Product>> GetLookupFailedAsync(int max, CancellationToken cancellationToken);
 }

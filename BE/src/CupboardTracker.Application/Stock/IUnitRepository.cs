@@ -9,6 +9,9 @@ public interface IUnitRepository
 
     Task<IReadOnlyList<Versioned<Unit>>> GetInStockAsync(Guid productId, CancellationToken cancellationToken);
 
+    /// <summary>In-stock units with no estimated expiry date yet, whatever their product (cross-partition; #52).</summary>
+    Task<IReadOnlyList<Versioned<Unit>>> GetInStockWithoutExpiryAsync(CancellationToken cancellationToken);
+
     /// <summary>Replaces the unit only if it hasn't changed since it was read (ETag). False on a conflict.</summary>
     Task<bool> TryReplaceAsync(Versioned<Unit> current, Unit updated, CancellationToken cancellationToken);
 

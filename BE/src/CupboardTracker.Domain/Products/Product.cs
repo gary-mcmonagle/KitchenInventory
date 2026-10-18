@@ -38,8 +38,14 @@ public sealed record Product(
     DateTimeOffset? LastLookupAttemptAt,
     DateTimeOffset? LookupFailedSince,
     DateTimeOffset? NamedAt = null,
-    Guid? NamedBy = null)
+    Guid? NamedBy = null,
+    ShelfLife? ShelfLife = null)
 {
+    /// <summary>Known but not yet estimated: the shelf-life timer picks it up (#52). Unknown items get no shelf life.</summary>
+    public bool NeedsShelfLife => Status == ProductStatus.Known && ShelfLife is null;
+
+    public Product WithShelfLife(ShelfLife shelfLife) => this with { ShelfLife = shelfLife };
+
     /// <summary>Unnamed: Open Food Facts had no answer (yet). Shown as "Unknown item" and waiting for a name.</summary>
     public bool IsUnnamed => Status is ProductStatus.NoMatch or ProductStatus.LookupFailed;
 

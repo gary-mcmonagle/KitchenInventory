@@ -19,6 +19,11 @@ internal static class CosmosJson
             ? parsed
             : null;
 
+    public static DateOnly? ParseDate(JsonNode? node) =>
+        DateOnly.TryParseExact(Text(node), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+            ? date
+            : null;
+
     public static string? Text(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var s) ? s : null;
 
     public static MemoryStream ToStream(JsonObject document)

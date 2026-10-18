@@ -18,6 +18,10 @@ const gravy: StockProduct = {
     count: 2,
     latestCheckedInAt: "2026-10-17T18:00:00.000Z",
     status: "known",
+    section: "later",
+    soonestEstimatedExpiryDate: null,
+    daysUntilSoonest: null,
+    shelfLifeDays: null,
 };
 const naan: StockProduct = {
     ...gravy,
@@ -27,7 +31,7 @@ const naan: StockProduct = {
     size: null,
     count: 1,
 };
-const stock: Stock = { generatedAt: "", totalUnits: 3, products: [gravy, naan] };
+const stock: Stock = { generatedAt: "", totalUnits: 3, useFirstCount: 0, products: [gravy, naan] };
 
 function deferred<T>() {
     let resolve!: (v: T) => void;
@@ -37,20 +41,30 @@ function deferred<T>() {
 }
 
 function setup(overrides: Partial<Record<"checkOut" | "undoCheckOut", ReturnType<typeof vi.fn>>> = {}) {
+    // A stateful fake: the screen reloads quietly after a check-out or undo, and should see the new counts.
+    const counts = new Map(stock.products.map((p) => [p.productId, p.count]));
+    const current = (): Stock => {
+        const products = stock.products
+            .filter((p) => counts.get(p.productId)! > 0)
+            .map((p) => ({ ...p, count: counts.get(p.productId)! }));
+        return { ...stock, products, totalUnits: products.reduce((n, p) => n + p.count, 0) };
+    };
     const api = {
-        stock: vi.fn(async () => stock),
-        checkOut: vi.fn(async (productId: string): Promise<CheckedOut> => ({
-            unitId: `unit-of-${productId}`,
-            productId,
-            displayName: productId === "p-gravy" ? "Beef Gravy" : "PLAIN NAAN BREADS",
-            remainingCount: productId === "p-gravy" ? 1 : 0,
-        })),
-        undoCheckOut: vi.fn(async (unitId: string): Promise<UndoneCheckOut> => ({
-            unitId,
-            productId: unitId.replace("unit-of-", ""),
-            count: unitId === "unit-of-p-gravy" ? 2 : 1,
-            restored: true,
-        })),
+        stock: vi.fn(async () => current()),
+        checkOut: vi.fn(async (productId: string): Promise<CheckedOut> => {
+            counts.set(productId, counts.get(productId)! - 1);
+            return {
+                unitId: `unit-of-${productId}`,
+                productId,
+                displayName: productId === "p-gravy" ? "Beef Gravy" : "PLAIN NAAN BREADS",
+                remainingCount: counts.get(productId)!,
+            };
+        }),
+        undoCheckOut: vi.fn(async (unitId: string): Promise<UndoneCheckOut> => {
+            const productId = unitId.replace("unit-of-", "");
+            counts.set(productId, counts.get(productId)! + 1);
+            return { unitId, productId, count: counts.get(productId)!, restored: true };
+        }),
         ...overrides,
     };
     render(<StockScreen api={api as unknown as ApiClient} />);
@@ -69,7 +83,7 @@ test("check out drops the count at once and shows the toast", async () => {
 
     expect(api.checkOut).toHaveBeenCalledWith("p-gravy");
     expect(screen.getByText("Bisto · 230g")).toBeInTheDocument(); // ×2 → 1
-    expect(screen.getAllByText("2 items")[0]).toBeInTheDocument(); // header total (3 → 2)
+    expect(screen.getByText("2 items · 0 to use first")).toBeInTheDocument(); // header total (3 → 2)
     expect(screen.getByRole("status")).toHaveTextContent("Checked out Beef Gravy");
 });
 
@@ -109,7 +123,7 @@ test("Undo puts it back", async () => {
 
     expect(api.undoCheckOut).toHaveBeenCalledWith("unit-of-p-naan");
     expect(screen.getByText("PLAIN NAAN BREADS")).toBeInTheDocument();
-    expect(screen.getByText("3 items")).toBeInTheDocument();
+    expect(screen.getByText("3 items · 0 to use first")).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 });
 
@@ -177,12 +191,37 @@ test("withCount keeps the API's order when a row comes back", () => {
         productId: "p-x",
         displayName: "Unknown item (1)",
         status: "noMatch",
+        section: "waitingForName",
         count: 1,
     };
-    const s: Stock = { generatedAt: "", totalUnits: 3, products: [gravy, naan, unknown] };
+    const s: Stock = { generatedAt: "", totalUnits: 3, useFirstCount: 0, products: [gravy, naan, unknown] };
 
     const back = withCount(s, apple, 1);
     expect(back.products.map((p) => p.productId)).toEqual(["p-apple", "p-gravy", "p-naan", "p-x"]);
     expect(back.totalUnits).toBe(5);
     expect(withCount(s, naan, 0).products.map((p) => p.productId)).toEqual(["p-gravy", "p-x"]);
+});
+
+test("withCount puts a Use first row back by soonest expiry and recounts Use first", () => {
+    const due = (id: string, date: string, name = id): StockProduct => ({
+        ...gravy,
+        productId: id,
+        displayName: name,
+        count: 1,
+        section: "useFirst",
+        soonestEstimatedExpiryDate: date,
+        daysUntilSoonest: 1,
+    });
+    const s: Stock = {
+        generatedAt: "",
+        totalUnits: 4,
+        useFirstCount: 2,
+        products: [due("a", "2026-10-17"), due("c", "2026-10-19"), gravy],
+    };
+
+    const back = withCount(s, due("b", "2026-10-18"), 1);
+
+    expect(back.products.map((p) => p.productId)).toEqual(["a", "b", "c", "p-gravy"]);
+    expect(back.useFirstCount).toBe(3);
+    expect(withCount(s, s.products[0], 0).useFirstCount).toBe(1);
 });

@@ -104,6 +104,21 @@ internal sealed class FakeProducts : IProductRepository
         return Task.FromResult(true);
     }
 
+    public Task<IReadOnlyList<Product>> GetNeedingShelfLifeAsync(int max, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.NeedsShelfLife).Take(max).ToList());
+
+    public Task<bool> TrySetShelfLifeAsync(Product updated, CancellationToken cancellationToken)
+    {
+        BeforeWrite?.Invoke();
+        if (!Products.TryGetValue(updated.ProductId, out var current) || !current.NeedsShelfLife)
+        {
+            return Task.FromResult(false);
+        }
+
+        Products[updated.ProductId] = updated;
+        return Task.FromResult(true);
+    }
+
     public Task<IReadOnlyList<Product>> GetLookupFailedAsync(int max, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Product>>(Products.Values
             .Where(p => p.Status == ProductStatus.LookupFailed).OrderBy(p => p.LastLookupAttemptAt).Take(max).ToList());
@@ -135,6 +150,12 @@ internal sealed class FakeUnits : IUnitRepository
     public Task<IReadOnlyList<Versioned<Unit>>> GetInStockAsync(Guid productId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Versioned<Unit>>>(Units.Values
             .Where(v => v.Unit.ProductId == productId && v.Unit.Status == UnitStatus.InStock)
+            .Select(v => new Versioned<Unit>(v.Unit, v.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            .ToList());
+
+    public Task<IReadOnlyList<Versioned<Unit>>> GetInStockWithoutExpiryAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Versioned<Unit>>>(Units.Values
+            .Where(v => v.Unit.Status == UnitStatus.InStock && v.Unit.EstimatedExpiryDate is null)
             .Select(v => new Versioned<Unit>(v.Unit, v.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)))
             .ToList());
 
@@ -173,6 +194,13 @@ internal sealed class FakeUnmatched : IUnmatchedCheckOutRepository
 
     public Task<bool> CreateIfNotExistsAsync(UnmatchedCheckOut unmatched, CancellationToken cancellationToken) =>
         Task.FromResult(Records.TryAdd(unmatched.ScanId, unmatched));
+}
+
+internal static class TestSettings
+{
+    public static readonly TimeZoneInfo London = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");
+
+    public static StockSettings Stock(int useFirstDays = StockSettings.DefaultUseFirstDays) => new(London, useFirstDays);
 }
 
 internal static class TestScans

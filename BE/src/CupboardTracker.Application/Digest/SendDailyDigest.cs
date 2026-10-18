@@ -1,6 +1,8 @@
 using CupboardTracker.Application.Notifications;
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Stock;
 using CupboardTracker.Domain.Products;
+using CupboardTracker.Domain.Stock;
 using Microsoft.Extensions.Logging;
 
 namespace CupboardTracker.Application.Digest;
@@ -15,6 +17,7 @@ public sealed partial class SendDailyDigest(
     ISentDigestRepository sentDigests,
     INotifier notifier,
     DigestSettings settings,
+    StockSettings stock,
     TimeProvider clock,
     ILogger<SendDailyDigest> logger)
 {
@@ -73,8 +76,20 @@ public sealed partial class SendDailyDigest(
             Group(checkedIn, Name),
             Group(checkedOut, Name),
             Group(inStock.Where(IsNamed), Name),
-            Group(inStock.Where(u => !IsNamed(u)), Name));
+            Group(inStock.Where(u => !IsNamed(u)), Name),
+            UseFirst(inStock.Where(IsNamed), Name, window.Date));
     }
+
+    /// <summary>Named products whose soonest unit is expired or due within the Use first threshold on the digest's
+    /// day, soonest first, then by name.</summary>
+    private List<DigestUseFirstLine> UseFirst(IEnumerable<DigestUnit> named, Func<DigestUnit, string> name, DateOnly today) =>
+        named.GroupBy(u => u.ProductId)
+            .Select(g => (Name: name(g.First()), Count: g.Count(), Soonest: g.Min(u => u.EstimatedExpiryDate)))
+            .Where(p => p.Soonest is { } soonest && stock.IsUseFirst(EstimatedExpiry.DaysUntil(soonest, today)))
+            .OrderBy(p => p.Soonest)
+            .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(p => new DigestUseFirstLine(p.Name, p.Count, ExpiryBadge.Text(p.Soonest!.Value, today)))
+            .ToList();
 
     /// <summary>Counts per name, alphabetical ignoring case.</summary>
     public static IReadOnlyList<DigestLine> Group(IEnumerable<DigestUnit> units, Func<DigestUnit, string> name) =>

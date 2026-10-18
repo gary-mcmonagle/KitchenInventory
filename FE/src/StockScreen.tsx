@@ -6,8 +6,18 @@ import {
     type ApiClient,
     type Stock,
     type StockProduct,
+    type StockSection,
 } from "./api";
-import { groupBarcode, initial, itemsLabel, metaLine, scannedLabel, todayLine } from "./format";
+import {
+    boughtNote,
+    expiryBadge,
+    groupBarcode,
+    initial,
+    itemsLabel,
+    metaLine,
+    scannedLabel,
+    todayLine,
+} from "./format";
 import { namePath, navigate } from "./router";
 import styles from "./Stock.module.css";
 
@@ -18,7 +28,7 @@ type Toast =
     | { kind: "checkedOut"; unitId: string; product: StockProduct; name: string }
     | { kind: "error"; text: string };
 
-/** The stock with one product's count set (the row is removed at 0, put back if missing), and the total recomputed. */
+/** The stock with one product's count set (the row is removed at 0, put back if missing), and the totals recomputed. */
 export function withCount(stock: Stock, product: StockProduct, count: number): Stock {
     const others = stock.products.filter((p) => p.productId !== product.productId);
     let products = others;
@@ -30,22 +40,46 @@ export function withCount(stock: Stock, product: StockProduct, count: number): S
                 ? stock.products.map((p) => (p.productId === product.productId ? updated : p))
                 : insertSorted(others, updated);
     }
-    return { ...stock, products, totalUnits: products.reduce((n, p) => n + p.count, 0) };
+    return {
+        ...stock,
+        products,
+        totalUnits: products.reduce((n, p) => n + p.count, 0),
+        useFirstCount: products.filter((p) => p.section === "useFirst").length,
+    };
 }
 
-/** Back where the API would put it: named products A–Z ignoring case, before the unnamed ones. */
+const SECTION_ORDER: StockSection[] = ["useFirst", "later", "waitingForName"];
+
+/** The API's order: by section; within Use first and Later, soonest estimated expiry (none last), then name ignoring
+ * case; Waiting for a name, newest first. */
+function compareStock(a: StockProduct, b: StockProduct): number {
+    const section = SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section);
+    if (section !== 0) return section;
+    if (a.section === "waitingForName") return b.latestCheckedInAt.localeCompare(a.latestCheckedInAt);
+    if (a.soonestEstimatedExpiryDate !== b.soonestEstimatedExpiryDate) {
+        if (a.soonestEstimatedExpiryDate === null) return 1;
+        if (b.soonestEstimatedExpiryDate === null) return -1;
+        return a.soonestEstimatedExpiryDate.localeCompare(b.soonestEstimatedExpiryDate);
+    }
+    return a.displayName.localeCompare(b.displayName, "en", { sensitivity: "base" });
+}
+
+/** Back where the API would put it. */
 function insertSorted(products: StockProduct[], product: StockProduct): StockProduct[] {
-    const at = products.findIndex(
-        (p) =>
-            p.status !== "known" ||
-            p.displayName.localeCompare(product.displayName, "en", { sensitivity: "base" }) > 0,
-    );
+    const at = products.findIndex((p) => compareStock(p, product) > 0);
     return at < 0 ? [...products, product] : [...products.slice(0, at), product, ...products.slice(at)];
 }
 
+const SECTION_TITLES: Record<StockSection, string> = {
+    useFirst: "Use first",
+    later: "Later",
+    waitingForName: "Waiting for a name",
+};
+
 type Phase = "loading" | "ready" | "error" | "noAccess";
 
-/** The stock list (#49): what's in the house now. Reloads on open, on returning to the app, and on pull-to-refresh. */
+/** The stock list (#49, #52): what's in the house now, in Use first, Later and Waiting for a name. Reloads on open, on
+ * returning to the app, and on pull-to-refresh. */
 export function StockScreen({ api }: { api: ApiClient }) {
     const [stock, setStock] = useState<Stock | null>(null);
     const [phase, setPhase] = useState<Phase>("loading");
@@ -81,6 +115,7 @@ export function StockScreen({ api }: { api: ApiClient }) {
             const result = await api.checkOut(product.productId);
             setStock((s) => s && withCount(s, product, result.remainingCount));
             showToast({ kind: "checkedOut", unitId: result.unitId, product, name: product.displayName });
+            void load({ quiet: true }); // the soonest unit went, so its badge may change
         } catch (error) {
             if (error instanceof SignInRequiredError) return;
             setStock((s) => s && withCount(s, product, product.count)); // revert
@@ -105,6 +140,7 @@ export function StockScreen({ api }: { api: ApiClient }) {
         try {
             const result = await api.undoCheckOut(done.unitId);
             setStock((s) => s && withCount(s, done.product, result.count));
+            void load({ quiet: true });
         } catch (error) {
             if (error instanceof SignInRequiredError) return;
             setStock((s) => s && withCount(s, done.product, before)); // revert
@@ -112,24 +148,27 @@ export function StockScreen({ api }: { api: ApiClient }) {
         }
     };
 
-    const load = useCallback(async () => {
-        if (!navigator.onLine) {
-            setOffline(true);
-            return;
-        }
-        setRefreshing(true);
-        try {
-            const next = await api.stock();
-            if (!live.current) return;
-            setStock(next);
-            setPhase("ready");
-        } catch (error) {
-            if (!live.current || error instanceof SignInRequiredError) return;
-            setPhase(error instanceof NoAccessError ? "noAccess" : "error");
-        } finally {
-            if (live.current) setRefreshing(false);
-        }
-    }, [api]);
+    const load = useCallback(
+        async ({ quiet = false }: { quiet?: boolean } = {}) => {
+            if (!navigator.onLine) {
+                setOffline(true);
+                return;
+            }
+            if (!quiet) setRefreshing(true);
+            try {
+                const next = await api.stock();
+                if (!live.current) return;
+                setStock(next);
+                setPhase("ready");
+            } catch (error) {
+                if (!live.current || error instanceof SignInRequiredError || quiet) return;
+                setPhase(error instanceof NoAccessError ? "noAccess" : "error");
+            } finally {
+                if (live.current) setRefreshing(false);
+            }
+        },
+        [api],
+    );
 
     useEffect(() => {
         live.current = true;
@@ -164,8 +203,10 @@ export function StockScreen({ api }: { api: ApiClient }) {
         setPull(0);
     };
 
-    const known = stock?.products.filter((p) => p.status === "known") ?? [];
-    const unnamed = stock?.products.filter((p) => p.status !== "known") ?? [];
+    const sections = SECTION_ORDER.map((section) => ({
+        section,
+        products: stock?.products.filter((p) => p.section === section) ?? [],
+    })).filter((s) => s.products.length > 0);
 
     return (
         <div
@@ -181,7 +222,14 @@ export function StockScreen({ api }: { api: ApiClient }) {
             <header className={styles.header}>
                 <div className={styles.date}>{todayLine()}</div>
                 <h1 className={styles.title}>Cupboard</h1>
-                {stock && <div className={styles.summary}>{itemsLabel(stock.totalUnits)}</div>}
+                {stock && (
+                    <div className={styles.summary}>
+                        {`${itemsLabel(stock.totalUnits)} · ${stock.useFirstCount} to use first`}
+                    </div>
+                )}
+                <div className={styles.disclaimer}>
+                    Dates are estimates: the day it was bought plus how long that kind of food usually keeps.
+                </div>
             </header>
 
             <div className={styles.content} aria-busy={refreshing}>
@@ -223,26 +271,22 @@ export function StockScreen({ api }: { api: ApiClient }) {
                     </p>
                 )}
 
-                {known.length > 0 && (
-                    <Section title="In stock" count={known.length}>
-                        {known.map((p) => (
-                            <KnownRow
-                                key={p.productId}
-                                product={p}
-                                busy={inFlight.has(p.productId)}
-                                onCheckOut={() => void checkOut(p)}
-                            />
-                        ))}
+                {sections.map(({ section, products }) => (
+                    <Section key={section} title={SECTION_TITLES[section]} count={products.length}>
+                        {products.map((p) =>
+                            section === "waitingForName" ? (
+                                <UnnamedRow key={p.productId} product={p} />
+                            ) : (
+                                <KnownRow
+                                    key={p.productId}
+                                    product={p}
+                                    busy={inFlight.has(p.productId)}
+                                    onCheckOut={() => void checkOut(p)}
+                                />
+                            ),
+                        )}
                     </Section>
-                )}
-
-                {unnamed.length > 0 && (
-                    <Section title="Waiting for a name" count={unnamed.length}>
-                        {unnamed.map((p) => (
-                            <UnnamedRow key={p.productId} product={p} />
-                        ))}
-                    </Section>
-                )}
+                ))}
             </div>
 
             {toast && (
@@ -282,6 +326,14 @@ function KnownRow({
     onCheckOut: () => void;
 }) {
     const meta = metaLine(product.brand, product.size, product.count);
+    const badge =
+        product.daysUntilSoonest !== null && product.soonestEstimatedExpiryDate !== null
+            ? expiryBadge(product.daysUntilSoonest, product.soonestEstimatedExpiryDate)
+            : null;
+    const note =
+        product.soonestEstimatedExpiryDate !== null && product.shelfLifeDays !== null
+            ? boughtNote(product.soonestEstimatedExpiryDate, product.shelfLifeDays)
+            : null;
     return (
         <li className={styles.row}>
             <div className={styles.rowMain}>
@@ -292,8 +344,10 @@ function KnownRow({
                     <span className={styles.name}>{product.displayName}</span>
                     {meta && <span className={styles.meta}>{meta}</span>}
                 </div>
+                {badge && <span className={`${styles.badge} ${styles[badge.tone]}`}>{badge.text}</span>}
             </div>
             <div className={styles.actions}>
+                {note && <span className={styles.note}>{note}</span>}
                 <button
                     type="button"
                     className={styles.checkOut}

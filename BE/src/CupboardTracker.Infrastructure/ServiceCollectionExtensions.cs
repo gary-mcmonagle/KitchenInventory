@@ -6,9 +6,11 @@ using CupboardTracker.Application.Notifications;
 using CupboardTracker.Application.Ping;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Scans;
+using CupboardTracker.Application.ShelfLives;
 using CupboardTracker.Application.Stock;
 using CupboardTracker.Infrastructure.Cosmos;
 using CupboardTracker.Infrastructure.Email;
+using CupboardTracker.Infrastructure.Jev;
 using CupboardTracker.Infrastructure.OpenFoodFacts;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
@@ -63,6 +65,13 @@ public static class ServiceCollectionExtensions
         services.AddTransient<UndoCheckOut>();
         services.AddTransient<GetProduct>();
         services.AddTransient<NameProduct>();
+        services.AddSingleton(sp => StockSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+
+        // Shelf life and estimated expiry dates (#52): Jev, keyed from Key Vault through an app setting (#42).
+        services.AddSingleton(sp => JevOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddHttpClient<JevClient>();
+        services.AddTransient<IShelfLifeEstimator, JevShelfLifeEstimator>();
+        services.AddTransient<EstimateShelfLives>();
 
         // Hubs: heartbeats (ingest) and the offline alert (API timer), emailed through ACS with the managed identity.
         // Settings are read lazily, so the ingest app needs none of the email settings.
@@ -81,6 +90,20 @@ public static class ServiceCollectionExtensions
         services.AddTransient<SendDailyDigest>();
 
         return services;
+    }
+
+    /// <summary>USE_FIRST_DAYS (default 3) and the household's time zone (#52).</summary>
+    internal static StockSettings StockSettingsFromConfiguration(IConfiguration config)
+    {
+        var days = StockSettings.DefaultUseFirstDays;
+        if (config["USE_FIRST_DAYS"] is { Length: > 0 } text
+            && (!int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out days)
+                || days > 365))
+        {
+            throw new InvalidOperationException("USE_FIRST_DAYS must be a whole number of days, 0 to 365.");
+        }
+
+        return new StockSettings(TimeZoneInfo.FindSystemTimeZoneById("Europe/London"), days);
     }
 
     /// <summary>OFFLINE_THRESHOLD_MINUTES (default 20) and the household's time zone, resolved now so a missing zone

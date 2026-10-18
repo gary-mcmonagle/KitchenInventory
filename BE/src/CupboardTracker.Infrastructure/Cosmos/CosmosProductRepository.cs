@@ -109,6 +109,37 @@ public sealed class CosmosProductRepository(CosmosContainers containers, TimePro
         return true;
     }
 
+    public async Task<IReadOnlyList<Product>> GetNeedingShelfLifeAsync(int max, CancellationToken cancellationToken)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.type = 'product' AND c.status = 'known' "
+            + "AND (NOT IS_DEFINED(c.shelfLifeDays) OR IS_NULL(c.shelfLifeDays))");
+        var documents = await CosmosJson.QueryAsync(Products, query, partitionKey: null, max, cancellationToken);
+        return documents.Select(ProductDocument.ToProduct).ToList();
+    }
+
+    public async Task<bool> TrySetShelfLifeAsync(Product updated, CancellationToken cancellationToken)
+    {
+        var id = updated.ProductId.ToString("D");
+        var current = await ReadAsync(updated.ProductId, cancellationToken);
+        if (current is null || CosmosJson.Text(current["status"]) != "known" || current["shelfLifeDays"] is not null)
+        {
+            return false; // not known any more, or already estimated (never overwritten)
+        }
+
+        var etag = CosmosJson.Text(current["_etag"]);
+        using var stream = CosmosJson.ToStream(ProductDocument.Write(updated, current));
+        using var response = await Products.ReplaceItemStreamAsync(
+            stream, id, new PartitionKey(id), new ItemRequestOptions { IfMatchEtag = etag }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            return false;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return true;
+    }
+
     public async Task<IReadOnlyList<Product>> GetLookupFailedAsync(int max, CancellationToken cancellationToken)
     {
         var query = new QueryDefinition(
@@ -153,6 +184,16 @@ internal static class ProductDocument
             document["namedBy"] = product.NamedBy?.ToString("D");
         }
 
+        if (product.ShelfLife is { } shelfLife)
+        {
+            document["shelfLifeDays"] = shelfLife.Days;
+            document["shelfLifeSource"] = shelfLife.Source;
+            document["shelfLifeConfidence"] = Math.Round(shelfLife.Confidence, 3);
+            document["jevLowConfidence"] = shelfLife.LowConfidence;
+            document["storage"] = StorageName(shelfLife.UsualStorage);
+            document["shelfLifeEstimatedAt"] = CosmosJson.Timestamp(shelfLife.EstimatedAt);
+        }
+
         return document;
     }
 
@@ -185,8 +226,35 @@ internal static class ProductDocument
             CosmosJson.ParseTimestamp(document["lastLookupAttemptAt"]),
             CosmosJson.ParseTimestamp(document["lookupFailedSince"]),
             CosmosJson.ParseTimestamp(document["namedAt"]),
-            Guid.TryParse(CosmosJson.Text(document["namedBy"]), out var namedBy) ? namedBy : null);
+            Guid.TryParse(CosmosJson.Text(document["namedBy"]), out var namedBy) ? namedBy : null,
+            ReadShelfLife(document));
     }
+
+    private static ShelfLife? ReadShelfLife(JsonObject document)
+    {
+        if (document["shelfLifeDays"] is not JsonValue daysValue || !daysValue.TryGetValue<int>(out var days))
+        {
+            return null;
+        }
+
+        var storage = CosmosJson.Text(document["storage"]) switch
+        {
+            "fridge" => Storage.Fridge,
+            "freezer" => Storage.Freezer,
+            _ => Storage.Cupboard,
+        };
+        var confidence = document["shelfLifeConfidence"] is JsonValue c && c.TryGetValue<double>(out var value) ? value : 0;
+        var low = document["jevLowConfidence"] is JsonValue l && l.TryGetValue<bool>(out var flag) && flag;
+        return new ShelfLife(days, storage, confidence, low, CosmosJson.Text(document["shelfLifeSource"]) ?? ShelfLife.JevSource,
+            CosmosJson.ParseTimestamp(document["shelfLifeEstimatedAt"]) ?? DateTimeOffset.MinValue);
+    }
+
+    internal static string StorageName(Storage storage) => storage switch
+    {
+        Storage.Fridge => "fridge",
+        Storage.Freezer => "freezer",
+        _ => "cupboard",
+    };
 
     private static string Status(ProductStatus status) => status switch
     {

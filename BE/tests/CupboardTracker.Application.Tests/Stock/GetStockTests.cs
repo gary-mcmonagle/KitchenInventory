@@ -1,5 +1,6 @@
 using CupboardTracker.Application.Stock;
 using CupboardTracker.Domain.Products;
+using CupboardTracker.Domain.Stock;
 
 namespace CupboardTracker.Application.Tests.Stock;
 
@@ -17,7 +18,8 @@ public sealed class GetStockTests
     private readonly FakeStockQueries queries = new();
     private readonly FakeProducts products = new();
 
-    private GetStock UseCase() => new(queries, products, new FixedClock(Now));
+    private GetStock UseCase(int useFirstDays = StockSettings.DefaultUseFirstDays) =>
+        new(queries, products, TestSettings.Stock(useFirstDays), new FixedClock(Now));
 
     private Guid Known(string name, string? brand = null, string? size = null, string barcode = "5000354922831")
     {
@@ -35,12 +37,78 @@ public sealed class GetStockTests
         return id;
     }
 
-    private void InStock(Guid productId, int count, int hoursAgo = 1, string? barcode = null)
+    private void InStock(Guid productId, int count, int hoursAgo = 1, string? barcode = null, int? expiresInDays = null)
     {
         for (var i = 0; i < count; i++)
         {
-            queries.Units.Add(new StockUnit(productId, barcode, Now.AddHours(-hoursAgo - i)));
+            queries.Units.Add(new StockUnit(productId, barcode, Now.AddHours(-hoursAgo - i),
+                expiresInDays is { } days ? Today.AddDays(days + i) : null));
         }
+    }
+
+    // 22:00 UTC on 17 Oct is 23:00 BST: still the 17th in the UK.
+    private static readonly DateOnly Today = new(2026, 10, 17);
+
+    [Theory]
+    [InlineData(-1, StockSection.UseFirst)]
+    [InlineData(0, StockSection.UseFirst)]
+    [InlineData(1, StockSection.UseFirst)]
+    [InlineData(3, StockSection.UseFirst)]
+    [InlineData(4, StockSection.Later)]
+    [InlineData(400, StockSection.Later)]
+    public async Task Use_first_is_expired_or_due_within_three_days(int days, StockSection section)
+    {
+        InStock(Known("Milk"), 1, expiresInDays: days);
+
+        var view = await UseCase().ExecuteAsync(CancellationToken.None);
+
+        var product = Assert.Single(view.Products);
+        Assert.Equal((section, days, Today.AddDays(days)), (product.Section, product.DaysUntilSoonest, product.SoonestEstimatedExpiryDate));
+        Assert.Equal(section == StockSection.UseFirst ? 1 : 0, view.UseFirstCount);
+    }
+
+    [Fact]
+    public async Task The_threshold_comes_from_settings()
+    {
+        InStock(Known("Yoghurt"), 1, expiresInDays: 5);
+        Assert.Equal(StockSection.UseFirst, Assert.Single((await UseCase(useFirstDays: 5).ExecuteAsync(CancellationToken.None)).Products).Section);
+    }
+
+    [Fact]
+    public async Task The_soonest_unit_decides_and_the_shelf_life_is_included()
+    {
+        var milk = Known("Milk");
+        products.Products[milk] = products.Products[milk].WithShelfLife(new ShelfLife(7, Storage.Fridge, 0.8, false, "jev", Now));
+        InStock(milk, 3, expiresInDays: 2); // 2, 3 and 4 days
+
+        var product = Assert.Single((await UseCase().ExecuteAsync(CancellationToken.None)).Products);
+
+        Assert.Equal((2, 7, 3), (product.DaysUntilSoonest!.Value, product.ShelfLifeDays!.Value, product.Count));
+    }
+
+    [Fact]
+    public async Task Sections_are_sorted_by_soonest_then_name_with_no_estimate_last_and_unnamed_at_the_bottom()
+    {
+        InStock(Known("Penne"), 1, expiresInDays: 700);
+        InStock(Known("hummus"), 1, expiresInDays: -1);
+        InStock(Known("Walnuts"), 1);                       // no estimate yet: Later, last
+        InStock(Unnamed(ProductStatus.NoMatch, "20055363"), 1, hoursAgo: 3);
+        InStock(Known("Chicken"), 1, expiresInDays: 1);
+        InStock(Known("Baked beans"), 1, expiresInDays: 700);
+        InStock(Known("Cheddar"), 1, expiresInDays: 17);
+        InStock(Known("Apples"), 1);
+
+        var view = await UseCase().ExecuteAsync(CancellationToken.None);
+
+        Assert.Equal(
+            ["hummus", "Chicken", "Cheddar", "Baked beans", "Penne", "Apples", "Walnuts", "Unknown item (20055363)"],
+            view.Products.Select(p => p.DisplayName));
+        Assert.Equal(
+            [StockSection.UseFirst, StockSection.UseFirst, StockSection.Later, StockSection.Later, StockSection.Later,
+             StockSection.Later, StockSection.Later, StockSection.WaitingForName],
+            view.Products.Select(p => p.Section));
+        Assert.Equal(2, view.UseFirstCount);
+        Assert.Null(view.Products[5].DaysUntilSoonest);
     }
 
     [Fact]

@@ -35,6 +35,16 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         return documents.Select(d => new Versioned<Unit>(ToUnit(d), CosmosJson.Text(d["_etag"])!)).ToList();
     }
 
+    public async Task<IReadOnlyList<Versioned<Unit>>> GetInStockWithoutExpiryAsync(CancellationToken cancellationToken)
+    {
+        var documents = await CosmosJson.QueryAsync(
+            Items,
+            new QueryDefinition(
+                "SELECT * FROM c WHERE c.status = 'inStock' AND (NOT IS_DEFINED(c.estimatedExpiryDate) OR IS_NULL(c.estimatedExpiryDate))"),
+            partitionKey: null, max: null, cancellationToken);
+        return documents.Select(d => new Versioned<Unit>(ToUnit(d), CosmosJson.Text(d["_etag"])!)).ToList();
+    }
+
     public async Task<bool> TryReplaceAsync(Versioned<Unit> current, Unit updated, CancellationToken cancellationToken)
     {
         var id = updated.UnitId.ToString("D");

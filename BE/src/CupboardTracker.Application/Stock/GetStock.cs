@@ -1,10 +1,11 @@
 using CupboardTracker.Application.Products;
 using CupboardTracker.Domain.Products;
+using CupboardTracker.Domain.Stock;
 
 namespace CupboardTracker.Application.Stock;
 
 /// <summary>An in-stock unit as the stock list needs it.</summary>
-public sealed record StockUnit(Guid ProductId, string? Barcode, DateTimeOffset CheckedInAt);
+public sealed record StockUnit(Guid ProductId, string? Barcode, DateTimeOffset CheckedInAt, DateOnly? EstimatedExpiryDate = null);
 
 /// <summary>Reads for the stock list (cross-partition over inventoryItems; small at household volume).</summary>
 public interface IStockQueries
@@ -19,6 +20,19 @@ public enum StockProductStatus
     LookupFailed,
 }
 
+/// <summary>Which part of the stock list a product is in (#52).</summary>
+public enum StockSection
+{
+    /// <summary>Its soonest unit is estimated to be expired or due within <see cref="StockSettings.UseFirstDays"/>.</summary>
+    UseFirst,
+
+    /// <summary>Everything else that's named, including products with no estimate yet.</summary>
+    Later,
+
+    /// <summary>Unknown items (no match, or lookup failed).</summary>
+    WaitingForName,
+}
+
 /// <summary>One product in stock and how many units of it are in the house.</summary>
 public sealed record StockProduct(
     Guid ProductId,
@@ -28,16 +42,22 @@ public sealed record StockProduct(
     string? Size,
     int Count,
     DateTimeOffset LatestCheckedInAt,
-    StockProductStatus Status);
+    StockProductStatus Status,
+    StockSection Section = StockSection.Later,
+    DateOnly? SoonestEstimatedExpiryDate = null,
+    int? DaysUntilSoonest = null,
+    int? ShelfLifeDays = null);
 
-public sealed record StockView(DateTimeOffset GeneratedAt, int TotalUnits, IReadOnlyList<StockProduct> Products);
+public sealed record StockView(
+    DateTimeOffset GeneratedAt, int TotalUnits, IReadOnlyList<StockProduct> Products, int UseFirstCount = 0);
 
 /// <summary>
-/// The stock list (#49): in-stock units grouped by product, with counts, already sorted so the UI does no
-/// aggregation. Named products first, alphabetical ignoring case; then unnamed ones (no match, or lookup failed),
-/// most recently scanned first.
+/// The stock list (#49, #52): in-stock units grouped by product, with counts, already sorted and put in sections so
+/// the UI does no aggregation. Use first (soonest estimated expiry within <see cref="StockSettings.UseFirstDays"/>,
+/// or passed) and Later are sorted by soonest estimated expiry (no estimate last), then name ignoring case; Waiting
+/// for a name (no match, or lookup failed) by most recently scanned.
 /// </summary>
-public sealed class GetStock(IStockQueries queries, IProductRepository products, TimeProvider clock)
+public sealed class GetStock(IStockQueries queries, IProductRepository products, StockSettings settings, TimeProvider clock)
 {
     public async Task<StockView> ExecuteAsync(CancellationToken cancellationToken)
     {
@@ -45,11 +65,19 @@ public sealed class GetStock(IStockQueries queries, IProductRepository products,
         var groups = units.GroupBy(u => u.ProductId).ToList();
         // Point reads, all at once: one after another took about a second for 26 products.
         var found = await Task.WhenAll(groups.Select(g => products.GetAsync(g.Key, cancellationToken)));
+        var now = clock.GetUtcNow();
+        var today = settings.Today(now);
         var rows = new List<StockProduct>();
         foreach (var (group, product) in groups.Zip(found))
         {
             var latest = group.MaxBy(u => u.CheckedInAt)!;
             var barcode = product?.Barcodes is [var first, ..] ? first : latest.Barcode;
+            var status = StatusOf(product);
+            var soonest = group.Min(u => u.EstimatedExpiryDate);
+            int? days = soonest is { } date ? EstimatedExpiry.DaysUntil(date, today) : null;
+            var section = status != StockProductStatus.Known ? StockSection.WaitingForName
+                : settings.IsUseFirst(days) ? StockSection.UseFirst
+                : StockSection.Later;
             rows.Add(new StockProduct(
                 group.Key,
                 barcode,
@@ -58,17 +86,25 @@ public sealed class GetStock(IStockQueries queries, IProductRepository products,
                 product?.Details?.Size,
                 group.Count(),
                 latest.CheckedInAt,
-                StatusOf(product)));
+                status,
+                section,
+                soonest,
+                days,
+                product?.ShelfLife?.Days));
         }
 
-        var sorted = rows
-            .Where(r => r.Status == StockProductStatus.Known)
-            .OrderBy(r => r.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.DisplayName, StringComparer.Ordinal)
-            .Concat(rows.Where(r => r.Status != StockProductStatus.Known).OrderByDescending(r => r.LatestCheckedInAt))
+        var sorted = BySoonest(rows.Where(r => r.Section == StockSection.UseFirst))
+            .Concat(BySoonest(rows.Where(r => r.Section == StockSection.Later)))
+            .Concat(rows.Where(r => r.Section == StockSection.WaitingForName).OrderByDescending(r => r.LatestCheckedInAt))
             .ToList();
-        return new StockView(clock.GetUtcNow(), units.Count, sorted);
+        return new StockView(now, units.Count, sorted, sorted.Count(r => r.Section == StockSection.UseFirst));
     }
+
+    private static IEnumerable<StockProduct> BySoonest(IEnumerable<StockProduct> rows) =>
+        rows.OrderBy(r => r.SoonestEstimatedExpiryDate is null)
+            .ThenBy(r => r.SoonestEstimatedExpiryDate)
+            .ThenBy(r => r.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.DisplayName, StringComparer.Ordinal);
 
     private static StockProductStatus StatusOf(Product? product) => product?.Status switch
     {

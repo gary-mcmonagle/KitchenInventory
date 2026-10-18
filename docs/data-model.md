@@ -35,6 +35,7 @@ All decisions in this document are agreed with Gary. They're listed under [Decis
 | API Function: change-feed processor | read (change feed) | read / create / update (lookup retry) | read / create / update | – | create |
 | API Function: HTTP (BFF) | read | read / create (loose items) / update (name a product) | read / create (loose items) / update (check out, undo) | read | read / update (dismiss) |
 | API Function: lookup-retry timer | – | read / update | – | – | – |
+| API Function: shelf-life timer (#52) | – | read / update (shelf life) | read / update (`estimatedExpiryDate`) | – | – |
 | API Function: offline-alert timer | – | – | – | read hubs / update (`offlineAlertSentAt`) | – |
 | API Function: daily-digest timer (also creates its `sentDigests` record) | – | read | read | – | – |
 
@@ -112,7 +113,12 @@ A product found on Open Food Facts:
 
   "namedAt": null,
   "namedBy": null,
-  "shelfLifeDays": null,
+  "shelfLifeDays": 365,
+  "shelfLifeSource": "jev",
+  "shelfLifeConfidence": 0.65,
+  "jevLowConfidence": false,
+  "storage": "cupboard",
+  "shelfLifeEstimatedAt": "2026-10-16T18:45:00.120Z",
   "icon": null
 }
 ```
@@ -155,7 +161,20 @@ A barcode that Open Food Facts couldn't be reached for (`lookupFailed`) looks li
 
 **Display name from Open Food Facts** (decided in [spike #28](spikes/28-open-food-facts.md)): `product_name_en`, else `product_name`, trimmed, otherwise **exactly as returned**. No title-casing, no language checks. A product with neither is a no-match.
 
-**Reserved, not used yet:** `shelfLifeDays` (Jev's shelf-life estimate) and `icon`. Later features add fields such as `shelfLifeSource`, `editedAt` and `editedBy`; they document them here when they land.
+**Shelf life** (#52, [spike #40](spikes/40-jev.md)): how long the product usually keeps after it's bought, unopened and stored the usual way. Estimated **once per product**, only for `known` products (unknown items get none); absent or `null` until then.
+
+| Field | Notes |
+|---|---|
+| `shelfLifeDays` | The estimate in days: one of Jev's ten worded levels (2, 4, 7, 14, 30, 90, 180, 365, 730, 1095). |
+| `shelfLifeSource` | `jev`. (A manual shelf life comes with item detail, #53, and is never overwritten.) |
+| `shelfLifeConfidence` | Jev's confidence in the score, 0–1. |
+| `jevLowConfidence` | `true` when that confidence was below **0.5**, so the cautious **25th-percentile** level was used instead of the median. |
+| `storage` | The **usual storage** Jev chose: `cupboard`, `fridge` or `freezer`. The estimate is for that storage. Not shown in the UI yet. |
+| `shelfLifeEstimatedAt` | When it was estimated. |
+
+Written only by the **shelf-life timer**, with an ETag-guarded replace that applies only while the product is still `known` with no shelf life.
+
+**Reserved, not used yet:** `icon`. Later features add fields such as `editedAt` and `editedBy`; they document them here when they land.
 
 ### Barcode lookup document
 
@@ -212,6 +231,15 @@ Each retry ends in `known` (found), `noMatch` (not found; final) or `lookupFaile
 
 ---
 
+### Shelf life and estimated expiry dates (#52)
+
+**The shelf-life timer**, every **5 minutes** (API app, `estimateShelfLives`):
+
+1. Query `known` products with no `shelfLifeDays` (cross-partition), at most **20 per run**, and ask Jev for each: a `score` over the ten worded durations plus a `choice` of usual storage, in one request ([spike #40](spikes/40-jev.md)). Store the shelf-life fields above.
+2. Query in-stock units with no `estimatedExpiryDate` (cross-partition) and, for those whose product now has a shelf life, set it (ETag-guarded; a unit checked out meanwhile is skipped).
+
+This covers every way a product becomes known: Open Food Facts at check-in, the lookup-retry timer, and naming in the app. It also did the **one-off fill** of existing stock on the first runs after deploy. Check-in and naming never wait for Jev. **If Jev is unreachable** (429/529, 5xx or timeouts after 3 tries) the run logs a warning and stops; products stay unestimated and the next run tries again. A refused request (400/401/413/415/422) logs an error. With no key yet (`JEV_API_KEY` unresolved), it logs a warning and does nothing. Everything it writes is derived data, and a re-run changes nothing already done.
+
 ## Container: `inventoryItems`
 
 **Purpose:** one document per **unit** (physical item). Stock is the set of units with status `inStock`. Units are created on check-in and marked checked out, never deleted, so undo check-out and the digest's activity both work.
@@ -233,7 +261,7 @@ Each retry ends in `known` (found), `noMatch` (not found; final) or `lookupFaile
   "checkOutSource": null,
   "checkedOutBy": null,
 
-  "estimatedExpiryDate": null,
+  "estimatedExpiryDate": "2027-10-16",
   "expiryIsApproximate": null
 }
 ```
@@ -249,10 +277,11 @@ Each retry ends in `known` (found), `noMatch` (not found; final) or `lookupFaile
 | `checkedOutAt`, `checkOutScanId` | Set when checked out: the check-out scan's `scannedAt` and ID, or for a check-out in the app the time it happened and `checkOutScanId: null`. |
 | `checkOutSource` | `scanner` (check-out scans) or `ui` (check-out from the stock list, #50). |
 | `checkedOutBy` | For `ui` check-outs, the user's Entra object ID (`oid`); `null` for scanner check-outs. |
+| `estimatedExpiryDate` | `YYYY-MM-DD` (#52): the **bought date** (`checkedInAt` as a UK calendar date, Europe/London) plus the product's `shelfLifeDays`. Absent or `null` until the product has a shelf life. Set at check-in if the product already has one; otherwise filled in by the shelf-life timer. Never changed once set. |
 
 The unit doesn't copy the product's status or name: the product is always one point read away. (The earlier `productStatus` field is gone, because every unit now has a product, including `lookupFailed` ones.)
 
-**Reserved, not used yet:** `estimatedExpiryDate` and `expiryIsApproximate` (stock-take units), set by the expiry feature.
+**Reserved, not used yet:** `expiryIsApproximate` (stock-take units). Units from the stock-take get ordinary estimates like any other (decided with Gary: approximate is fine).
 
 **Undo check-out** (#50, `POST /api/units/{unitId}/undo-check-out`): set `status` back to `inStock` and clear `checkedOutAt`, `checkOutScanId`, `checkOutSource` and `checkedOutBy`, so the unit is exactly as before. ETag-guarded; undoing a unit already in stock changes nothing. Check-out from the app uses the same selection rule and ETag handling as a check-out scan, so the app and a scanner never take the same unit.
 
@@ -505,9 +534,8 @@ None of these are used yet. They are listed so the first features leave room for
 
 | Field | Container | For |
 |---|---|---|
-| `estimatedExpiryDate`, `expiryIsApproximate` | `inventoryItems` | Estimated expiry (Jev), stock-take |
+| `expiryIsApproximate` | `inventoryItems` | Stock-take |
 | `dismissed`, `dismissedAt` | `unmatchedCheckOuts` | Scanners screen, dismiss (written as `false` / `null` by check-out) |
-| `shelfLifeDays` | `products` | Shelf life estimate (Jev) |
 | `icon` | `products` | Stock list icon |
 | `namedAt`, `namedBy`; `source` values `manual`, `photo` | `products` | Name a product, photo identification, loose items |
 

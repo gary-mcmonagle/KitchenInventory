@@ -1,4 +1,4 @@
-/* The stock list, matching project/Main.dc.html for the parts in #49's scope. */
+/* The stock list, matching project/Main.dc.html for the parts in #49's and #52's scope. */
 .screen {
     flex: 1;
     display: flex;
@@ -152,6 +152,29 @@
     font-size: 13px;
     font-weight: 700;
     white-space: nowrap;
+}
+
+/* Estimated expiry badges (#52): expired red, 3 days or fewer amber, later green. */
+.expired {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}
+
+.soon {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.later {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.disclaimer {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
 }
 
 .note {

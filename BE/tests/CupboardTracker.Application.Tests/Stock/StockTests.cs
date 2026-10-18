@@ -23,7 +23,7 @@ public sealed class StockTests
     private ProductResolver Resolver() => new(products, lookup, clock, resolverLog);
 
     private ProcessScanEvent Processor() => new(
-        new CheckInScan(Resolver(), units, new ListLogger<CheckInScan>()),
+        new CheckInScan(Resolver(), units, TestSettings.Stock(), new ListLogger<CheckInScan>()),
         new CheckOutScan(products, units, unmatched, clock, new ListLogger<CheckOutScan>()),
         new ListLogger<ProcessScanEvent>());
 
@@ -49,6 +49,30 @@ public sealed class StockTests
         Assert.Equal(scan.ScanId, unit.UnitId);
         Assert.Equal(scan.ScannedAt, unit.CheckedInAt); // the bought date
         Assert.Equal("scanner-in", unit.CheckInDeviceId);
+    }
+
+    [Fact]
+    public async Task A_new_product_has_no_estimate_until_the_shelf_life_timer_runs()
+    {
+        lookup.Results.Enqueue(new ProductLookupResult.Found(BistoDetails));
+        await Process(TestScans.Make(Bisto, Role.In));
+
+        Assert.Null(Assert.Single(units.Units.Values).Unit.EstimatedExpiryDate);
+        Assert.True(products.Products[products.Lookups[Bisto]].NeedsShelfLife);
+    }
+
+    [Fact]
+    public async Task A_check_in_of_a_product_with_a_shelf_life_gets_its_estimated_expiry_date_at_once()
+    {
+        var id = Guid.NewGuid();
+        products.Lookups[Bisto] = id;
+        products.Products[id] = Product.Found(id, Bisto, BistoDetails, TestScans.At, 1)
+            .WithShelfLife(new ShelfLife(365, Storage.Cupboard, 0.65, false, "jev", TestScans.At));
+        // 23:30 UTC on 24 Oct is 00:30 BST on 25 Oct: bought on the 25th.
+        await Process(TestScans.Make(Bisto, Role.In, at: new DateTimeOffset(2026, 10, 24, 23, 30, 0, TimeSpan.Zero)));
+
+        Assert.Equal(new DateOnly(2027, 10, 25), Assert.Single(units.Units.Values).Unit.EstimatedExpiryDate);
+        Assert.Empty(lookup.Calls);
     }
 
     [Fact]

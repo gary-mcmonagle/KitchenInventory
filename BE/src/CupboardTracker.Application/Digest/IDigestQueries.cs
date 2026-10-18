@@ -1,7 +1,7 @@
 namespace CupboardTracker.Application.Digest;
 
 /// <summary>A unit as the digest needs it: which product, and the barcode it was scanned with (if any).</summary>
-public sealed record DigestUnit(Guid ProductId, string? Barcode);
+public sealed record DigestUnit(Guid ProductId, string? Barcode, DateOnly? EstimatedExpiryDate = null);
 
 /// <summary>The digest's reads (cross-partition over inventoryItems; tiny at household volume).</summary>
 public interface IDigestQueries

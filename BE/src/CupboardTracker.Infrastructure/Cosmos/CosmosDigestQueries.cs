@@ -9,7 +9,7 @@ namespace CupboardTracker.Infrastructure.Cosmos;
 public sealed class CosmosDigestQueries(CosmosContainers containers) : IDigestQueries
 {
     public Task<IReadOnlyList<DigestUnit>> GetInStockAsync(CancellationToken cancellationToken) =>
-        QueryAsync(new QueryDefinition("SELECT c.productId, c.barcode FROM c WHERE c.status = 'inStock'"), cancellationToken);
+        QueryAsync(new QueryDefinition("SELECT c.productId, c.barcode, c.estimatedExpiryDate FROM c WHERE c.status = 'inStock'"), cancellationToken);
 
     public Task<IReadOnlyList<DigestUnit>> GetCheckedInAsync(DigestWindow window, CancellationToken cancellationToken) =>
         QueryAsync(InWindow("SELECT c.productId, c.barcode FROM c WHERE c.checkedInAt >= @start AND c.checkedInAt < @end", window),
@@ -32,5 +32,6 @@ public sealed class CosmosDigestQueries(CosmosContainers containers) : IDigestQu
     }
 
     internal static DigestUnit ToUnit(JsonObject row) =>
-        new(Guid.Parse(CosmosJson.Text(row["productId"])!), CosmosJson.Text(row["barcode"]));
+        new(Guid.Parse(CosmosJson.Text(row["productId"])!), CosmosJson.Text(row["barcode"]),
+            CosmosJson.ParseDate(row["estimatedExpiryDate"]));
 }
