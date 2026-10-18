@@ -70,6 +70,9 @@ internal sealed class FakeProducts : IProductRepository
     public Task<Product?> GetAsync(Guid productId, CancellationToken cancellationToken) =>
         Task.FromResult(Products.GetValueOrDefault(productId));
 
+    public Task<IReadOnlyList<Product>> ListKnownAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.Status == ProductStatus.Known).ToList());
+
     public Task<Product> CreateIfNotExistsAsync(Product product, CancellationToken cancellationToken)
     {
         BeforeWrite?.Invoke();
@@ -230,6 +233,35 @@ internal sealed class FakeUnmatched : IUnmatchedCheckOutRepository
 
         return Task.CompletedTask;
     }
+}
+
+/// <summary>Store-label check-ins (#58), with integer versions for ETag checks.</summary>
+internal sealed class FakeStoreLabels : CupboardTracker.Application.Adding.IStoreLabelRepository
+{
+    public Dictionary<Guid, (StoreLabelCheckIn CheckIn, int Version)> Records { get; } = [];
+
+    public Task<bool> CreateIfNotExistsAsync(StoreLabelCheckIn checkIn, CancellationToken cancellationToken) =>
+        Task.FromResult(Records.TryAdd(checkIn.ScanId, (checkIn, 0)));
+
+    public Task<Versioned<StoreLabelCheckIn>?> GetAsync(Guid scanId, CancellationToken cancellationToken) =>
+        Task.FromResult(Records.TryGetValue(scanId, out var r)
+            ? new Versioned<StoreLabelCheckIn>(r.CheckIn, r.Version.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            : null);
+
+    public Task<bool> TryReplaceAsync(Versioned<StoreLabelCheckIn> current, StoreLabelCheckIn updated, CancellationToken cancellationToken)
+    {
+        if (!Records.TryGetValue(updated.ScanId, out var r)
+            || r.Version.ToString(System.Globalization.CultureInfo.InvariantCulture) != current.ETag)
+        {
+            return Task.FromResult(false);
+        }
+
+        Records[updated.ScanId] = (updated, r.Version + 1);
+        return Task.FromResult(true);
+    }
+
+    public Task<IReadOnlyList<StoreLabelCheckIn>> ListUnresolvedAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<StoreLabelCheckIn>>(Records.Values.Select(r => r.CheckIn).Where(c => !c.IsResolved).ToList());
 }
 
 /// <summary>Records what the scan feed would send; can be told to fail (#54).</summary>

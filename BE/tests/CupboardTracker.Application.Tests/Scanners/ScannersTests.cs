@@ -1,3 +1,4 @@
+using CupboardTracker.Application.Adding;
 using CupboardTracker.Application.Hubs;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Scanners;
@@ -36,6 +37,7 @@ public sealed class ScannersTests
     private readonly FakeProducts products = new();
     private readonly FakeUnits units = new();
     private readonly FakeUnmatched unmatched = new();
+    private readonly FakeStoreLabels storeLabels = new();
     private readonly FixedClock clock = new(Now);
     private readonly FakeScannersQueries queries;
     private readonly FakeScanFeedQueries feedQueries;
@@ -46,7 +48,7 @@ public sealed class ScannersTests
         feedQueries = new FakeScanFeedQueries(products, units, unmatched);
     }
 
-    private GetScanners UseCase() => new(hubs, queries, feedQueries, units, products,
+    private GetScanners UseCase() => new(hubs, queries, feedQueries, units, products, storeLabels,
         new OfflineAlertSettings(TimeSpan.FromMinutes(20), TestSettings.London),
         new ScannersSettings(TimeSpan.FromSeconds(120)), clock);
 
@@ -157,7 +159,7 @@ public sealed class ScannersTests
         var list = (await UseCase().ExecuteAsync(CancellationToken.None)).NoMatchCheckIns;
 
         Assert.Equal([newer, older], list.Select(n => n.ProductId));
-        Assert.Equal(("5010012345681", ProductStatus.LookupFailed, Now.AddHours(-1), 2), (list[0].Barcode, list[0].Status, list[0].ScannedAt, list[0].InStockCount));
+        Assert.Equal(("5010012345681", NoMatchKind.LookupFailed, Now.AddHours(-1), 2), (list[0].Barcode, list[0].Kind, list[0].ScannedAt, list[0].InStockCount));
     }
 
     [Fact]
@@ -179,6 +181,23 @@ public sealed class ScannersTests
         Assert.Equal((recentId, "Beef Gravy"), (list[0].ScanId, list[0].DisplayName));
         Assert.Equal((unknownId, (string?)null), (list[1].ScanId, list[1].DisplayName)); // shown as "Unknown item <barcode>"
         Assert.DoesNotContain(list, u => u.ScanId == dismissedId);
+    }
+
+    [Fact]
+    public async Task Store_labels_unresolved_check_ins_are_listed_even_if_dismissed_from_the_feed_and_check_outs_are_flagged()
+    {
+        var waiting = Guid.NewGuid();
+        storeLabels.Records[waiting] = (new StoreLabelCheckIn(waiting, "2012345678903", "scanner-in", Now.AddHours(-1), Now, FeedDismissedAt: Now), 0);
+        var done = Guid.NewGuid();
+        storeLabels.Records[done] = (new StoreLabelCheckIn(done, "2012345678910", "scanner-in", Now, Now).Resolved(Guid.NewGuid(), Gary.ObjectId, Now), 0);
+        var checkOut = Guid.NewGuid();
+        unmatched.Records[checkOut] = new(checkOut, "2012345678903", null, "scanner-out", Now, Now);
+
+        var view = await UseCase().ExecuteAsync(CancellationToken.None);
+
+        var label = Assert.Single(view.NoMatchCheckIns);
+        Assert.Equal((NoMatchKind.StoreLabel, waiting, "2012345678903", (Guid?)null), (label.Kind, label.ScanId, label.Barcode, label.ProductId));
+        Assert.True(Assert.Single(view.UnmatchedCheckOuts).StoreLabel);
     }
 
     [Fact]

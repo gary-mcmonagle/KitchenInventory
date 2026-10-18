@@ -47,6 +47,15 @@ public static class ScanFeedWire
                 payload["barcode"] = u.Barcode;
                 payload["productId"] = u.ProductId?.ToString("D");
                 payload["displayName"] = u.DisplayName;
+                payload["storeLabel"] = StoreLabels.IsStoreLabel(u.Barcode);
+                break;
+            case StoreLabelScanned l:
+                payload["barcode"] = l.Barcode;
+                break;
+            case StoreLabelResolved r:
+                payload["scanId"] = r.ScanId.ToString("D");
+                payload["productId"] = r.ProductId.ToString("D");
+                payload["displayName"] = r.DisplayName;
                 break;
             case ScanSkipped s:
                 payload["barcode"] = s.Barcode;
@@ -57,7 +66,12 @@ public static class ScanFeedWire
                 payload["displayName"] = p.DisplayName;
                 break;
             case FeedDismissed d:
-                payload["productId"] = d.ProductId.ToString("D");
+                payload["productId"] = d.ProductId?.ToString("D");
+                if (d.ScanId is { } scanId)
+                {
+                    payload["scanId"] = scanId.ToString("D");
+                }
+
                 break;
         }
 

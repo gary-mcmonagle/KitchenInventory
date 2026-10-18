@@ -25,6 +25,9 @@ public interface IProductRepository
     /// (ETag). False if it was named or looked up meanwhile.</summary>
     Task<bool> TryReplaceUnnamedAsync(Product updated, CancellationToken cancellationToken);
 
+    /// <summary>Every known product (cross-partition; a few hundred at most): matching names and the quick pick (#58).</summary>
+    Task<IReadOnlyList<Product>> ListKnownAsync(CancellationToken cancellationToken);
+
     /// <summary>A product and its version (ETag), for edits in item detail (#53).</summary>
     Task<Versioned<Product>?> GetVersionedAsync(Guid productId, CancellationToken cancellationToken);
 

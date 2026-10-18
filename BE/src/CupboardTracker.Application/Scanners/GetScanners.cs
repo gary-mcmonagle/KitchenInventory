@@ -1,3 +1,4 @@
+using CupboardTracker.Application.Adding;
 using CupboardTracker.Application.Hubs;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.ScanFeed;
@@ -33,9 +34,22 @@ public sealed record ScannerHubView(string HubId, DateTimeOffset LastSeenAt, Tim
 public sealed record ScannerDeviceView(
     string DeviceId, Role Role, bool? Present, DateTimeOffset? PresentSince, DateTimeOffset? AbsentSince, DateTimeOffset? LastScanAt);
 
-public sealed record NoMatchCheckInView(Guid ProductId, string Barcode, ProductStatus Status, DateTimeOffset ScannedAt, Guid UnitId, int InStockCount);
+public enum NoMatchKind
+{
+    NoMatch,
+    LookupFailed,
 
-public sealed record UnmatchedCheckOutView(Guid ScanId, string Barcode, Guid? ProductId, string? DisplayName, DateTimeOffset ScannedAt);
+    /// <summary>An in-store printed label waiting for "what is it?" (#58): no product yet.</summary>
+    StoreLabel,
+}
+
+/// <summary>A check-in to identify: an unnamed product (with its newest in-stock unit) or a store-label check-in.</summary>
+public sealed record NoMatchCheckInView(
+    Guid? ProductId, string Barcode, NoMatchKind Kind, DateTimeOffset ScannedAt, Guid? UnitId, int InStockCount, Guid? ScanId = null);
+
+/// <summary><see cref="StoreLabel"/>: its barcode is an in-store label, which can never match a unit (#58).</summary>
+public sealed record UnmatchedCheckOutView(
+    Guid ScanId, string Barcode, Guid? ProductId, string? DisplayName, DateTimeOffset ScannedAt, bool StoreLabel = false);
 
 public sealed record RecentCheckOutView(Guid UnitId, Guid ProductId, string DisplayName, DateTimeOffset CheckedOutAt, string? Source);
 
@@ -64,6 +78,7 @@ public sealed class GetScanners(
     IScanFeedQueries feedQueries,
     IUnitRepository units,
     IProductRepository products,
+    IStoreLabelRepository storeLabels,
     OfflineAlertSettings offline,
     ScannersSettings settings,
     TimeProvider clock)
@@ -103,8 +118,16 @@ public sealed class GetScanners(
             if (inStock.MaxBy(u => u.CheckedInAt) is { } newest)
             {
                 noMatch.Add(new NoMatchCheckInView(product.ProductId,
-                    newest.Barcode ?? (product.Barcodes is [var b, ..] ? b : ""), product.Status, newest.CheckedInAt, newest.UnitId, inStock.Count));
+                    newest.Barcode ?? (product.Barcodes is [var b, ..] ? b : ""),
+                    product.Status == ProductStatus.NoMatch ? NoMatchKind.NoMatch : NoMatchKind.LookupFailed,
+                    newest.CheckedInAt, newest.UnitId, inStock.Count));
             }
+        }
+
+        // #58: store-label check-ins still waiting for "what is it?" (feed dismissals don't hide them here).
+        foreach (var label in await storeLabels.ListUnresolvedAsync(cancellationToken))
+        {
+            noMatch.Add(new NoMatchCheckInView(null, label.Barcode, NoMatchKind.StoreLabel, label.ScannedAt, null, 1, label.ScanId));
         }
 
         var unmatched = new List<UnmatchedCheckOutView>();
@@ -112,7 +135,7 @@ public sealed class GetScanners(
         {
             var product = u.ProductId is { } id ? await ProductAsync(id) : null;
             unmatched.Add(new UnmatchedCheckOutView(u.ScanId, u.Barcode, u.ProductId,
-                product is { IsUnnamed: false } ? product.DisplayName : null, u.ScannedAt));
+                product is { IsUnnamed: false } ? product.DisplayName : null, u.ScannedAt, StoreLabels.IsStoreLabel(u.Barcode)));
         }
 
         var recent = new List<RecentCheckOutView>();

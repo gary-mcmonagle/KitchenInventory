@@ -41,7 +41,7 @@ public sealed class ScanFeedWireTests
     public void Check_out_unmatched_skipped_named_and_dismissed()
     {
         Assert.Equal(
-            """{"scanId":"11111111-1111-1111-1111-111111111111","deviceId":"scanner-out","role":"out","occurredAt":"2026-10-18T07:30:00.000Z","barcode":"20055363","productId":null,"displayName":null}""",
+            """{"scanId":"11111111-1111-1111-1111-111111111111","deviceId":"scanner-out","role":"out","occurredAt":"2026-10-18T07:30:00.000Z","barcode":"20055363","productId":null,"displayName":null,"storeLabel":false}""",
             Json(new CheckOutUnmatched(Scan, "scanner-out", At, "20055363", null, null)));
         Assert.Equal(
             """{"scanId":"11111111-1111-1111-1111-111111111111","deviceId":"scanner-in","role":"in","occurredAt":"2026-10-18T07:30:00.000Z","barcode":"2012345678903","reason":"storeLabel"}""",
@@ -50,12 +50,30 @@ public sealed class ScanFeedWireTests
             Json(new ProductNamed(Product, "Mustard", At)));
         Assert.Equal("""{"occurredAt":"2026-10-18T07:30:00.000Z","productId":"22222222-2222-2222-2222-222222222222"}""",
             Json(new FeedDismissed(Product, At)));
+        Assert.Equal(
+            """{"scanId":"11111111-1111-1111-1111-111111111111","deviceId":"scanner-out","role":"out","occurredAt":"2026-10-18T07:30:00.000Z","barcode":"2012345678903","productId":null,"displayName":null,"storeLabel":true}""",
+            Json(new CheckOutUnmatched(Scan, "scanner-out", At, "2012345678903", null, null)));
+        Assert.Equal("""{"occurredAt":"2026-10-18T07:30:00.000Z","productId":null,"scanId":"11111111-1111-1111-1111-111111111111"}""",
+            Json(new FeedDismissed(null, At, Scan)));
         Assert.Equal(["checkOutUnmatched", "scanSkipped", "productNamed", "feedDismissed", "scanReceived"],
             new ScanFeedEvent[]
             {
                 new CheckOutUnmatched(Scan, "d", At, "1", null, null), new ScanSkipped(Scan, "d", Role.In, At, "1", "x"),
                 new ProductNamed(Product, "x", At), new FeedDismissed(Product, At), new ScanReceived(Scan, "d", Role.In, At, "1", At),
             }.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void Store_label_scanned_and_resolved()
+    {
+        Assert.Equal(
+            """{"scanId":"11111111-1111-1111-1111-111111111111","deviceId":"scanner-in","role":"in","occurredAt":"2026-10-18T07:30:00.000Z","barcode":"2012345678903"}""",
+            Json(new StoreLabelScanned(Scan, "scanner-in", At, "2012345678903")));
+        Assert.Equal(
+            """{"occurredAt":"2026-10-18T07:30:00.000Z","scanId":"11111111-1111-1111-1111-111111111111","productId":"22222222-2222-2222-2222-222222222222","displayName":"Olives"}""",
+            Json(new StoreLabelResolved(Scan, Product, "Olives", At)));
+        Assert.Equal(["storeLabelCheckIn", "storeLabelResolved"],
+            new ScanFeedEvent[] { new StoreLabelScanned(Scan, "d", At, "1"), new StoreLabelResolved(Scan, Product, "x", At) }.Select(e => e.Name));
     }
 
     [Fact]

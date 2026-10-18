@@ -110,6 +110,14 @@ public sealed class CosmosProductRepository(CosmosContainers containers, TimePro
         return true;
     }
 
+    public async Task<IReadOnlyList<Product>> ListKnownAsync(CancellationToken cancellationToken)
+    {
+        var rows = await CosmosJson.QueryAsync(Products,
+            new QueryDefinition("SELECT * FROM c WHERE c.type = 'product' AND c.status = 'known'"),
+            partitionKey: null, max: null, cancellationToken);
+        return rows.Select(ProductDocument.ToProduct).ToList();
+    }
+
     public async Task<Versioned<Product>?> GetVersionedAsync(Guid productId, CancellationToken cancellationToken) =>
         (await ReadAsync(productId, cancellationToken)) is { } document
             ? new Versioned<Product>(ProductDocument.ToProduct(document), CosmosJson.Text(document["_etag"])!)
@@ -211,6 +219,11 @@ internal static class ProductDocument
             document["namedBy"] = product.NamedBy?.ToString("D");
         }
 
+        if (product.LastAddedAt is { } lastAdded)
+        {
+            document["lastAddedAt"] = CosmosJson.Timestamp(lastAdded);
+        }
+
         if (product.FeedDismissedAt is { } dismissedAt)
         {
             document["feedDismissedAt"] = CosmosJson.Timestamp(dismissedAt);
@@ -268,7 +281,8 @@ internal static class ProductDocument
             ReadShelfLife(document),
             CosmosJson.ParseTimestamp(document["editedAt"]),
             Guid.TryParse(CosmosJson.Text(document["editedBy"]), out var editedBy) ? editedBy : null,
-            CosmosJson.ParseTimestamp(document["feedDismissedAt"]));
+            CosmosJson.ParseTimestamp(document["feedDismissedAt"]),
+            CosmosJson.ParseTimestamp(document["lastAddedAt"]));
     }
 
     private static ShelfLife? ReadShelfLife(JsonObject document)

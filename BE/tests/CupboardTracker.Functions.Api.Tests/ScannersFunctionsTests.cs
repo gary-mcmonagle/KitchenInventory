@@ -25,16 +25,18 @@ public sealed class ScannersFunctionsTests
         var view = new ScannersView(At,
             new ScannerHubView("cupboard-pi", At.AddMinutes(-2), TimeSpan.FromSeconds(120), TimeSpan.FromMinutes(20), true),
             [new ScannerDeviceView("scanner-out", Role.Out, false, null, At.AddMinutes(-30), null)],
-            [new NoMatchCheckInView(Id, "5010012345674", ProductStatus.NoMatch, At, Id, 1)],
-            [new UnmatchedCheckOutView(Id, "20055363", null, null, At)],
+            [new NoMatchCheckInView(Id, "5010012345674", NoMatchKind.NoMatch, At, Id, 1),
+                new NoMatchCheckInView(null, "2012345678906", NoMatchKind.StoreLabel, At, null, 0, Id)],
+            [new UnmatchedCheckOutView(Id, "20055363", null, null, At, StoreLabel: true)],
             [new RecentCheckOutView(Id, Id, "Beef Gravy", At, "scanner")]);
 
         var expected = """
             {"generatedAt":"2026-10-18T08:00:00.000Z",
             "hub":{"hubId":"cupboard-pi","lastSeenAt":"2026-10-18T07:58:00.000Z","heartbeatIntervalSeconds":120,"offlineThresholdMinutes":20,"online":true},
             "devices":[{"deviceId":"scanner-out","role":"out","present":false,"presentSince":null,"absentSince":"2026-10-18T07:30:00.000Z","lastScanAt":null}],
-            "noMatchCheckIns":[{"productId":"11111111-1111-1111-1111-111111111111","barcode":"5010012345674","status":"noMatch","scannedAt":"2026-10-18T08:00:00.000Z","unitId":"11111111-1111-1111-1111-111111111111","inStockCount":1}],
-            "unmatchedCheckOuts":[{"scanId":"11111111-1111-1111-1111-111111111111","barcode":"20055363","productId":null,"displayName":null,"scannedAt":"2026-10-18T08:00:00.000Z"}],
+            "noMatchCheckIns":[{"productId":"11111111-1111-1111-1111-111111111111","barcode":"5010012345674","status":"noMatch","scannedAt":"2026-10-18T08:00:00.000Z","unitId":"11111111-1111-1111-1111-111111111111","inStockCount":1,"scanId":null},
+            {"productId":null,"barcode":"2012345678906","status":"storeLabel","scannedAt":"2026-10-18T08:00:00.000Z","unitId":null,"inStockCount":0,"scanId":"11111111-1111-1111-1111-111111111111"}],
+            "unmatchedCheckOuts":[{"scanId":"11111111-1111-1111-1111-111111111111","barcode":"20055363","productId":null,"displayName":null,"scannedAt":"2026-10-18T08:00:00.000Z","storeLabel":true}],
             "recentlyCheckedOut":[{"unitId":"11111111-1111-1111-1111-111111111111","productId":"11111111-1111-1111-1111-111111111111","displayName":"Beef Gravy","checkedOutAt":"2026-10-18T08:00:00.000Z","source":"scanner"}]}
             """.ReplaceLineEndings("");
 

@@ -1,3 +1,4 @@
+using CupboardTracker.Application.Adding;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Stock;
 using CupboardTracker.Domain;
@@ -35,7 +36,8 @@ public sealed record ScanFeedView(DateTimeOffset GeneratedAt, IReadOnlyList<Scan
 /// </list>
 /// </summary>
 public sealed class GetScanFeed(
-    IScanFeedQueries queries, IProductRepository products, IUnitRepository units, TimeProvider clock)
+    IScanFeedQueries queries, IProductRepository products, IUnitRepository units, IStoreLabelRepository storeLabels,
+    TimeProvider clock)
 {
     public static readonly TimeSpan DefaultWindow = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan MaxWindow = TimeSpan.FromHours(24);
@@ -52,13 +54,16 @@ public sealed class GetScanFeed(
 
         var events = new Dictionary<Guid, ScanFeedEvent>();
         var unnamed = (await queries.GetUnnamedProductsAsync(cancellationToken)).ToDictionary(p => p.ProductId);
-        await AddRecentAsync(from, events, unnamed, cancellationToken);
+        var labels = (await storeLabels.ListUnresolvedAsync(cancellationToken)).ToDictionary(l => l.ScanId);
+        await AddRecentAsync(from, events, unnamed, labels, cancellationToken);
         await AddWaitingForNameAsync(events, unnamed, cancellationToken);
+        AddStoreLabels(events, labels);
         return new ScanFeedView(now, [.. events.Values.OrderBy(e => e.OccurredAt)]);
     }
 
     private async Task AddRecentAsync(
-        DateTimeOffset from, Dictionary<Guid, ScanFeedEvent> events, Dictionary<Guid, Product> unnamed, CancellationToken cancellationToken)
+        DateTimeOffset from, Dictionary<Guid, ScanFeedEvent> events, Dictionary<Guid, Product> unnamed,
+        Dictionary<Guid, StoreLabelCheckIn> unresolvedLabels, CancellationToken cancellationToken)
     {
         var scans = await queries.GetScansSinceAsync(from, MaxScans, cancellationToken);
         if (scans.Count == 0)
@@ -92,11 +97,21 @@ public sealed class GetScanFeed(
         {
             var at = scan.ReceivedAt;
             ScanFeedEvent? outcome = null;
-            if (StoreLabels.IsStoreLabel(scan.Barcode))
+            if (scan.Role == Role.In && StoreLabels.IsStoreLabel(scan.Barcode) && !checkedIn.ContainsKey(scan.ScanId))
             {
-                outcome = new ScanSkipped(scan.ScanId, scan.DeviceId, scan.Role, at, scan.Barcode.Value, ScanSkipped.StoreLabel);
+                // #58: waiting for "what is it?" (added below with the other unresolved ones), or dismissed.
+                if (unresolvedLabels.ContainsKey(scan.ScanId) || !await IsRecordedAsync(scan.ScanId, cancellationToken))
+                {
+                    if (!unresolvedLabels.ContainsKey(scan.ScanId))
+                    {
+                        events[scan.ScanId] = new ScanReceived(scan.ScanId, scan.DeviceId, scan.Role, at, scan.Barcode.Value, scan.ScannedAt);
+                    }
+                }
+
+                continue;
             }
-            else if (scan.Role == Role.In && checkedIn.TryGetValue(scan.ScanId, out var unit))
+
+            if (scan.Role == Role.In && checkedIn.TryGetValue(scan.ScanId, out var unit))
             {
                 var product = await ProductAsync(unit.ProductId);
                 if (product is { IsUnnamed: true })
@@ -132,6 +147,18 @@ public sealed class GetScanFeed(
 
             // Not processed yet: still "Reading…".
             events[scan.ScanId] = outcome ?? new ScanReceived(scan.ScanId, scan.DeviceId, scan.Role, at, scan.Barcode.Value, scan.ScannedAt);
+        }
+    }
+
+    private async Task<bool> IsRecordedAsync(Guid scanId, CancellationToken cancellationToken) =>
+        await storeLabels.GetAsync(scanId, cancellationToken) is not null;
+
+    /// <summary>Every unresolved store-label check-in not dismissed from the feed (#58): "Store label: what is it?".</summary>
+    private static void AddStoreLabels(Dictionary<Guid, ScanFeedEvent> events, Dictionary<Guid, StoreLabelCheckIn> labels)
+    {
+        foreach (var label in labels.Values.Where(l => l.FeedDismissedAt is null))
+        {
+            events[label.ScanId] = new StoreLabelScanned(label.ScanId, label.DeviceId, label.ScannedAt, label.Barcode);
         }
     }
 

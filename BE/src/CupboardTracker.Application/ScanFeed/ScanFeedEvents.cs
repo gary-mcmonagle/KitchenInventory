@@ -47,7 +47,8 @@ public sealed record ScanNeedsIdentification(
     public override string Name => "scanNeedsIdentification";
 }
 
-/// <summary>A check-out with nothing in stock to take (amber "Not in stock" toast).</summary>
+/// <summary>A check-out with nothing in stock to take (amber "Not in stock" toast). A store label's barcode never
+/// matches (#58): the app adds its note.</summary>
 public sealed record CheckOutUnmatched(
     Guid ScanId, string DeviceId, DateTimeOffset OccurredAt, string Barcode, Guid? ProductId, string? DisplayName)
     : ScanEventBase(ScanId, DeviceId, Role.Out, OccurredAt)
@@ -70,8 +71,23 @@ public sealed record ProductNamed(Guid ProductId, string DisplayName, DateTimeOf
     public override string Name => "productNamed";
 }
 
-/// <summary>Someone dismissed a product's amber toast: it goes on every open app (new in #54).</summary>
-public sealed record FeedDismissed(Guid ProductId, DateTimeOffset OccurredAt) : ScanFeedEvent(OccurredAt)
+/// <summary>Someone dismissed an amber toast: it goes on every open app (new in #54). A product's "No match"
+/// (<see cref="ProductId"/>), or a store label's "what is it?" (<see cref="ScanId"/>, #58).</summary>
+public sealed record FeedDismissed(Guid? ProductId, DateTimeOffset OccurredAt, Guid? ScanId = null) : ScanFeedEvent(OccurredAt)
 {
     public override string Name => "feedDismissed";
+}
+
+/// <summary>A store-label check-in (#58): amber "Store label: what is it?" with Pick.</summary>
+public sealed record StoreLabelScanned(Guid ScanId, string DeviceId, DateTimeOffset OccurredAt, string Barcode)
+    : ScanEventBase(ScanId, DeviceId, Role.In, OccurredAt)
+{
+    public override string Name => "storeLabelCheckIn";
+}
+
+/// <summary>A store-label check-in was assigned to a product (#58): its toast goes everywhere.</summary>
+public sealed record StoreLabelResolved(Guid ScanId, Guid ProductId, string DisplayName, DateTimeOffset OccurredAt)
+    : ScanFeedEvent(OccurredAt)
+{
+    public override string Name => "storeLabelResolved";
 }

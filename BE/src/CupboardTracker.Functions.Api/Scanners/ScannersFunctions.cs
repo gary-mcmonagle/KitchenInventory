@@ -3,7 +3,6 @@ using System.Net;
 using System.Text.Json;
 using CupboardTracker.Application.Scanners;
 using CupboardTracker.Domain;
-using CupboardTracker.Domain.Products;
 using CupboardTracker.Functions.Api.Auth;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -63,10 +62,16 @@ public sealed class ScannersFunctions(GetScanners getScanners, DismissUnmatchedC
         {
             productId = n.ProductId,
             barcode = n.Barcode,
-            status = n.Status == ProductStatus.NoMatch ? "noMatch" : "lookupFailed",
+            status = n.Kind switch
+            {
+                NoMatchKind.NoMatch => "noMatch",
+                NoMatchKind.LookupFailed => "lookupFailed",
+                _ => "storeLabel",
+            },
             scannedAt = Timestamp(n.ScannedAt),
             unitId = n.UnitId,
             inStockCount = n.InStockCount,
+            scanId = n.ScanId,
         }),
         unmatchedCheckOuts = view.UnmatchedCheckOuts.Select(u => new
         {
@@ -75,6 +80,7 @@ public sealed class ScannersFunctions(GetScanners getScanners, DismissUnmatchedC
             productId = u.ProductId,
             displayName = u.DisplayName,
             scannedAt = Timestamp(u.ScannedAt),
+            storeLabel = u.StoreLabel,
         }),
         recentlyCheckedOut = view.RecentlyCheckedOut.Select(r => new
         {

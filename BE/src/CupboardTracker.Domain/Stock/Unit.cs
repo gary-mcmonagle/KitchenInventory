@@ -30,8 +30,14 @@ public sealed record Unit(
     string? CheckOutSource,
     DateOnly? EstimatedExpiryDate,
     Guid? CheckedOutBy = null,
-    ExpirySource? ExpirySource = null)
+    ExpirySource? ExpirySource = null,
+    Guid? CheckedInBy = null)
 {
+    /// <summary>A unit added in the app (#58): no scan, so no scan or device; the user who added it instead.</summary>
+    public static Unit AddedInApp(Guid unitId, Guid productId, Guid userId, DateTimeOffset at, DateOnly? estimatedExpiry) =>
+        new(unitId, productId, null, UnitStatus.InStock, null, null, at, null, null, null, estimatedExpiry, null,
+            estimatedExpiry is null ? null : Stock.ExpirySource.ShelfLife, userId);
+
     /// <summary><see cref="CheckOutSource"/> for check-outs from the stock list (scanner check-outs use "scanner").</summary>
     public const string AppSource = "ui";
 

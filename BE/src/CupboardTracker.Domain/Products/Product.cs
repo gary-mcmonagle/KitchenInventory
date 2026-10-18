@@ -42,8 +42,25 @@ public sealed record Product(
     ShelfLife? ShelfLife = null,
     DateTimeOffset? EditedAt = null,
     Guid? EditedBy = null,
-    DateTimeOffset? FeedDismissedAt = null)
+    DateTimeOffset? FeedDismissedAt = null,
+    DateTimeOffset? LastAddedAt = null)
 {
+    /// <summary>A product with no barcode: fruit, veg, bakery, deli (#58). Added from the app, never scanned.</summary>
+    public bool IsLoose => Barcodes.Count == 0;
+
+    /// <summary>Its name as matched when adding from the app: lower case, single spaces, trimmed.</summary>
+    public string NameKey => NameKeyOf(DisplayName);
+
+    public static string NameKeyOf(string name) =>
+        string.Join(' ', name.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
+
+    /// <summary>A new loose product (#58): known at once, no barcode. <paramref name="source"/> is
+    /// <see cref="ProductSource.Photo"/> for a recognised item, else <see cref="ProductSource.Manual"/>.</summary>
+    public static Product Loose(
+        Guid productId, string name, string? brand, string? size, ProductSource source, Guid userId, DateTimeOffset at) =>
+        new(productId, ProductStatus.Known, source, [], name, new ProductDetails(name, brand, size, null, []),
+            null, 0, null, null, at, userId);
+
     /// <summary>Someone dismissed its amber "No match" toast (#54). Hides the toast only; a newer check-in shows it again.</summary>
     public Product DismissedFromFeed(DateTimeOffset at) => this with { FeedDismissedAt = at };
 

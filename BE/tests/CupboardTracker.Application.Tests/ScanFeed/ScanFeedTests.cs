@@ -1,3 +1,4 @@
+using CupboardTracker.Application.Adding;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Application.Stock;
@@ -39,6 +40,7 @@ public sealed class ScanFeedTests
     private readonly FakeProducts products = new();
     private readonly FakeUnits units = new();
     private readonly FakeUnmatched unmatched = new();
+    private readonly FakeStoreLabels storeLabels = new();
     private readonly FakeFeed feed = new();
     private readonly ListLogger<ScanFeedNotifier> feedLog = new();
     private readonly FakeScanFeedQueries queries;
@@ -49,7 +51,8 @@ public sealed class ScanFeedTests
         new CheckInScan(new ProductResolver(products, lookup, clock, new ListLogger<ProductResolver>()), units,
             TestSettings.Stock(), feed.Notifier(feedLog), clock, new ListLogger<CheckInScan>()),
         new CheckOutScan(products, units, unmatched, feed.Notifier(feedLog), clock, new ListLogger<CheckOutScan>()),
-        feed.Notifier(feedLog), clock, new ListLogger<ProcessScanEvent>());
+        new StoreLabelCheckInScan(storeLabels, feed.Notifier(feedLog), clock, new ListLogger<StoreLabelCheckInScan>()),
+        new ListLogger<ProcessScanEvent>());
 
     private async Task<ScanEvent> Scan(string barcode, Role role, DateTimeOffset? at = null)
     {
@@ -59,7 +62,7 @@ public sealed class ScanFeedTests
         return scan;
     }
 
-    private GetScanFeed Catchup() => new(queries, products, units, clock);
+    private GetScanFeed Catchup() => new(queries, products, units, storeLabels, clock);
 
     // ---- Events from processing
 
@@ -103,11 +106,41 @@ public sealed class ScanFeedTests
     }
 
     [Fact]
-    public async Task A_store_label_is_skipped()
+    public async Task A_store_label_check_in_asks_what_it_is_and_a_replay_asks_again_without_a_second_record()
     {
         var scan = await Scan("2012345678903", Role.In);
-        var sent = Assert.IsType<ScanSkipped>(Assert.Single(feed.Sent));
-        Assert.Equal((scan.ScanId, "storeLabel"), (sent.ScanId, sent.Reason));
+        await Processor().ExecuteAsync(scan, CancellationToken.None);
+
+        Assert.Equal(2, feed.Sent.Count);
+        Assert.All(feed.Sent, e => Assert.Equal((scan.ScanId, "2012345678903"), (((StoreLabelScanned)e).ScanId, ((StoreLabelScanned)e).Barcode)));
+        Assert.Single(storeLabels.Records);
+        Assert.Empty(units.Units);
+        Assert.Empty(products.Products);
+        Assert.Empty(lookup.Calls);
+    }
+
+    [Fact]
+    public async Task A_store_label_check_out_is_unmatched()
+    {
+        var scan = await Scan("2012345678903", Role.Out);
+
+        Assert.Equal(scan.ScanId, Assert.IsType<CheckOutUnmatched>(Assert.Single(feed.Sent)).ScanId);
+        Assert.True(unmatched.Records.ContainsKey(scan.ScanId));
+        Assert.Empty(lookup.Calls);
+    }
+
+    [Fact]
+    public async Task Store_label_toasts_survive_a_reload_until_assigned_or_dismissed()
+    {
+        var scan = await Scan("2012345678903", Role.In, clock.Now.AddHours(-3)); // outside the window
+        Assert.Equal(scan.ScanId, Assert.IsType<StoreLabelScanned>(Assert.Single((await Catchup().ExecuteAsync(null, CancellationToken.None)).Events)).ScanId);
+
+        await new DismissStoreLabelFromFeed(storeLabels, feed.Notifier(), clock, new ListLogger<DismissStoreLabelFromFeed>())
+            .ExecuteAsync(scan.ScanId, new CurrentUser(Guid.NewGuid(), "G"), CancellationToken.None);
+
+        Assert.Empty((await Catchup().ExecuteAsync(null, CancellationToken.None)).Events);
+        Assert.Equal(scan.ScanId, Assert.IsType<FeedDismissed>(feed.Sent[^1]).ScanId);
+        Assert.False(storeLabels.Records[scan.ScanId].CheckIn.IsResolved); // still on the scanners screen
     }
 
     [Fact]
@@ -200,7 +233,7 @@ public sealed class ScanFeedTests
         Assert.Equal(ScanOutcome.CheckedOut, Assert.IsType<ScanIdentified>(byScan[checkOut.ScanId]).Outcome);
         Assert.IsType<CheckOutUnmatched>(byScan[notInStock.ScanId]);
         Assert.IsType<ScanReceived>(byScan[reading.ScanId]);
-        Assert.IsType<ScanSkipped>(byScan[label.ScanId]);
+        Assert.IsType<StoreLabelScanned>(byScan[label.ScanId]);
     }
 
     [Fact]

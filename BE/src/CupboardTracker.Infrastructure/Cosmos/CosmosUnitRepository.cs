@@ -99,6 +99,10 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         document["checkOutScanId"] = unit.CheckOutScanId?.ToString("D");
         document["checkOutSource"] = unit.CheckOutSource;
         document["checkedOutBy"] = unit.CheckedOutBy?.ToString("D");
+        if (unit.CheckedInBy is { } addedBy)
+        {
+            document["checkedInBy"] = addedBy.ToString("D"); // added in the app (#58)
+        }
         if (unit.EstimatedExpiryDate is { } expiry)
         {
             document["estimatedExpiryDate"] = expiry.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -128,7 +132,8 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
             "shelfLife" => ExpirySource.ShelfLife,
             // Dates written before #53 have no source; they all came from the shelf life.
             _ => d["estimatedExpiryDate"] is not null ? ExpirySource.ShelfLife : null,
-        });
+        },
+        Guid.TryParse(CosmosJson.Text(d["checkedInBy"]), out var addedBy) ? addedBy : null);
 }
 
 /// <summary>Unmatched check-outs (id = scan ID), partitioned by /id (docs/data-model.md).</summary>

@@ -1,3 +1,4 @@
+using CupboardTracker.Application.Adding;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Stock;
 using CupboardTracker.Domain;
@@ -17,6 +18,7 @@ public sealed class StockTests
     private readonly FakeProducts products = new();
     private readonly FakeUnits units = new();
     private readonly FakeUnmatched unmatched = new();
+    private readonly FakeStoreLabels storeLabels = new();
     private readonly ListLogger<ProductResolver> resolverLog = new();
     private readonly ListLogger<RetryFailedLookups> retryLog = new();
 
@@ -27,7 +29,8 @@ public sealed class StockTests
     private ProcessScanEvent Processor() => new(
         new CheckInScan(Resolver(), units, TestSettings.Stock(), feed.Notifier(), clock, new ListLogger<CheckInScan>()),
         new CheckOutScan(products, units, unmatched, feed.Notifier(), clock, new ListLogger<CheckOutScan>()),
-        feed.Notifier(), clock, new ListLogger<ProcessScanEvent>());
+        new StoreLabelCheckInScan(storeLabels, feed.Notifier(), clock, new ListLogger<StoreLabelCheckInScan>()),
+        new ListLogger<ProcessScanEvent>());
 
     private Task Process(ScanEvent scan) => Processor().ExecuteAsync(scan, CancellationToken.None);
 

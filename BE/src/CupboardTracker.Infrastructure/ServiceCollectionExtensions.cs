@@ -1,5 +1,6 @@
 using Azure.Communication.Email;
 using Azure.Identity;
+using CupboardTracker.Application.Adding;
 using CupboardTracker.Application.Digest;
 using CupboardTracker.Application.Hubs;
 using CupboardTracker.Application.Notifications;
@@ -13,6 +14,7 @@ using CupboardTracker.Application.Stock;
 using CupboardTracker.Infrastructure.Cosmos;
 using CupboardTracker.Infrastructure.Email;
 using CupboardTracker.Infrastructure.Jev;
+using CupboardTracker.Infrastructure.Photos;
 using CupboardTracker.Infrastructure.SignalR;
 using CupboardTracker.Infrastructure.OpenFoodFacts;
 using Microsoft.Azure.Cosmos;
@@ -53,6 +55,19 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IScanFeedQueries, CosmosScanFeedQueries>();
         services.AddTransient<GetScanFeed>();
         services.AddTransient<DismissFeedItem>();
+
+        // Adding from the app (#58): photo recognition (gpt-4o on Foundry, managed identity), loose products, store labels.
+        services.AddSingleton(sp => PhotoRecognitionOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<Azure.Core.TokenCredential>(_ => new DefaultAzureCredential());
+        services.AddHttpClient<IProductPhotoRecogniser, FoundryPhotoRecogniser>();
+        services.AddSingleton<IStoreLabelRepository, CosmosStoreLabelRepository>();
+        services.AddTransient<ProductMatcher>();
+        services.AddTransient<RecogniseProductPhoto>();
+        services.AddTransient<AddToStock>();
+        services.AddTransient<GetLooseProducts>();
+        services.AddTransient<StoreLabelCheckInScan>();
+        services.AddTransient<AssignStoreLabel>();
+        services.AddTransient<DismissStoreLabelFromFeed>();
 
         services.AddSingleton<IScanEventRepository, CosmosScanEventRepository>();
         services.AddSingleton<IDeviceRepository, CosmosDeviceRepository>();

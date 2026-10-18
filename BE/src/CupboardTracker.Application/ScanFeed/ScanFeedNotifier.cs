@@ -26,7 +26,8 @@ public sealed partial class ScanFeedNotifier(IScanFeedPublisher publisher, ILogg
     {
         ScanEventBase s => $"scan {s.ScanId}",
         ProductNamed p => $"product {p.ProductId}",
-        FeedDismissed d => $"product {d.ProductId}",
+        FeedDismissed d => d.ProductId is { } p ? $"product {p}" : $"store label {d.ScanId}",
+        StoreLabelResolved r => $"store label {r.ScanId}",
         _ => "",
     };
 
