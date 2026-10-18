@@ -14,7 +14,26 @@ public enum ExpirySource
 
     /// <summary>Set by a person in item detail. Never recalculated.</summary>
     Manual,
+
+    /// <summary>The earlier of the open date plus the product's "once opened" shelf life and the estimate before (#65).</summary>
+    Opened,
+
+    /// <summary>The freeze date plus the product's freezer shelf life (#65).</summary>
+    Frozen,
+
+    /// <summary>The defrost date plus the product's "once defrosted" shelf life (#65).</summary>
+    Defrosted,
 }
+
+/// <summary>A unit's estimate fields as they were before a state change, so Undo puts them back exactly (#65).</summary>
+public sealed record UnitEstimateSnapshot(
+    DateOnly? EstimatedExpiryDate,
+    ExpirySource? ExpirySource,
+    DateOnly? OpenedOn,
+    DateOnly? FrozenOn,
+    DateOnly? DefrostedOn,
+    Products.Storage? CurrentStorage,
+    bool EstimatePending);
 
 /// <summary>One physical item in the house. Created on check-in (id = the check-in scan ID); checked out, never deleted.</summary>
 public sealed record Unit(
@@ -31,8 +50,38 @@ public sealed record Unit(
     DateOnly? EstimatedExpiryDate,
     Guid? CheckedOutBy = null,
     ExpirySource? ExpirySource = null,
-    Guid? CheckedInBy = null)
+    Guid? CheckedInBy = null,
+    DateOnly? OpenedOn = null,
+    DateOnly? FrozenOn = null,
+    DateOnly? DefrostedOn = null,
+    Products.Storage? CurrentStorage = null,
+    bool EstimatePending = false,
+    UnitEstimateSnapshot? BeforeStateChange = null)
 {
+    public bool IsOpened => OpenedOn is not null;
+
+    /// <summary>In the freezer now: frozen and not defrosted since.</summary>
+    public bool IsFrozen => FrozenOn is not null && DefrostedOn is null;
+
+    public UnitEstimateSnapshot Snapshot() =>
+        new(EstimatedExpiryDate, ExpirySource, OpenedOn, FrozenOn, DefrostedOn, CurrentStorage, EstimatePending);
+
+    /// <summary>Back to the estimate fields before the last state change (#65); one level only.</summary>
+    public Unit UndoStateChange() =>
+        BeforeStateChange is not { } before
+            ? this
+            : this with
+            {
+                EstimatedExpiryDate = before.EstimatedExpiryDate,
+                ExpirySource = before.ExpirySource,
+                OpenedOn = before.OpenedOn,
+                FrozenOn = before.FrozenOn,
+                DefrostedOn = before.DefrostedOn,
+                CurrentStorage = before.CurrentStorage,
+                EstimatePending = before.EstimatePending,
+                BeforeStateChange = null,
+            };
+
     /// <summary>A unit added in the app (#58): no scan, so no scan or device; the user who added it instead.</summary>
     public static Unit AddedInApp(Guid unitId, Guid productId, Guid userId, DateTimeOffset at, DateOnly? estimatedExpiry) =>
         new(unitId, productId, null, UnitStatus.InStock, null, null, at, null, null, null, estimatedExpiry, null,

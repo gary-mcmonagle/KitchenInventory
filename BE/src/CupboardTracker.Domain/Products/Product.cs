@@ -43,8 +43,24 @@ public sealed record Product(
     DateTimeOffset? EditedAt = null,
     Guid? EditedBy = null,
     DateTimeOffset? FeedDismissedAt = null,
-    DateTimeOffset? LastAddedAt = null)
+    DateTimeOffset? LastAddedAt = null,
+    ProductStateEstimates? StateEstimates = null)
 {
+    /// <summary>Has a shelf life but Jev hasn't answered the opened / frozen / defrosted questions yet (#65).</summary>
+    public bool NeedsStateEstimates => Status == ProductStatus.Known && ShelfLife is not null && StateEstimates?.EstimatedAt is null;
+
+    public ProductStateEstimates States => StateEstimates ?? ProductStateEstimates.None;
+
+    /// <summary>"Once opened" set by hand in item detail (#65): kept where Jev would keep it, else the usual storage.</summary>
+    public Product WithManualOpenedShelfLife(int days) =>
+        this with
+        {
+            StateEstimates = States with
+            {
+                Opened = StateShelfLife.Manual(days, States.Opened?.Storage ?? ShelfLife?.UsualStorage ?? Storage.Cupboard),
+            },
+        };
+
     /// <summary>A product with no barcode: fruit, veg, bakery, deli (#58). Added from the app, never scanned.</summary>
     public bool IsLoose => Barcodes.Count == 0;
 

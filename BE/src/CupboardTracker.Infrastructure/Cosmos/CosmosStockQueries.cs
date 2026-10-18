@@ -11,7 +11,7 @@ public sealed class CosmosStockQueries(CosmosContainers containers) : IStockQuer
     {
         var rows = await CosmosJson.QueryAsync(
             containers.InventoryItems,
-            new QueryDefinition("SELECT c.productId, c.barcode, c.checkedInAt, c.estimatedExpiryDate FROM c WHERE c.status = 'inStock'"),
+            new QueryDefinition("SELECT c.productId, c.barcode, c.checkedInAt, c.estimatedExpiryDate, c.openedOn, c.frozenOn, c.defrostedOn FROM c WHERE c.status = 'inStock'"),
             partitionKey: null, max: null, cancellationToken);
         return rows.Select(ToUnit).ToList();
     }
@@ -20,5 +20,7 @@ public sealed class CosmosStockQueries(CosmosContainers containers) : IStockQuer
         Guid.Parse(CosmosJson.Text(row["productId"])!),
         CosmosJson.Text(row["barcode"]),
         CosmosJson.ParseTimestamp(row["checkedInAt"]) ?? DateTimeOffset.MinValue,
-        CosmosJson.ParseDate(row["estimatedExpiryDate"]));
+        CosmosJson.ParseDate(row["estimatedExpiryDate"]),
+        row["openedOn"] is not null,
+        row["frozenOn"] is not null && row["defrostedOn"] is null);
 }

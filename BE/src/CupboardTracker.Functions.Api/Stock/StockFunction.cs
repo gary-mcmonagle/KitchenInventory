@@ -52,6 +52,8 @@ public sealed class StockFunction(GetStock getStock)
             soonestEstimatedExpiryDate = p.SoonestEstimatedExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             daysUntilSoonest = p.DaysUntilSoonest,
             shelfLifeDays = p.ShelfLifeDays,
+            openedCount = p.OpenedCount,
+            frozenCount = p.FrozenCount,
         }),
     };
 

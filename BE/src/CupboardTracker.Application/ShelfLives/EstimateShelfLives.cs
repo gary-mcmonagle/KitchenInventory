@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace CupboardTracker.Application.ShelfLives;
 
 /// <summary>What one run did.</summary>
-public sealed record ShelfLifeRun(int Estimated, int LowConfidence, int UnitsFilled, bool Stopped);
+public sealed record ShelfLifeRun(int Estimated, int LowConfidence, int UnitsFilled, bool Stopped, int StatesEstimated = 0, int PendingFilled = 0);
 
 /// <summary>
 /// The shelf-life timer (#52). Each run:
@@ -15,7 +15,11 @@ public sealed record ShelfLifeRun(int Estimated, int LowConfidence, int UnitsFil
 /// <item>estimates the shelf life of known products that don't have one yet, a few per run (new Open Food Facts
 /// products, products upgraded by the lookup-retry timer, items named in the app, and on the first runs after
 /// deploy, all existing stock);</item>
-/// <item>fills in the estimated expiry date of every in-stock unit whose product now has a shelf life.</item>
+/// <item>fills in the estimated expiry date of every in-stock unit whose product now has a shelf life;</item>
+/// <item>asks the opened / frozen / defrosted questions for products that have a shelf life but no state estimates
+/// (#65), a few per run: new products shortly after their shelf life, and on the first runs after deploy, all
+/// existing stock;</item>
+/// <item>fills in units opened, frozen or defrosted before their product had that estimate.</item>
 /// </list>
 /// Check-in and naming never wait for it. If the estimator is down, products stay unestimated and the next run tries
 /// again. Everything it writes is derived, and re-running changes nothing that's already done.
@@ -34,12 +38,87 @@ public sealed partial class EstimateShelfLives(
     {
         var (estimated, low, stopped) = await EstimateProductsAsync(cancellationToken);
         var filled = await FillExpiryDatesAsync(cancellationToken);
-        if (estimated > 0 || filled > 0 || stopped)
+        var (states, statesStopped) = stopped ? (0, true) : await EstimateStatesAsync(cancellationToken);
+        var pendingFilled = await FillPendingAsync(cancellationToken);
+        stopped |= statesStopped;
+        if (estimated > 0 || filled > 0 || states > 0 || pendingFilled > 0 || stopped)
         {
-            LogRun(estimated, low, filled, stopped);
+            LogRun(estimated, low, filled, states, pendingFilled, stopped);
         }
 
-        return new ShelfLifeRun(estimated, low, filled, stopped);
+        return new ShelfLifeRun(estimated, low, filled, stopped, states, pendingFilled);
+    }
+
+    private async Task<(int Estimated, bool Stopped)> EstimateStatesAsync(CancellationToken cancellationToken)
+    {
+        var pending = await products.GetNeedingStateEstimatesAsync(MaxPerRun, cancellationToken);
+        var estimated = 0;
+        foreach (var product in pending)
+        {
+            var result = await estimator.EstimateStatesAsync(Describe(product), product.ShelfLife!.UsualStorage, cancellationToken);
+            switch (result)
+            {
+                case StateEstimatesResult.Estimated { Estimates: var e }:
+                    if (await TrySetStatesAsync(product.ProductId, e, cancellationToken))
+                    {
+                        estimated++;
+                        LogStatesEstimated(product.ProductId, product.DisplayName, e.Opened.Days, e.Opened.Storage,
+                            e.Frozen.Days, e.Defrosted.Days, e.Defrosted.Storage);
+                    }
+
+                    break;
+                case StateEstimatesResult.NotConfigured:
+                    LogNotConfigured();
+                    return (estimated, true);
+                case StateEstimatesResult.Unavailable { Reason: var reason }:
+                    LogUnavailable(reason, pending.Count - estimated);
+                    return (estimated, true);
+                case StateEstimatesResult.Failed { Reason: var reason }:
+                    LogFailed(product.ProductId, reason);
+                    return (estimated, true);
+            }
+        }
+
+        return (estimated, false);
+    }
+
+    /// <summary>Stores Jev's state estimates, keeping a manual "once opened" (ETag-guarded; a conflict waits for the next run).</summary>
+    private async Task<bool> TrySetStatesAsync(Guid productId, StateEstimates e, CancellationToken cancellationToken)
+    {
+        if (await products.GetVersionedAsync(productId, cancellationToken) is not { Value.NeedsStateEstimates: true } current)
+        {
+            return false;
+        }
+
+        static StateShelfLife Jev(StateEstimate s) => new(s.Days, s.Storage, s.Confidence, s.LowConfidence, ShelfLife.JevSource);
+        var states = current.Value.States.FromJev(
+            Jev(e.Opened), Jev(e.Frozen with { Storage = Storage.Freezer }), Jev(e.Defrosted), clock.GetUtcNow());
+        return await products.TryReplaceAsync(current, current.Value with { StateEstimates = states }, cancellationToken);
+    }
+
+    /// <summary>Units opened, frozen or defrosted before their product had that estimate: worked out now if it has one.</summary>
+    private async Task<int> FillPendingAsync(CancellationToken cancellationToken)
+    {
+        var pending = await units.GetInStockEstimatePendingAsync(cancellationToken);
+        var filled = 0;
+        foreach (var group in pending.GroupBy(u => u.Value.ProductId))
+        {
+            if (await products.GetAsync(group.Key, cancellationToken) is not { } product)
+            {
+                continue;
+            }
+
+            foreach (var unit in group)
+            {
+                if (UnitStates.Estimate(unit.Value, product.States) is { } estimated
+                    && await units.TryReplaceAsync(unit, estimated, cancellationToken))
+                {
+                    filled++;
+                }
+            }
+        }
+
+        return filled;
     }
 
     private async Task<(int Estimated, int Low, bool Stopped)> EstimateProductsAsync(CancellationToken cancellationToken)
@@ -89,7 +168,8 @@ public sealed partial class EstimateShelfLives(
                 continue; // unknown, or not estimated yet
             }
 
-            foreach (var unit in group)
+            // A unit opened, frozen or defrosted waits for that estimate instead (#65).
+            foreach (var unit in group.Where(u => u.Value.ExpirySource is null or ExpirySource.ShelfLife && !u.Value.EstimatePending))
             {
                 var expiry = EstimatedExpiry.For(unit.Value.CheckedInAt, shelfLife.Days, settings.HomeTimeZone);
                 // A conflict means it was just checked out (or filled): either way, nothing more to do for it.
@@ -111,8 +191,12 @@ public sealed partial class EstimateShelfLives(
     private partial void LogEstimated(Guid productId, string displayName, int days, Storage storage, double confidence, bool lowConfidence);
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Shelf-life run: {Estimated} products estimated ({Low} low confidence), {Filled} units given an estimated expiry date, stopped early: {Stopped}.")]
-    private partial void LogRun(int estimated, int low, int filled, bool stopped);
+        Message = "Shelf-life run: {Estimated} products estimated ({Low} low confidence), {Filled} units given an estimated expiry date, {States} products given state estimates, {Pending} pending units filled, stopped early: {Stopped}.")]
+    private partial void LogRun(int estimated, int low, int filled, int states, int pending, bool stopped);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "State estimates for {ProductId} ({DisplayName}): opened {OpenedDays} days in the {OpenedStorage}, frozen {FrozenDays} days, defrosted {DefrostedDays} days in the {DefrostedStorage}.")]
+    private partial void LogStatesEstimated(Guid productId, string displayName, int openedDays, Storage openedStorage, int frozenDays, int defrostedDays, Storage defrostedStorage);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Shelf life isn't configured (no Jev key yet): products stay unestimated until it is.")]

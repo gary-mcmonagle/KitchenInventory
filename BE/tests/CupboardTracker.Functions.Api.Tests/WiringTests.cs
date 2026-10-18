@@ -17,6 +17,7 @@ public sealed class WiringTests
     [InlineData(typeof(ScanFeedFunctions))]
     [InlineData(typeof(ScanEventsProcessor))]
     [InlineData(typeof(ProductFunctions))]
+    [InlineData(typeof(UnitStateFunctions))]
     public async Task Functions_resolve(Type functions)
     {
         var services = new ServiceCollection();

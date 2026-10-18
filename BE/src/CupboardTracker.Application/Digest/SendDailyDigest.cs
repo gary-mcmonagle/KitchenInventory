@@ -84,11 +84,12 @@ public sealed partial class SendDailyDigest(
     /// day, soonest first, then by name.</summary>
     private List<DigestUseFirstLine> UseFirst(IEnumerable<DigestUnit> named, Func<DigestUnit, string> name, DateOnly today) =>
         named.GroupBy(u => u.ProductId)
-            .Select(g => (Name: name(g.First()), Count: g.Count(), Soonest: g.Min(u => u.EstimatedExpiryDate)))
+            .Select(g => (Name: name(g.First()), Count: g.Count(), Soonest: g.Min(u => u.EstimatedExpiryDate),
+                Note: g.Where(u => u.EstimatedExpiryDate is not null).MinBy(u => u.EstimatedExpiryDate)?.StateNote))
             .Where(p => p.Soonest is { } soonest && stock.IsUseFirst(EstimatedExpiry.DaysUntil(soonest, today)))
             .OrderBy(p => p.Soonest)
             .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(p => new DigestUseFirstLine(p.Name, p.Count, ExpiryBadge.Text(p.Soonest!.Value, today)))
+            .Select(p => new DigestUseFirstLine(p.Name, p.Count, ExpiryBadge.Text(p.Soonest!.Value, today), p.Note))
             .ToList();
 
     /// <summary>Counts per name, alphabetical ignoring case.</summary>

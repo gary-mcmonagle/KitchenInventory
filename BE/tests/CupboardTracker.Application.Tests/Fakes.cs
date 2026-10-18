@@ -133,6 +133,9 @@ internal sealed class FakeProducts : IProductRepository
     public Task<IReadOnlyList<Product>> GetNeedingShelfLifeAsync(int max, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.NeedsShelfLife).Take(max).ToList());
 
+    public Task<IReadOnlyList<Product>> GetNeedingStateEstimatesAsync(int max, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.NeedsStateEstimates).Take(max).ToList());
+
     public Task<bool> TrySetShelfLifeAsync(Product updated, CancellationToken cancellationToken)
     {
         BeforeWrite?.Invoke();
@@ -176,6 +179,12 @@ internal sealed class FakeUnits : IUnitRepository
     public Task<IReadOnlyList<Versioned<Unit>>> GetInStockAsync(Guid productId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Versioned<Unit>>>(Units.Values
             .Where(v => v.Unit.ProductId == productId && v.Unit.Status == UnitStatus.InStock)
+            .Select(v => new Versioned<Unit>(v.Unit, v.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            .ToList());
+
+    public Task<IReadOnlyList<Versioned<Unit>>> GetInStockEstimatePendingAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Versioned<Unit>>>(Units.Values
+            .Where(v => v.Unit.Status == UnitStatus.InStock && v.Unit.EstimatePending)
             .Select(v => new Versioned<Unit>(v.Unit, v.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)))
             .ToList());
 

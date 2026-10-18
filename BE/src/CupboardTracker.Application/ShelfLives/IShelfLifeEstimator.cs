@@ -22,8 +22,31 @@ public abstract record ShelfLifeResult
     public sealed record NotConfigured : ShelfLifeResult;
 }
 
+/// <summary>How long a product keeps in one state, and where to keep it then (#65).</summary>
+public sealed record StateEstimate(int Days, Storage Storage, double Confidence, bool LowConfidence);
+
+/// <summary>Opened, frozen and defrosted estimates for a product, from one request (#65).</summary>
+public sealed record StateEstimates(StateEstimate Opened, StateEstimate Frozen, StateEstimate Defrosted);
+
+public abstract record StateEstimatesResult
+{
+    public sealed record Estimated(StateEstimates Estimates) : StateEstimatesResult;
+
+    /// <summary>As <see cref="ShelfLifeResult.Unavailable"/>: try again later.</summary>
+    public sealed record Unavailable(string Reason) : StateEstimatesResult;
+
+    /// <summary>As <see cref="ShelfLifeResult.Failed"/>: a bug or bad config.</summary>
+    public sealed record Failed(string Reason) : StateEstimatesResult;
+
+    public sealed record NotConfigured : StateEstimatesResult;
+}
+
 /// <summary>Estimates how long a product usually keeps. Implemented with Jev in Infrastructure.</summary>
 public interface IShelfLifeEstimator
 {
     Task<ShelfLifeResult> EstimateAsync(ProductDescription product, CancellationToken cancellationToken);
+
+    /// <summary>How long it keeps once opened, in the freezer and once defrosted, and where to keep it (#65).
+    /// <paramref name="usualStorage"/> is where it's kept sealed (from its shelf life).</summary>
+    Task<StateEstimatesResult> EstimateStatesAsync(ProductDescription product, Storage usualStorage, CancellationToken cancellationToken);
 }

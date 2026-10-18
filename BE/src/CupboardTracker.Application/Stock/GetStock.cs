@@ -5,7 +5,9 @@ using CupboardTracker.Domain.Stock;
 namespace CupboardTracker.Application.Stock;
 
 /// <summary>An in-stock unit as the stock list needs it.</summary>
-public sealed record StockUnit(Guid ProductId, string? Barcode, DateTimeOffset CheckedInAt, DateOnly? EstimatedExpiryDate = null);
+public sealed record StockUnit(
+    Guid ProductId, string? Barcode, DateTimeOffset CheckedInAt, DateOnly? EstimatedExpiryDate = null, bool Opened = false,
+    bool Frozen = false);
 
 /// <summary>Reads for the stock list (cross-partition over inventoryItems; small at household volume).</summary>
 public interface IStockQueries
@@ -46,7 +48,9 @@ public sealed record StockProduct(
     StockSection Section = StockSection.Later,
     DateOnly? SoonestEstimatedExpiryDate = null,
     int? DaysUntilSoonest = null,
-    int? ShelfLifeDays = null);
+    int? ShelfLifeDays = null,
+    int OpenedCount = 0,
+    int FrozenCount = 0);
 
 public sealed record StockView(
     DateTimeOffset GeneratedAt, int TotalUnits, IReadOnlyList<StockProduct> Products, int UseFirstCount = 0);
@@ -90,7 +94,9 @@ public sealed class GetStock(IStockQueries queries, IProductRepository products,
                 section,
                 soonest,
                 days,
-                product?.ShelfLife?.Days));
+                product?.ShelfLife?.Days,
+                group.Count(u => u.Opened),
+                group.Count(u => u.Frozen)));
         }
 
         var sorted = BySoonest(rows.Where(r => r.Section == StockSection.UseFirst))

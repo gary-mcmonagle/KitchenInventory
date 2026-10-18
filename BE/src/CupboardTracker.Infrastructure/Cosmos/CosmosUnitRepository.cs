@@ -45,6 +45,14 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         return documents.Select(d => new Versioned<Unit>(ToUnit(d), CosmosJson.Text(d["_etag"])!)).ToList();
     }
 
+    public async Task<IReadOnlyList<Versioned<Unit>>> GetInStockEstimatePendingAsync(CancellationToken cancellationToken)
+    {
+        var documents = await CosmosJson.QueryAsync(
+            Items, new QueryDefinition("SELECT * FROM c WHERE c.status = 'inStock' AND c.estimatePending = true"),
+            partitionKey: null, max: null, cancellationToken);
+        return documents.Select(d => new Versioned<Unit>(ToUnit(d), CosmosJson.Text(d["_etag"])!)).ToList();
+    }
+
     public async Task<bool> TryReplaceAsync(Versioned<Unit> current, Unit updated, CancellationToken cancellationToken)
     {
         var id = updated.UnitId.ToString("D");
@@ -105,14 +113,77 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
             document["checkInSource"] = unit.CheckInScanId is null ? "ui" : "scanner";
         }
 
-        if (unit.EstimatedExpiryDate is { } expiry)
-        {
-            document["estimatedExpiryDate"] = expiry.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            document["expirySource"] = unit.ExpirySource == ExpirySource.Manual ? "manual" : "shelfLife";
-        }
-
+        // Set or removed, so Undo back to "no date" (#65) never leaves an old value behind.
+        Set(document, "estimatedExpiryDate", Date(unit.EstimatedExpiryDate));
+        Set(document, "expirySource", unit.ExpirySource is { } source ? SourceName(source)
+            : unit.EstimatedExpiryDate is not null ? "shelfLife" : null);
+        Set(document, "openedOn", Date(unit.OpenedOn));
+        Set(document, "frozenOn", Date(unit.FrozenOn));
+        Set(document, "defrostedOn", Date(unit.DefrostedOn));
+        Set(document, "currentStorage", unit.CurrentStorage is { } storage ? ProductDocument.StorageName(storage) : null);
+        Set(document, "estimatePending", unit.EstimatePending ? true : null);
+        Set(document, "beforeStateChange", unit.BeforeStateChange is { } before ? WriteSnapshot(before) : null);
         return document;
     }
+
+    private static void Set(JsonObject document, string name, JsonNode? value)
+    {
+        if (value is null)
+        {
+            document.Remove(name);
+        }
+        else
+        {
+            document[name] = value;
+        }
+    }
+
+    private static JsonNode? Date(DateOnly? date) => date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private static DateOnly? ParseDate(JsonNode? node) =>
+        DateOnly.TryParseExact(CosmosJson.Text(node), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
+
+    private static string SourceName(ExpirySource source) => source switch
+    {
+        ExpirySource.Manual => "manual",
+        ExpirySource.Opened => "opened",
+        ExpirySource.Frozen => "frozen",
+        ExpirySource.Defrosted => "defrosted",
+        _ => "shelfLife",
+    };
+
+    private static ExpirySource? ParseSource(string? text, bool hasDate) => text switch
+    {
+        "manual" => ExpirySource.Manual,
+        "shelfLife" => ExpirySource.ShelfLife,
+        "opened" => ExpirySource.Opened,
+        "frozen" => ExpirySource.Frozen,
+        "defrosted" => ExpirySource.Defrosted,
+        // Dates written before #53 have no source; they all came from the shelf life.
+        _ => hasDate ? ExpirySource.ShelfLife : null,
+    };
+
+    private static JsonObject WriteSnapshot(UnitEstimateSnapshot s)
+    {
+        var snapshot = new JsonObject();
+        Set(snapshot, "estimatedExpiryDate", Date(s.EstimatedExpiryDate));
+        Set(snapshot, "expirySource", s.ExpirySource is { } source ? SourceName(source) : null);
+        Set(snapshot, "openedOn", Date(s.OpenedOn));
+        Set(snapshot, "frozenOn", Date(s.FrozenOn));
+        Set(snapshot, "defrostedOn", Date(s.DefrostedOn));
+        Set(snapshot, "currentStorage", s.CurrentStorage is { } storage ? ProductDocument.StorageName(storage) : null);
+        Set(snapshot, "estimatePending", s.EstimatePending ? true : null);
+        return snapshot;
+    }
+
+    private static UnitEstimateSnapshot ReadSnapshot(JsonObject s) => new(
+        ParseDate(s["estimatedExpiryDate"]),
+        ParseSource(CosmosJson.Text(s["expirySource"]), s["estimatedExpiryDate"] is not null),
+        ParseDate(s["openedOn"]),
+        ParseDate(s["frozenOn"]),
+        ParseDate(s["defrostedOn"]),
+        ProductDocument.ParseStorage(CosmosJson.Text(s["currentStorage"])),
+        s["estimatePending"] is JsonValue p && p.TryGetValue<bool>(out var pending) && pending);
 
     internal static Unit ToUnit(JsonObject d) => new(
         Guid.Parse(CosmosJson.Text(d["id"])!),
@@ -125,17 +196,16 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         CosmosJson.ParseTimestamp(d["checkedOutAt"]),
         Guid.TryParse(CosmosJson.Text(d["checkOutScanId"]), out var outScan) ? outScan : null,
         CosmosJson.Text(d["checkOutSource"]),
-        DateOnly.TryParseExact(CosmosJson.Text(d["estimatedExpiryDate"]), "yyyy-MM-dd", CultureInfo.InvariantCulture,
-            DateTimeStyles.None, out var date) ? date : null,
+        ParseDate(d["estimatedExpiryDate"]),
         Guid.TryParse(CosmosJson.Text(d["checkedOutBy"]), out var by) ? by : null,
-        CosmosJson.Text(d["expirySource"]) switch
-        {
-            "manual" => ExpirySource.Manual,
-            "shelfLife" => ExpirySource.ShelfLife,
-            // Dates written before #53 have no source; they all came from the shelf life.
-            _ => d["estimatedExpiryDate"] is not null ? ExpirySource.ShelfLife : null,
-        },
-        Guid.TryParse(CosmosJson.Text(d["checkedInBy"]), out var addedBy) ? addedBy : null);
+        ParseSource(CosmosJson.Text(d["expirySource"]), d["estimatedExpiryDate"] is not null),
+        Guid.TryParse(CosmosJson.Text(d["checkedInBy"]), out var addedBy) ? addedBy : null,
+        ParseDate(d["openedOn"]),
+        ParseDate(d["frozenOn"]),
+        ParseDate(d["defrostedOn"]),
+        ProductDocument.ParseStorage(CosmosJson.Text(d["currentStorage"])),
+        d["estimatePending"] is JsonValue p && p.TryGetValue<bool>(out var pending) && pending,
+        d["beforeStateChange"] is JsonObject before ? ReadSnapshot(before) : null);
 }
 
 /// <summary>Unmatched check-outs (id = scan ID), partitioned by /id (docs/data-model.md).</summary>

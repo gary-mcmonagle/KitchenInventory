@@ -183,3 +183,85 @@ public sealed class AddingDocumentTests
         Assert.Equal(("Leeks", ProductSource.Photo, true, At, user), (read.DisplayName, read.Source!.Value, read.IsLoose, read.LastAddedAt!.Value, read.NamedBy!.Value));
     }
 }
+
+/// <summary>#65's stored fields survive a write and a read.</summary>
+public sealed class UnitStateDocumentTests
+{
+    private static readonly DateTimeOffset At = new(2026, 10, 18, 8, 0, 0, TimeSpan.Zero);
+
+    private static JsonObject Stored(JsonObject document) => JsonNode.Parse(document.ToJsonString())!.AsObject();
+
+    private static Unit Jar() =>
+        new(Guid.NewGuid(), Guid.NewGuid(), "8001234567890", UnitStatus.InStock, null, null, At, null, null, null,
+            new DateOnly(2027, 4, 8), null, ExpirySource.Manual);
+
+    [Fact]
+    public void An_opened_unit_with_its_undo_snapshot_round_trips_and_undo_clears_it()
+    {
+        var opened = Jar() with
+        {
+            EstimatedExpiryDate = new DateOnly(2026, 10, 22), ExpirySource = ExpirySource.Opened, OpenedOn = new DateOnly(2026, 10, 18),
+            CurrentStorage = Storage.Fridge, BeforeStateChange = Jar().Snapshot(),
+        };
+
+        var document = Stored(CosmosUnitRepository.Write(opened, null));
+
+        Assert.Equal(("opened", "2026-10-18", "fridge", "manual"),
+            (document["expirySource"]!.GetValue<string>(), document["openedOn"]!.GetValue<string>(),
+             document["currentStorage"]!.GetValue<string>(), document["beforeStateChange"]!["expirySource"]!.GetValue<string>()));
+        Assert.Equal(opened, CosmosUnitRepository.ToUnit(document));
+
+        var undone = Stored(CosmosUnitRepository.Write(opened.UndoStateChange(), document));
+        Assert.False(undone.ContainsKey("openedOn") || undone.ContainsKey("beforeStateChange") || undone.ContainsKey("currentStorage"));
+        Assert.Equal("manual", undone["expirySource"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void A_pending_unit_with_no_date_keeps_its_source_and_a_cleared_date_is_removed()
+    {
+        var pending = Jar() with
+        {
+            EstimatedExpiryDate = null, ExpirySource = ExpirySource.Frozen, FrozenOn = new DateOnly(2026, 10, 18),
+            CurrentStorage = Storage.Freezer, EstimatePending = true,
+        };
+
+        var document = Stored(CosmosUnitRepository.Write(pending, Stored(CosmosUnitRepository.Write(Jar(), null))));
+
+        Assert.False(document.ContainsKey("estimatedExpiryDate")); // the old date isn't left behind
+        Assert.True(document["estimatePending"]!.GetValue<bool>());
+        Assert.Equal(pending, CosmosUnitRepository.ToUnit(document));
+    }
+
+    [Fact]
+    public void Product_state_estimates_round_trip()
+    {
+        var product = Product.Loose(Guid.NewGuid(), "Pesto", null, null, ProductSource.Manual, Guid.NewGuid(), At)
+            .WithShelfLife(new ShelfLife(180, Storage.Cupboard, 0.7, false, "jev", At)) with
+        {
+            StateEstimates = new ProductStateEstimates(
+                StateShelfLife.Manual(5, Storage.Fridge), new StateShelfLife(90, Storage.Freezer, 0.79, false, "jev"),
+                new StateShelfLife(4, Storage.Cupboard, 0.633, false, "jev"), At),
+        };
+
+        var document = Stored(ProductDocument.Write(product, null));
+
+        Assert.Equal((5, "manual", "fridge", 90, "cupboard"),
+            (document["openedShelfLifeDays"]!.GetValue<int>(), document["openedShelfLifeSource"]!.GetValue<string>(),
+             document["openedStorage"]!.GetValue<string>(), document["frozenShelfLifeDays"]!.GetValue<int>(),
+             document["defrostedStorage"]!.GetValue<string>()));
+        Assert.Equal(product.StateEstimates, ProductDocument.ToProduct(document).StateEstimates);
+        Assert.Null(ProductDocument.ToProduct(Stored(ProductDocument.Write(product with { StateEstimates = null }, null))).StateEstimates);
+    }
+
+    [Theory]
+    [InlineData("opened", "2026-10-12", null, "opened 12 Oct")]
+    [InlineData("defrosted", null, "2026-10-05", "defrosted 5 Oct")]
+    [InlineData("frozen", "2026-10-12", null, null)]
+    [InlineData("shelfLife", "2026-10-12", null, null)]
+    public void The_digest_note_says_how_the_estimate_came_about(string source, string? openedOn, string? defrostedOn, string? note)
+    {
+        var row = new JsonObject { ["expirySource"] = source, ["openedOn"] = openedOn, ["defrostedOn"] = defrostedOn };
+
+        Assert.Equal(note, CosmosDigestQueries.StateNote(row));
+    }
+}

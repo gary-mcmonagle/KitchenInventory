@@ -9,7 +9,7 @@ namespace CupboardTracker.Infrastructure.Cosmos;
 public sealed class CosmosDigestQueries(CosmosContainers containers) : IDigestQueries
 {
     public Task<IReadOnlyList<DigestUnit>> GetInStockAsync(CancellationToken cancellationToken) =>
-        QueryAsync(new QueryDefinition("SELECT c.productId, c.barcode, c.estimatedExpiryDate FROM c WHERE c.status = 'inStock'"), cancellationToken);
+        QueryAsync(new QueryDefinition("SELECT c.productId, c.barcode, c.estimatedExpiryDate, c.expirySource, c.openedOn, c.defrostedOn FROM c WHERE c.status = 'inStock'"), cancellationToken);
 
     public Task<IReadOnlyList<DigestUnit>> GetCheckedInAsync(DigestWindow window, CancellationToken cancellationToken) =>
         QueryAsync(InWindow("SELECT c.productId, c.barcode FROM c WHERE c.checkedInAt >= @start AND c.checkedInAt < @end", window),
@@ -33,5 +33,15 @@ public sealed class CosmosDigestQueries(CosmosContainers containers) : IDigestQu
 
     internal static DigestUnit ToUnit(JsonObject row) =>
         new(Guid.Parse(CosmosJson.Text(row["productId"])!), CosmosJson.Text(row["barcode"]),
-            CosmosJson.ParseDate(row["estimatedExpiryDate"]));
+            CosmosJson.ParseDate(row["estimatedExpiryDate"]), StateNote(row));
+
+    /// <summary>"opened 12 Oct" or "defrosted 12 Oct" when the estimate is from that (#65).</summary>
+    internal static string? StateNote(JsonObject row) => CosmosJson.Text(row["expirySource"]) switch
+    {
+        "opened" when CosmosJson.ParseDate(row["openedOn"]) is { } on => $"opened {on.ToString("d MMM", Uk)}",
+        "defrosted" when CosmosJson.ParseDate(row["defrostedOn"]) is { } on => $"defrosted {on.ToString("d MMM", Uk)}",
+        _ => null,
+    };
+
+    private static readonly System.Globalization.CultureInfo Uk = System.Globalization.CultureInfo.GetCultureInfo("en-GB");
 }

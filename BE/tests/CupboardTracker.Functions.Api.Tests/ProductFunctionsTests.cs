@@ -29,17 +29,21 @@ public sealed class ProductFunctionsTests
             new DateTimeOffset(2026, 10, 17, 18, 42, 0, TimeSpan.Zero), Role.In,
             [
                 new ProductUnitView(Guid.Parse("33333333-3333-3333-3333-333333333333"),
-                    new DateTimeOffset(2026, 10, 13, 9, 0, 0, TimeSpan.Zero), new DateOnly(2026, 10, 18), ExpirySource.Manual, 1),
+                    new DateTimeOffset(2026, 10, 13, 9, 0, 0, TimeSpan.Zero), new DateOnly(2026, 10, 18), ExpirySource.Opened, 1,
+                    OpenedOn: new DateOnly(2026, 10, 17), CurrentStorage: Storage.Fridge, CanUndoStateChange: true),
                 new ProductUnitView(Guid.Parse("44444444-4444-4444-4444-444444444444"),
                     new DateTimeOffset(2026, 10, 17, 18, 42, 0, TimeSpan.Zero), null, null, null),
             ],
-            7, "jev");
+            7, "jev",
+            StateShelfLife.Manual(5, Storage.Fridge), new StateShelfLife(90, Storage.Freezer, 0.7, false, "jev"), null,
+            Storage.Cupboard);
 
         Assert.Equal(
             """{"productId":"22222222-2222-2222-2222-222222222222","barcode":"501001234567","status":"noMatch","displayName":"Unknown item (501001234567)","brand":null,"size":null,"inStockCount":2,"latestCheckedInAt":"2026-10-17T18:42:00.000Z","latestDeviceRole":"in",""" +
-            "\"shelfLifeDays\":7,\"shelfLifeSource\":\"jev\",\"units\":[" +
-            """{"unitId":"33333333-3333-3333-3333-333333333333","checkedInAt":"2026-10-13T09:00:00.000Z","estimatedExpiryDate":"2026-10-18","expirySource":"manual","daysUntilExpiry":1},""" +
-            """{"unitId":"44444444-4444-4444-4444-444444444444","checkedInAt":"2026-10-17T18:42:00.000Z","estimatedExpiryDate":null,"expirySource":null,"daysUntilExpiry":null}]}""",
+            "\"shelfLifeDays\":7,\"shelfLifeSource\":\"jev\",\"usualStorage\":\"cupboard\",\"opened\":" +
+            """{"days":5,"storage":"fridge","source":"manual"},"frozen":{"days":90,"storage":"freezer","source":"jev"},"defrosted":null,"openedCount":1,"frozenCount":0,"units":[""" +
+            """{"unitId":"33333333-3333-3333-3333-333333333333","checkedInAt":"2026-10-13T09:00:00.000Z","estimatedExpiryDate":"2026-10-18","expirySource":"opened","daysUntilExpiry":1,"openedOn":"2026-10-17","frozenOn":null,"defrostedOn":null,"currentStorage":"fridge","estimatePending":false,"canUndoStateChange":true},""" +
+            """{"unitId":"44444444-4444-4444-4444-444444444444","checkedInAt":"2026-10-17T18:42:00.000Z","estimatedExpiryDate":null,"expirySource":null,"daysUntilExpiry":null,"openedOn":null,"frozenOn":null,"defrostedOn":null,"currentStorage":null,"estimatePending":false,"canUndoStateChange":false}]}""",
             JsonSerializer.Serialize(ProductFunctions.ToJson(view), WebJson));
     }
 

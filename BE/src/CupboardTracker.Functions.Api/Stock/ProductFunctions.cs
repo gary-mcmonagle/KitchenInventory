@@ -158,19 +158,50 @@ public sealed class ProductFunctions(
         latestDeviceRole = view.LatestDeviceRole?.ToWireName(),
         shelfLifeDays = view.ShelfLifeDays,
         shelfLifeSource = view.ShelfLifeSource,
-        units = view.InStockUnits.Select(u => new
+        usualStorage = StorageName(view.UsualStorage),
+        // How long it keeps once opened, in the freezer, and once defrosted (#65); null until estimated.
+        opened = StateJson(view.Opened),
+        frozen = StateJson(view.Frozen),
+        defrosted = StateJson(view.Defrosted),
+        openedCount = view.OpenedCount,
+        frozenCount = view.FrozenCount,
+        units = view.InStockUnits.Select(UnitJson),
+    };
+
+    internal static object UnitJson(ProductUnitView u) => new
+    {
+        unitId = u.UnitId,
+        checkedInAt = u.CheckedInAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+        estimatedExpiryDate = Date(u.EstimatedExpiryDate),
+        expirySource = u.ExpirySource switch
         {
-            unitId = u.UnitId,
-            checkedInAt = u.CheckedInAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
-            estimatedExpiryDate = u.EstimatedExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            expirySource = u.ExpirySource switch
-            {
-                ExpirySource.Manual => "manual",
-                ExpirySource.ShelfLife => "shelfLife",
-                _ => null,
-            },
-            daysUntilExpiry = u.DaysUntilExpiry,
-        }),
+            ExpirySource.Manual => "manual",
+            ExpirySource.ShelfLife => "shelfLife",
+            ExpirySource.Opened => "opened",
+            ExpirySource.Frozen => "frozen",
+            ExpirySource.Defrosted => "defrosted",
+            _ => null,
+        },
+        daysUntilExpiry = u.DaysUntilExpiry,
+        openedOn = Date(u.OpenedOn),
+        frozenOn = Date(u.FrozenOn),
+        defrostedOn = Date(u.DefrostedOn),
+        currentStorage = StorageName(u.CurrentStorage),
+        estimatePending = u.EstimatePending,
+        canUndoStateChange = u.CanUndoStateChange,
+    };
+
+    private static object? StateJson(StateShelfLife? state) =>
+        state is null ? null : new { days = state.Days, storage = StorageName(state.Storage), source = state.Source };
+
+    private static string? Date(DateOnly? date) => date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private static string? StorageName(Storage? storage) => storage switch
+    {
+        Storage.Cupboard => "cupboard",
+        Storage.Fridge => "fridge",
+        Storage.Freezer => "freezer",
+        _ => null,
     };
 
     internal static (HttpStatusCode Status, object Body) ToResponse(EditProductDetailsResult result) => result switch

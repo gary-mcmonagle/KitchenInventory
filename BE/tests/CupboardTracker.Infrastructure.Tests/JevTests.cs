@@ -213,4 +213,52 @@ public sealed class JevTests
         Assert.Equal(product.ShelfLife, ProductDocument.ToProduct(stored).ShelfLife);
         Assert.Null(ProductDocument.ToProduct(ProductDocument.Write(product with { ShelfLife = null }, null)).ShelfLife);
     }
+
+    // Recorded from jev-1.13.0 on 2026-10-18 for #65's check (docs/spikes/65-jev-unit-state.py), usage and legends removed.
+    private const string NaanStates = """
+        {"model":"jev-1.13.0","answers":{
+         "opened_storage":{"type":"choice","choice":"cupboard","confidence":0.22,"probabilities":{"cupboard":0.48,"fridge":0.27,"freezer":0.25}},
+         "opened_shelf_life":{"type":"score","score":2.24,"confidence":0.32,"probabilities":{"0":0.25,"1":0.26,"2":0.16,"3":0.08,"4":0.07,"5":0.07,"6":0.05,"7":0.04,"8":0.01,"9":0.01}},
+         "frozen_shelf_life":{"type":"score","score":5.12,"confidence":0.79,"probabilities":{"0":0.01,"1":0.0,"2":0.0,"3":0.02,"4":0.11,"5":0.61,"6":0.19,"7":0.05,"8":0.01,"9":0.0}},
+         "defrosted_storage":{"type":"choice","choice":"cupboard","confidence":0.18,"probabilities":{"cupboard":0.59,"fridge":0.41}},
+         "defrosted_shelf_life":{"type":"score","score":1.22,"confidence":0.63,"probabilities":{"0":0.37,"1":0.41,"2":0.1,"3":0.03,"4":0.02,"5":0.04,"6":0.01,"7":0.02,"8":0.0,"9":0.0}}}}
+        """;
+
+    [Fact]
+    public async Task State_questions_go_in_one_request_with_the_usual_storage()
+    {
+        var (estimator, handler) = Make(null, _ => Status(200, NaanStates));
+
+        var result = await estimator.EstimateStatesAsync(NaanProduct, Storage.Cupboard, CancellationToken.None);
+
+        Assert.IsType<StateEstimatesResult.Estimated>(result);
+        var (_, body) = Assert.Single(handler.Requests);
+        var json = JsonNode.Parse(body)!;
+        Assert.Equal("cupboard", json["state"]!["storage"]!.GetValue<string>());
+        Assert.Equal(["opened_storage", "opened_shelf_life", "frozen_shelf_life", "defrosted_storage", "defrosted_shelf_life"],
+            json["questions"]!.AsObject().Select(q => q.Key));
+        Assert.Equal(["cupboard", "fridge"], json["questions"]!["defrosted_storage"]!["criteria"]!.AsObject().Select(c => c.Key));
+        Assert.Equal(10, json["questions"]!["frozen_shelf_life"]!["criteria"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public void State_answers_use_the_same_level_rule()
+    {
+        var states = Assert.IsType<StateEstimatesResult.Estimated>(
+            JevShelfLifeEstimator.ReadStates(JsonNode.Parse(NaanStates)!["answers"]!.AsObject())).Estimates;
+
+        // Opened: confidence 0.32, so the 25th percentile ("1-2 days"); frozen and defrosted: the median.
+        Assert.Equal(new StateEstimate(2, Storage.Cupboard, 0.32, true), states.Opened);
+        Assert.Equal(new StateEstimate(90, Storage.Freezer, 0.79, false), states.Frozen);
+        Assert.Equal(new StateEstimate(4, Storage.Cupboard, 0.63, false), states.Defrosted);
+    }
+
+    [Fact]
+    public void A_missing_state_answer_is_a_failure()
+    {
+        var answers = JsonNode.Parse(NaanStates)!["answers"]!.AsObject();
+        answers.Remove("frozen_shelf_life");
+
+        Assert.IsType<StateEstimatesResult.Failed>(JevShelfLifeEstimator.ReadStates(answers));
+    }
 }

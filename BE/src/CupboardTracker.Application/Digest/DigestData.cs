@@ -24,4 +24,4 @@ public sealed record DigestData(
 public sealed record DigestLine(string Name, int Count);
 
 /// <summary>A product to use first: how many units, and the badge text for its soonest one ("Est. tomorrow").</summary>
-public sealed record DigestUseFirstLine(string Name, int Count, string Badge);
+public sealed record DigestUseFirstLine(string Name, int Count, string Badge, string? StateNote = null);

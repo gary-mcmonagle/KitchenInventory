@@ -153,6 +153,15 @@ public sealed class CosmosProductRepository(CosmosContainers containers, TimePro
         return documents.Select(ProductDocument.ToProduct).ToList();
     }
 
+    public async Task<IReadOnlyList<Product>> GetNeedingStateEstimatesAsync(int max, CancellationToken cancellationToken)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.type = 'product' AND c.status = 'known' AND IS_NUMBER(c.shelfLifeDays) "
+            + "AND (NOT IS_DEFINED(c.stateEstimatedAt) OR IS_NULL(c.stateEstimatedAt))");
+        var documents = await CosmosJson.QueryAsync(Products, query, partitionKey: null, max, cancellationToken);
+        return documents.Select(ProductDocument.ToProduct).ToList();
+    }
+
     public async Task<bool> TrySetShelfLifeAsync(Product updated, CancellationToken cancellationToken)
     {
         var id = updated.ProductId.ToString("D");
@@ -245,8 +254,64 @@ internal static class ProductDocument
             document["shelfLifeEstimatedAt"] = CosmosJson.Timestamp(shelfLife.EstimatedAt);
         }
 
+        // Opened / frozen / defrosted (#65): flat fields per state, like the shelf life.
+        var states = product.States;
+        WriteState(document, "opened", states.Opened, withStorage: true);
+        WriteState(document, "frozen", states.Frozen, withStorage: false);
+        WriteState(document, "defrosted", states.Defrosted, withStorage: true);
+        if (states.EstimatedAt is { } statesAt)
+        {
+            document["stateEstimatedAt"] = CosmosJson.Timestamp(statesAt);
+        }
+
         return document;
     }
+
+    private static void WriteState(JsonObject document, string prefix, StateShelfLife? state, bool withStorage)
+    {
+        if (state is null)
+        {
+            return;
+        }
+
+        document[$"{prefix}ShelfLifeDays"] = state.Days;
+        document[$"{prefix}ShelfLifeSource"] = state.Source;
+        document[$"{prefix}ShelfLifeConfidence"] = Math.Round(state.Confidence, 3);
+        document[$"{prefix}LowConfidence"] = state.LowConfidence;
+        if (withStorage)
+        {
+            document[$"{prefix}Storage"] = StorageName(state.Storage);
+        }
+    }
+
+    private static StateShelfLife? ReadState(JsonObject document, string prefix, Storage? fixedStorage)
+    {
+        if (document[$"{prefix}ShelfLifeDays"] is not JsonValue daysValue || !daysValue.TryGetValue<int>(out var days))
+        {
+            return null;
+        }
+
+        var confidence = document[$"{prefix}ShelfLifeConfidence"] is JsonValue c && c.TryGetValue<double>(out var value) ? value : 0;
+        var low = document[$"{prefix}LowConfidence"] is JsonValue l && l.TryGetValue<bool>(out var flag) && flag;
+        var storage = fixedStorage ?? ParseStorage(CosmosJson.Text(document[$"{prefix}Storage"])) ?? Storage.Fridge;
+        return new StateShelfLife(days, storage, confidence, low, CosmosJson.Text(document[$"{prefix}ShelfLifeSource"]) ?? ShelfLife.JevSource);
+    }
+
+    private static ProductStateEstimates? ReadStates(JsonObject document)
+    {
+        var states = new ProductStateEstimates(
+            ReadState(document, "opened", null), ReadState(document, "frozen", Storage.Freezer), ReadState(document, "defrosted", null),
+            CosmosJson.ParseTimestamp(document["stateEstimatedAt"]));
+        return states == ProductStateEstimates.None ? null : states;
+    }
+
+    internal static Storage? ParseStorage(string? text) => text switch
+    {
+        "cupboard" => Storage.Cupboard,
+        "fridge" => Storage.Fridge,
+        "freezer" => Storage.Freezer,
+        _ => null,
+    };
 
     public static Product ToProduct(JsonObject document)
     {
@@ -282,7 +347,8 @@ internal static class ProductDocument
             CosmosJson.ParseTimestamp(document["editedAt"]),
             Guid.TryParse(CosmosJson.Text(document["editedBy"]), out var editedBy) ? editedBy : null,
             CosmosJson.ParseTimestamp(document["feedDismissedAt"]),
-            CosmosJson.ParseTimestamp(document["lastAddedAt"]));
+            CosmosJson.ParseTimestamp(document["lastAddedAt"]),
+            ReadStates(document));
     }
 
     private static ShelfLife? ReadShelfLife(JsonObject document)

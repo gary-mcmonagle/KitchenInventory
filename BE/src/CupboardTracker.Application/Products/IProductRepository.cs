@@ -37,6 +37,9 @@ public interface IProductRepository
     /// <summary>Known products with no shelf life yet (#52).</summary>
     Task<IReadOnlyList<Product>> GetNeedingShelfLifeAsync(int max, CancellationToken cancellationToken);
 
+    /// <summary>Known products with a shelf life that Jev hasn't given state estimates yet (#65), up to <paramref name="max"/>.</summary>
+    Task<IReadOnlyList<Product>> GetNeedingStateEstimatesAsync(int max, CancellationToken cancellationToken);
+
     /// <summary>Stores a shelf life, only if the product is still known with none (ETag-guarded). False otherwise.</summary>
     Task<bool> TrySetShelfLifeAsync(Product updated, CancellationToken cancellationToken);
 

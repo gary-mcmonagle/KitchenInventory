@@ -171,7 +171,8 @@ public static class BuildDailyDigest
             html.Append("<ul style=\"margin:0;padding-left:20px\">");
             foreach (var item in Items)
             {
-                var line = $"{Line(new DigestLine(item.Name, item.Count))} · {item.Badge}";
+                var name = item.StateNote is { } note ? $"{item.Name} ({note})" : item.Name; // "Pesto (opened 12 Oct)", #65
+                var line = $"{Line(new DigestLine(name, item.Count))} · {item.Badge}";
                 html.Append(CultureInfo.InvariantCulture, $"<li style=\"margin:2px 0\">{E(line)}</li>");
                 text.AppendLine("  " + line);
             }

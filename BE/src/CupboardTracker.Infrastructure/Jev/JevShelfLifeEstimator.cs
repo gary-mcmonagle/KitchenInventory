@@ -38,6 +38,116 @@ public sealed class JevShelfLifeEstimator(JevClient client, JevOptions options) 
         };
     }
 
+    /// <summary>Opened, frozen and defrosted (#65): five questions in one request, worded as checked against Jev
+    /// before building (docs/spikes/65-jev-unit-state.py). The usual storage is part of the state.</summary>
+    public async Task<StateEstimatesResult> EstimateStatesAsync(
+        ProductDescription product, Storage usualStorage, CancellationToken cancellationToken)
+    {
+        if (!options.IsConfigured)
+        {
+            return new StateEstimatesResult.NotConfigured();
+        }
+
+        var state = State(product);
+        state["storage"] = StorageName(usualStorage);
+        return await client.AskAsync(state, StateQuestions(), cancellationToken) switch
+        {
+            JevResponse.Answered { Answers: var answers } => ReadStates(answers),
+            JevResponse.Unavailable { Reason: var reason } => new StateEstimatesResult.Unavailable(reason),
+            JevResponse.Refused { Reason: var reason } => new StateEstimatesResult.Failed(reason),
+            var other => throw new InvalidOperationException($"Unexpected Jev response {other}."),
+        };
+    }
+
+    internal static JsonObject StateQuestions() => new()
+    {
+        ["opened_storage"] = Choice("Where this product should be kept at home once it has been opened.", withFreezer: true),
+        ["opened_shelf_life"] = Duration(
+            "How long this product stays good to eat once it has been opened, kept where it should be once opened."),
+        ["frozen_shelf_life"] = Duration(
+            "How long this product keeps in a home freezer if it is frozen on the day it was bought, before the quality suffers."),
+        ["defrosted_storage"] = Choice(
+            "Where this product should be kept once it has been taken out of the freezer and defrosted.", withFreezer: false),
+        ["defrosted_shelf_life"] = Duration(
+            "How long this product stays good to eat once it has been frozen and then defrosted, kept where it should be once defrosted."),
+    };
+
+    internal static StateEstimatesResult ReadStates(JsonObject answers)
+    {
+        StateEstimate? Read(string duration, string? storage, Storage fixedStorage)
+        {
+            if (Score(answers[duration]) is not var (days, confidence, low))
+            {
+                return null;
+            }
+
+            var where = storage is null ? fixedStorage : ParseStorage(answers[storage]?["choice"]?.GetValue<string>(), fixedStorage);
+            return new StateEstimate(days, where, confidence, low);
+        }
+
+        var opened = Read("opened_shelf_life", "opened_storage", Storage.Fridge);
+        var frozen = Read("frozen_shelf_life", null, Storage.Freezer);
+        var defrosted = Read("defrosted_shelf_life", "defrosted_storage", Storage.Fridge);
+        return opened is null || frozen is null || defrosted is null
+            ? new StateEstimatesResult.Failed("missing a state answer")
+            : new StateEstimatesResult.Estimated(new StateEstimates(opened, frozen, defrosted));
+    }
+
+    private static JsonObject Duration(string instructions) => new()
+    {
+        ["type"] = "score",
+        ["instructions"] = instructions,
+        ["criteria"] = new JsonArray([.. Levels.Select(l => (JsonNode)JsonValue.Create(l.Words)!)]),
+    };
+
+    private static JsonObject Choice(string instructions, bool withFreezer)
+    {
+        var criteria = new JsonObject { ["cupboard"] = "Cupboard or worktop, at room temperature", ["fridge"] = "Fridge" };
+        if (withFreezer)
+        {
+            criteria["freezer"] = "Freezer";
+        }
+
+        return new JsonObject { ["type"] = "choice", ["instructions"] = instructions, ["criteria"] = criteria };
+    }
+
+    /// <summary>A score answer's days (median, or 25th percentile below 0.5 confidence), or null if unreadable.</summary>
+    private static (int Days, double Confidence, bool Low)? Score(JsonNode? answer)
+    {
+        if (answer is not JsonObject score
+            || score["probabilities"] is not JsonObject probabilities
+            || score["confidence"] is not JsonValue confidenceValue
+            || !confidenceValue.TryGetValue<double>(out var confidence))
+        {
+            return null;
+        }
+
+        var distribution = new double[Levels.Length];
+        foreach (var (key, value) in probabilities)
+        {
+            if (int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var level)
+                && level >= 0 && level < Levels.Length && value is JsonValue v && v.TryGetValue<double>(out var p))
+            {
+                distribution[level] = p;
+            }
+        }
+
+        if (distribution.Sum() <= 0)
+        {
+            return null;
+        }
+
+        var low = confidence < LowConfidenceBelow;
+        return (Levels[Percentile(distribution, low ? 0.25 : 0.5)].Days, confidence, low);
+    }
+
+    private static string StorageName(Storage storage) => storage switch
+    {
+        Storage.Fridge => "fridge",
+        Storage.Freezer => "freezer",
+        _ => "cupboard",
+    };
+
     internal static JsonObject State(ProductDescription product)
     {
         var state = new JsonObject { ["name"] = product.Name };
@@ -129,10 +239,11 @@ public sealed class JevShelfLifeEstimator(JevClient client, JevOptions options) 
         return distribution.Count - 1;
     }
 
-    private static Storage ParseStorage(string? choice) => choice switch
+    private static Storage ParseStorage(string? choice, Storage otherwise = Storage.Cupboard) => choice switch
     {
+        "cupboard" => Storage.Cupboard,
         "fridge" => Storage.Fridge,
         "freezer" => Storage.Freezer,
-        _ => Storage.Cupboard,
+        _ => otherwise,
     };
 }
