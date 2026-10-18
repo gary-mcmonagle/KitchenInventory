@@ -101,8 +101,10 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         document["checkedOutBy"] = unit.CheckedOutBy?.ToString("D");
         if (unit.CheckedInBy is { } addedBy)
         {
-            document["checkedInBy"] = addedBy.ToString("D"); // added in the app (#58)
+            document["checkedInBy"] = addedBy.ToString("D"); // added in the app, or a store label assigned there (#58)
+            document["checkInSource"] = unit.CheckInScanId is null ? "ui" : "scanner";
         }
+
         if (unit.EstimatedExpiryDate is { } expiry)
         {
             document["estimatedExpiryDate"] = expiry.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);

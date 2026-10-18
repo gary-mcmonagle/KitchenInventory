@@ -49,6 +49,8 @@ public sealed class StockRulesTests
     [Theory]
     [InlineData("2012345678903", true)]  // EAN-13 starting 20
     [InlineData("2912345678906", true)]  // EAN-13 starting 29
+    [InlineData("1912345678907", false)] // EAN-13 starting 19 or 30: outside the range
+    [InlineData("3012345678902", false)]
     [InlineData("20590093", false)]      // Lidl EAN-8 starting 2: a normal product (spike #28)
     [InlineData("20055363", false)]
     [InlineData("201234567899", false)]  // UPC-A starting 2: never a store label

@@ -174,7 +174,9 @@ public sealed class AddingDocumentTests
     {
         var user = Guid.NewGuid();
         var unit = Unit.AddedInApp(Guid.NewGuid(), Guid.NewGuid(), user, At, new DateOnly(2026, 10, 25));
-        Assert.Equal(unit, CosmosUnitRepository.ToUnit(Stored(CosmosUnitRepository.Write(unit, null))));
+        var document = Stored(CosmosUnitRepository.Write(unit, null));
+        Assert.Equal(("ui", user.ToString("D")), (document["checkInSource"]!.GetValue<string>(), document["checkedInBy"]!.GetValue<string>()));
+        Assert.Equal(unit, CosmosUnitRepository.ToUnit(document));
 
         var product = Product.Loose(Guid.NewGuid(), "Leeks", null, null, ProductSource.Photo, user, At) with { LastAddedAt = At };
         var read = ProductDocument.ToProduct(Stored(ProductDocument.Write(product, null)));
