@@ -92,13 +92,12 @@ function ukYear(now: Date): string {
 
 /** "Sunday 18 October", from a YYYY-MM-DD date; with the year ("Monday 16 October 2028") when it isn't this year. */
 export function longDate(isoDate: string, now: Date = new Date()): string {
-    return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("en-GB", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: isoDate.slice(0, 4) === ukYear(now) ? undefined : "numeric",
-        timeZone: "UTC",
-    });
+    // Built from parts: browsers differ on punctuation ("Monday, 16 October 2028" in Chrome).
+    const date = new Date(`${isoDate}T00:00:00Z`);
+    const part = (options: Intl.DateTimeFormatOptions) =>
+        date.toLocaleDateString("en-GB", { ...options, timeZone: "UTC" });
+    const year = isoDate.slice(0, 4) === ukYear(now) ? "" : ` ${isoDate.slice(0, 4)}`;
+    return `${part({ weekday: "long" })} ${part({ day: "numeric" })} ${part({ month: "long" })}${year}`;
 }
 
 /** "18 Oct", from a YYYY-MM-DD date; "16 Oct 2028" when it isn't this year. */
