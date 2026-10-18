@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Domain;
 using Microsoft.Extensions.Logging;
 
@@ -29,6 +30,7 @@ public abstract record RecordScanResult
 public sealed partial class RecordScan(
     IScanEventRepository scanEvents,
     IDeviceRepository devices,
+    ScanFeedNotifier feed,
     TimeProvider clock,
     ILogger<RecordScan> logger)
 {
@@ -96,6 +98,14 @@ public sealed partial class RecordScan(
         }
 
         await UpdateDeviceAsync(scanEvent, cancellationToken);
+        if (created)
+        {
+            // Only once stored, and never for a resend (#54): the grey "Reading…" toast.
+            await feed.NotifyAsync(
+                new ScanReceived(scanId, scanEvent.DeviceId, role, receivedAt, barcode!.Value, scanEvent.ScannedAt),
+                cancellationToken);
+        }
+
         return new RecordScanResult.Recorded(scanId, WasAlreadyRecorded: !created);
     }
 

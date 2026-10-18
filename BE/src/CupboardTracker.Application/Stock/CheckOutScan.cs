@@ -1,5 +1,7 @@
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Domain;
+using CupboardTracker.Domain.Products;
 using CupboardTracker.Domain.Stock;
 using Microsoft.Extensions.Logging;
 
@@ -13,6 +15,7 @@ public sealed partial class CheckOutScan(
     IProductRepository products,
     IUnitRepository units,
     IUnmatchedCheckOutRepository unmatched,
+    ScanFeedNotifier feed,
     TimeProvider clock,
     ILogger<CheckOutScan> logger)
 {
@@ -56,6 +59,12 @@ public sealed partial class CheckOutScan(
                 if (await units.TryReplaceAsync(current, candidate.CheckOut(scan.ScanId, scan.ScannedAt, Source), cancellationToken))
                 {
                     LogCheckedOut(scan.ScanId, candidate.UnitId, scan.Barcode.Value);
+                    var product = await products.GetAsync(productId.Value, cancellationToken);
+                    await feed.NotifyAsync(
+                        new ScanIdentified(scan.ScanId, scan.DeviceId, scan.Role, clock.GetUtcNow(), ScanOutcome.CheckedOut,
+                            productId.Value, product?.DisplayName ?? Product.UnknownName(scan.Barcode.Value),
+                            product?.Details?.Brand, product?.Details?.Size, candidate.UnitId),
+                        cancellationToken);
                     return;
                 }
 
@@ -75,6 +84,12 @@ public sealed partial class CheckOutScan(
         {
             LogUnmatched(scan.ScanId, scan.Barcode.Value);
         }
+
+        var product = productId is { } id ? await products.GetAsync(id, cancellationToken) : null;
+        await feed.NotifyAsync(
+            new CheckOutUnmatched(scan.ScanId, scan.DeviceId, clock.GetUtcNow(), scan.Barcode.Value, productId,
+                product is { IsUnnamed: false } ? product.DisplayName : null),
+            cancellationToken);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Checked out unit {UnitId} for scan {ScanId} ({Barcode}).")]

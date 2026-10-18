@@ -1,4 +1,5 @@
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Domain;
 using CupboardTracker.Domain.Stock;
 using Microsoft.Extensions.Logging;
@@ -11,7 +12,12 @@ namespace CupboardTracker.Application.Stock;
 /// it in later (#52), so check-in never waits for Jev.
 /// </summary>
 public sealed partial class CheckInScan(
-    ProductResolver resolver, IUnitRepository units, StockSettings settings, ILogger<CheckInScan> logger)
+    ProductResolver resolver,
+    IUnitRepository units,
+    StockSettings settings,
+    ScanFeedNotifier feed,
+    TimeProvider clock,
+    ILogger<CheckInScan> logger)
 {
     public async Task ExecuteAsync(ScanEvent scan, CancellationToken cancellationToken)
     {
@@ -31,6 +37,15 @@ public sealed partial class CheckInScan(
         {
             LogReplay(scan.ScanId);
         }
+
+        // Also on a replay: the app updates the toast with this scan ID in place (spike #38).
+        await feed.NotifyAsync(
+            product.IsUnnamed
+                ? new ScanNeedsIdentification(scan.ScanId, scan.DeviceId, clock.GetUtcNow(), product.ProductId,
+                    scan.Barcode.Value, product.DisplayName, product.Status, unit.UnitId)
+                : new ScanIdentified(scan.ScanId, scan.DeviceId, scan.Role, clock.GetUtcNow(), ScanOutcome.CheckedIn,
+                    product.ProductId, product.DisplayName, product.Details?.Brand, product.Details?.Size, unit.UnitId),
+            cancellationToken);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Checked in {ScanId}: {Barcode} as {DisplayName}.")]

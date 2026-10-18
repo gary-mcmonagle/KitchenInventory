@@ -22,10 +22,12 @@ public sealed class StockTests
 
     private ProductResolver Resolver() => new(products, lookup, clock, resolverLog);
 
+    private readonly FakeFeed feed = new();
+
     private ProcessScanEvent Processor() => new(
-        new CheckInScan(Resolver(), units, TestSettings.Stock(), new ListLogger<CheckInScan>()),
-        new CheckOutScan(products, units, unmatched, clock, new ListLogger<CheckOutScan>()),
-        new ListLogger<ProcessScanEvent>());
+        new CheckInScan(Resolver(), units, TestSettings.Stock(), feed.Notifier(), clock, new ListLogger<CheckInScan>()),
+        new CheckOutScan(products, units, unmatched, feed.Notifier(), clock, new ListLogger<CheckOutScan>()),
+        feed.Notifier(), clock, new ListLogger<ProcessScanEvent>());
 
     private Task Process(ScanEvent scan) => Processor().ExecuteAsync(scan, CancellationToken.None);
 

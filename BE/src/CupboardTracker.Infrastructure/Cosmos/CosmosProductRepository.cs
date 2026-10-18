@@ -211,6 +211,11 @@ internal static class ProductDocument
             document["namedBy"] = product.NamedBy?.ToString("D");
         }
 
+        if (product.FeedDismissedAt is { } dismissedAt)
+        {
+            document["feedDismissedAt"] = CosmosJson.Timestamp(dismissedAt);
+        }
+
         if (product.EditedAt is { } editedAt)
         {
             document["editedAt"] = CosmosJson.Timestamp(editedAt);
@@ -262,7 +267,8 @@ internal static class ProductDocument
             Guid.TryParse(CosmosJson.Text(document["namedBy"]), out var namedBy) ? namedBy : null,
             ReadShelfLife(document),
             CosmosJson.ParseTimestamp(document["editedAt"]),
-            Guid.TryParse(CosmosJson.Text(document["editedBy"]), out var editedBy) ? editedBy : null);
+            Guid.TryParse(CosmosJson.Text(document["editedBy"]), out var editedBy) ? editedBy : null,
+            CosmosJson.ParseTimestamp(document["feedDismissedAt"]));
     }
 
     private static ShelfLife? ReadShelfLife(JsonObject document)
