@@ -13,6 +13,9 @@ const unknown: Product = {
     inStockCount: 1,
     latestCheckedInAt: new Date(Date.now() - 5 * 60000).toISOString(),
     latestDeviceRole: "in",
+    shelfLifeDays: null,
+    shelfLifeSource: null,
+    units: [],
 };
 
 function deferred<T>() {

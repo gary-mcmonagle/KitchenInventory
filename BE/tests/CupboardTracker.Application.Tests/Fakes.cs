@@ -104,6 +104,29 @@ internal sealed class FakeProducts : IProductRepository
         return Task.FromResult(true);
     }
 
+    /// <summary>Product versions for ETag checks; bump one to simulate a concurrent writer.</summary>
+    public Dictionary<Guid, int> Versions { get; } = [];
+
+    public Task<Versioned<Product>?> GetVersionedAsync(Guid productId, CancellationToken cancellationToken) =>
+        Task.FromResult(Products.TryGetValue(productId, out var product)
+            ? new Versioned<Product>(product, Versions.GetValueOrDefault(productId).ToString(System.Globalization.CultureInfo.InvariantCulture))
+            : null);
+
+    public Task<bool> TryReplaceAsync(Versioned<Product> current, Product updated, CancellationToken cancellationToken)
+    {
+        BeforeWrite?.Invoke();
+        var version = Versions.GetValueOrDefault(updated.ProductId);
+        if (!Products.ContainsKey(updated.ProductId)
+            || version.ToString(System.Globalization.CultureInfo.InvariantCulture) != current.ETag)
+        {
+            return Task.FromResult(false);
+        }
+
+        Products[updated.ProductId] = updated;
+        Versions[updated.ProductId] = version + 1;
+        return Task.FromResult(true);
+    }
+
     public Task<IReadOnlyList<Product>> GetNeedingShelfLifeAsync(int max, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.NeedsShelfLife).Take(max).ToList());
 

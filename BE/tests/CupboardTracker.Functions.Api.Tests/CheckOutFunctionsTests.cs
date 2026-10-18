@@ -15,7 +15,9 @@ public sealed class CheckOutFunctionsTests
     [Theory]
     [InlineData("CupboardTracker.Functions.Api.Stock.CheckOutFunctions.CheckOut")]
     [InlineData("CupboardTracker.Functions.Api.Stock.CheckOutFunctions.Undo")]
-    public void Both_need_a_signed_in_user(string entryPoint) => Assert.True(FunctionAuthPolicy.RequiresUser(entryPoint));
+    [InlineData("CupboardTracker.Functions.Api.Stock.CheckOutFunctions.CheckOutOne")]
+    [InlineData("CupboardTracker.Functions.Api.Stock.CheckOutFunctions.SetExpiry")]
+    public void All_need_a_signed_in_user(string entryPoint) => Assert.True(FunctionAuthPolicy.RequiresUser(entryPoint));
 
     [Fact]
     public void Check_out_responses()
@@ -27,6 +29,35 @@ public sealed class CheckOutFunctionsTests
             JsonSerializer.Serialize(body, WebJson));
 
         Assert.Equal(HttpStatusCode.Conflict, CheckOutFunctions.ToResponse(new CheckOutFromAppResult.NothingInStock(Product)).Status);
+    }
+
+    [Fact]
+    public void Unit_check_out_and_expiry_responses()
+    {
+        var (status, body) = CheckOutFunctions.ToResponse(new CheckOutUnitResult.CheckedOut(Unit, Product, "Beef Gravy", 0));
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(
+            """{"unitId":"11111111-1111-1111-1111-111111111111","productId":"22222222-2222-2222-2222-222222222222","displayName":"Beef Gravy","remainingCount":0}""",
+            JsonSerializer.Serialize(body, WebJson));
+        Assert.Equal(HttpStatusCode.Conflict, CheckOutFunctions.ToResponse(new CheckOutUnitResult.NotInStock(Unit)).Status);
+        Assert.Equal(HttpStatusCode.NotFound, CheckOutFunctions.ToResponse(new CheckOutUnitResult.NotFound(Unit)).Status);
+
+        var (dateStatus, dateBody) = CheckOutFunctions.ToResponse(new SetUnitExpiryResult.Saved(Unit, Product, new DateOnly(2026, 10, 20)));
+        Assert.Equal(HttpStatusCode.OK, dateStatus);
+        Assert.Equal(
+            """{"unitId":"11111111-1111-1111-1111-111111111111","productId":"22222222-2222-2222-2222-222222222222","estimatedExpiryDate":"2026-10-20","expirySource":"manual"}""",
+            JsonSerializer.Serialize(dateBody, WebJson));
+        Assert.Equal(HttpStatusCode.BadRequest, CheckOutFunctions.ToResponse(new SetUnitExpiryResult.Invalid("x")).Status);
+        Assert.Equal(HttpStatusCode.Conflict, CheckOutFunctions.ToResponse(new SetUnitExpiryResult.Conflict(Unit, "x")).Status);
+        Assert.Equal(HttpStatusCode.NotFound, CheckOutFunctions.ToResponse(new SetUnitExpiryResult.NotFound(Unit)).Status);
+    }
+
+    [Fact]
+    public void Parses_the_date_body()
+    {
+        Assert.Equal(("2026-10-20", null), CheckOutFunctions.ParseDate("""{"date":"2026-10-20"}"""u8));
+        Assert.NotNull(CheckOutFunctions.ParseDate("""{"date":20261020}"""u8).Error);
+        Assert.NotNull(CheckOutFunctions.ParseDate("[]"u8).Error);
     }
 
     [Fact]

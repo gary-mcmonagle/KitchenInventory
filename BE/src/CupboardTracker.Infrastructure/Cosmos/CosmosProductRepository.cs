@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using CupboardTracker.Application;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Domain.Products;
 using Microsoft.Azure.Cosmos;
@@ -109,6 +110,32 @@ public sealed class CosmosProductRepository(CosmosContainers containers, TimePro
         return true;
     }
 
+    public async Task<Versioned<Product>?> GetVersionedAsync(Guid productId, CancellationToken cancellationToken) =>
+        (await ReadAsync(productId, cancellationToken)) is { } document
+            ? new Versioned<Product>(ProductDocument.ToProduct(document), CosmosJson.Text(document["_etag"])!)
+            : null;
+
+    public async Task<bool> TryReplaceAsync(Versioned<Product> current, Product updated, CancellationToken cancellationToken)
+    {
+        var id = updated.ProductId.ToString("D");
+        var existing = await ReadAsync(updated.ProductId, cancellationToken);
+        if (existing is null)
+        {
+            return false;
+        }
+
+        using var stream = CosmosJson.ToStream(ProductDocument.Write(updated, existing));
+        using var response = await Products.ReplaceItemStreamAsync(
+            stream, id, new PartitionKey(id), new ItemRequestOptions { IfMatchEtag = current.ETag }, cancellationToken);
+        if (response.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return true;
+    }
+
     public async Task<IReadOnlyList<Product>> GetNeedingShelfLifeAsync(int max, CancellationToken cancellationToken)
     {
         var query = new QueryDefinition(
@@ -184,6 +211,12 @@ internal static class ProductDocument
             document["namedBy"] = product.NamedBy?.ToString("D");
         }
 
+        if (product.EditedAt is { } editedAt)
+        {
+            document["editedAt"] = CosmosJson.Timestamp(editedAt);
+            document["editedBy"] = product.EditedBy?.ToString("D");
+        }
+
         if (product.ShelfLife is { } shelfLife)
         {
             document["shelfLifeDays"] = shelfLife.Days;
@@ -227,7 +260,9 @@ internal static class ProductDocument
             CosmosJson.ParseTimestamp(document["lookupFailedSince"]),
             CosmosJson.ParseTimestamp(document["namedAt"]),
             Guid.TryParse(CosmosJson.Text(document["namedBy"]), out var namedBy) ? namedBy : null,
-            ReadShelfLife(document));
+            ReadShelfLife(document),
+            CosmosJson.ParseTimestamp(document["editedAt"]),
+            Guid.TryParse(CosmosJson.Text(document["editedBy"]), out var editedBy) ? editedBy : null);
     }
 
     private static ShelfLife? ReadShelfLife(JsonObject document)

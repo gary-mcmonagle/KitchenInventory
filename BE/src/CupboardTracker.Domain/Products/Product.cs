@@ -39,7 +39,9 @@ public sealed record Product(
     DateTimeOffset? LookupFailedSince,
     DateTimeOffset? NamedAt = null,
     Guid? NamedBy = null,
-    ShelfLife? ShelfLife = null)
+    ShelfLife? ShelfLife = null,
+    DateTimeOffset? EditedAt = null,
+    Guid? EditedBy = null)
 {
     /// <summary>Known but not yet estimated: the shelf-life timer picks it up (#52). Unknown items get no shelf life.</summary>
     public bool NeedsShelfLife => Status == ProductStatus.Known && ShelfLife is null;
@@ -60,6 +62,18 @@ public sealed record Product(
             LookupFailedSince = null,
             NamedAt = at,
             NamedBy = userId,
+        };
+
+    /// <summary>A known product's details corrected in item detail (#53): manual from now on, so nothing (Open Food
+    /// Facts, Jev) overwrites the name. Its shelf life is kept.</summary>
+    public Product EditedByUser(string name, string? brand, string? size, Guid userId, DateTimeOffset at) =>
+        this with
+        {
+            Source = ProductSource.Manual,
+            DisplayName = name,
+            Details = new ProductDetails(name, brand, size, Details?.ImageUrl, Details?.CategoryTags ?? []),
+            EditedAt = at,
+            EditedBy = userId,
         };
 
     public static string UnknownName(string barcode) => $"Unknown item ({barcode})";

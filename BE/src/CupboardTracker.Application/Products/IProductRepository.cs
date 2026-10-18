@@ -25,6 +25,12 @@ public interface IProductRepository
     /// (ETag). False if it was named or looked up meanwhile.</summary>
     Task<bool> TryReplaceUnnamedAsync(Product updated, CancellationToken cancellationToken);
 
+    /// <summary>A product and its version (ETag), for edits in item detail (#53).</summary>
+    Task<Versioned<Product>?> GetVersionedAsync(Guid productId, CancellationToken cancellationToken);
+
+    /// <summary>Replaces the product only if it hasn't changed since it was read (ETag). False on a conflict.</summary>
+    Task<bool> TryReplaceAsync(Versioned<Product> current, Product updated, CancellationToken cancellationToken);
+
     /// <summary>Known products with no shelf life yet (#52).</summary>
     Task<IReadOnlyList<Product>> GetNeedingShelfLifeAsync(int max, CancellationToken cancellationToken);
 

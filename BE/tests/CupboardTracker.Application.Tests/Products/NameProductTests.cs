@@ -144,7 +144,7 @@ public sealed class GetProductTests
                 TestScans.At.AddHours(-hoursAgo), null, null, null, null));
         }
 
-        var view = await new GetProduct(products, units, new Devices()).ExecuteAsync(id, CancellationToken.None);
+        var view = await new GetProduct(products, units, new Devices(), TestSettings.Stock(), new FixedClock(TestScans.At)).ExecuteAsync(id, CancellationToken.None);
 
         Assert.NotNull(view);
         Assert.Equal(("501001234567", ProductStatus.NoMatch, 2), (view.Barcode, view.Status, view.InStockCount));
@@ -155,5 +155,5 @@ public sealed class GetProductTests
 
     [Fact]
     public async Task Unknown_product() =>
-        Assert.Null(await new GetProduct(new FakeProducts(), new FakeUnits(), new Devices()).ExecuteAsync(Guid.NewGuid(), CancellationToken.None));
+        Assert.Null(await new GetProduct(new FakeProducts(), new FakeUnits(), new Devices(), TestSettings.Stock(), new FixedClock(TestScans.At)).ExecuteAsync(Guid.NewGuid(), CancellationToken.None));
 }

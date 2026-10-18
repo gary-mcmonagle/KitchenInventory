@@ -79,6 +79,20 @@ export interface Product {
     inStockCount: number;
     latestCheckedInAt: string | null;
     latestDeviceRole: "in" | "out" | null;
+    shelfLifeDays: number | null;
+    /** "jev" or "manual". */
+    shelfLifeSource: string | null;
+    /** In-stock units, soonest estimated expiry first (#53). */
+    units: ProductUnit[];
+}
+
+export interface ProductUnit {
+    unitId: string;
+    checkedInAt: string;
+    /** YYYY-MM-DD, or null until estimated. */
+    estimatedExpiryDate: string | null;
+    expirySource: "shelfLife" | "manual" | null;
+    daysUntilExpiry: number | null;
 }
 
 export interface NameDetails {
@@ -132,6 +146,29 @@ export class ApiClient {
     /** Checks out one unit (409 → ApiError: nothing in stock). */
     checkOut(productId: string): Promise<CheckedOut> {
         return this.send<CheckedOut>("POST", `/api/products/${encodeURIComponent(productId)}/check-out`);
+    }
+
+    /** Checks out that unit (item detail; 409 → ApiError: not in stock). */
+    checkOutUnit(unitId: string): Promise<CheckedOut> {
+        return this.send<CheckedOut>("POST", `/api/units/${encodeURIComponent(unitId)}/check-out`);
+    }
+
+    /** Sets one unit's estimated expiry date by hand (YYYY-MM-DD). */
+    setUnitExpiry(unitId: string, date: string): Promise<{ unitId: string; estimatedExpiryDate: string }> {
+        return this.send("PUT", `/api/units/${encodeURIComponent(unitId)}/estimated-expiry`, { date });
+    }
+
+    /** Sets a product's shelf life by hand, for units bought from now on. */
+    setShelfLife(productId: string, days: number): Promise<{ productId: string; shelfLifeDays: number }> {
+        return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/shelf-life`, { days });
+    }
+
+    /** Corrects a known product's details (400 → ApiError with FieldErrors). */
+    editDetails(
+        productId: string,
+        details: NameDetails,
+    ): Promise<{ productId: string; displayName: string }> {
+        return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/details`, details);
     }
 
     /** Puts a checked-out unit back in stock (idempotent). */

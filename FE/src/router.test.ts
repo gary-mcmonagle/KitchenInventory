@@ -19,3 +19,14 @@ test("navigate pushes history and tells listeners", () => {
     window.removeEventListener("popstate", heard);
     navigate("/");
 });
+
+test("item detail and edit paths (#53)", async () => {
+    const { itemPath, editPath, matchItemPath, matchEditPath, matchNamePath } = await import("./router");
+    expect(itemPath("a b")).toBe("/products/a%20b");
+    expect(editPath("a b")).toBe("/products/a%20b/edit");
+    expect(matchItemPath("/products/a%20b")).toBe("a b");
+    expect(matchItemPath("/products/a%20b/name")).toBeNull();
+    expect(matchEditPath("/products/a%20b/edit")).toBe("a b");
+    expect(matchEditPath("/products/a%20b")).toBeNull();
+    expect(matchNamePath("/products/a%20b/edit")).toBeNull();
+});

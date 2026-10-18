@@ -6,6 +6,16 @@ public enum UnitStatus
     CheckedOut,
 }
 
+/// <summary>Where a unit's estimated expiry date came from (#53).</summary>
+public enum ExpirySource
+{
+    /// <summary>The bought date plus the product's shelf life (#52).</summary>
+    ShelfLife,
+
+    /// <summary>Set by a person in item detail. Never recalculated.</summary>
+    Manual,
+}
+
 /// <summary>One physical item in the house. Created on check-in (id = the check-in scan ID); checked out, never deleted.</summary>
 public sealed record Unit(
     Guid UnitId,
@@ -19,7 +29,8 @@ public sealed record Unit(
     Guid? CheckOutScanId,
     string? CheckOutSource,
     DateOnly? EstimatedExpiryDate,
-    Guid? CheckedOutBy = null)
+    Guid? CheckedOutBy = null,
+    ExpirySource? ExpirySource = null)
 {
     /// <summary><see cref="CheckOutSource"/> for check-outs from the stock list (scanner check-outs use "scanner").</summary>
     public const string AppSource = "ui";
@@ -35,7 +46,12 @@ public sealed record Unit(
             CheckedOutBy = userId,
         };
 
-    public Unit WithEstimatedExpiry(DateOnly date) => this with { EstimatedExpiryDate = date };
+    public Unit WithEstimatedExpiry(DateOnly date) =>
+        this with { EstimatedExpiryDate = date, ExpirySource = Stock.ExpirySource.ShelfLife };
+
+    /// <summary>A date a person set (#53): this unit only, and never recalculated.</summary>
+    public Unit WithManualExpiry(DateOnly date) =>
+        this with { EstimatedExpiryDate = date, ExpirySource = Stock.ExpirySource.Manual };
 
     /// <summary>Back in stock, as if it had never been checked out.</summary>
     public Unit UndoCheckOut() =>
