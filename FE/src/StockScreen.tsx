@@ -488,14 +488,15 @@ function KnownRow({
                             <path d="M7 9h10v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z" />
                             <path d="M5.5 6.5L17 3.5" />
                         </svg>
-                        Opened
+                        {/* "Open" while it can be done; "Opened" once one is (Gary, 2026-10-18). */}
+                        {alreadyOpen ? "Opened" : "Open"}
                     </button>
                     <button
                         type="button"
                         className={styles.checkOut}
                         onClick={onCheckOut}
                         disabled={busy}
-                        aria-label={`Check out one ${product.displayName}`}
+                        aria-label={`Remove one ${product.displayName}`}
                     >
                         <svg
                             width="18"
@@ -508,9 +509,12 @@ function KnownRow({
                             strokeLinejoin="round"
                             aria-hidden="true"
                         >
-                            <path d="M5 12.5l4.5 4.5L19 7.5" />
+                            <path d="M4 7h16" />
+                            <path d="M10 11v6M14 11v6" />
+                            <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+                            <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                         </svg>
-                        Check out
+                        Remove
                     </button>
                 </div>
             </div>

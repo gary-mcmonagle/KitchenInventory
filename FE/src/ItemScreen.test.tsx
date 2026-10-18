@@ -108,8 +108,8 @@ test("heading, use-by card, units and barcode as in the mockup", async () => {
 
     const units = within(screen.getByRole("region", { name: "In the cupboard" })).getAllByRole("listitem");
     expect(units.map((u) => u.textContent)).toEqual([
-        "Unit 1Bought 13 Oct · est. 20 OctCheck out",
-        "Unit 2Bought 15 Oct · est. 22 OctCheck out",
+        "Unit 1Bought 13 Oct · est. 20 OctRemove",
+        "Unit 2Bought 15 Oct · est. 22 OctRemove",
     ]);
     expect(screen.getByText("Barcode 4056 4898 9911 2")).toBeInTheDocument();
 });
@@ -151,18 +151,18 @@ test("dates set by hand are marked", () => {
 
 test("check out a unit: toast, then Undo puts it back", async () => {
     const api = setup([milk(), milk({ units: [unit("u1")] }), milk()]);
-    await screen.findByRole("button", { name: "Check out unit 2" });
+    await screen.findByRole("button", { name: "Remove unit 2" });
 
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Check out unit 2" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Remove unit 2" })));
 
     expect(api.checkOutUnit).toHaveBeenCalledWith("u2");
     expect(screen.getByRole("status", notFeed)).toHaveTextContent("Checked out Semi-skimmed milk");
-    expect(screen.queryByRole("button", { name: "Check out unit 2" })).not.toBeInTheDocument(); // reloaded
+    expect(screen.queryByRole("button", { name: "Remove unit 2" })).not.toBeInTheDocument(); // reloaded
 
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Undo" })));
 
     expect(api.undoCheckOut).toHaveBeenCalledWith("u2");
-    expect(await screen.findByRole("button", { name: "Check out unit 2" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Remove unit 2" })).toBeInTheDocument();
 });
 
 test("checking out the last unit returns to the stock list", async () => {
@@ -176,7 +176,7 @@ test("checking out the last unit returns to the stock list", async () => {
     });
     await screen.findByText("Unit 1");
 
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Check out unit 1" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Remove unit 1" })));
 
     expect(api.checkOutUnit).toHaveBeenCalledWith("u1");
     expect(window.location.pathname).toBe("/");
@@ -184,9 +184,9 @@ test("checking out the last unit returns to the stock list", async () => {
 
 test("a unit already gone says so", async () => {
     setup([milk()], { checkOutUnit: vi.fn(async () => Promise.reject(new ApiError(409, "gone"))) });
-    await screen.findByRole("button", { name: "Check out unit 1" });
+    await screen.findByRole("button", { name: "Remove unit 1" });
 
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Check out unit 1" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Remove unit 1" })));
 
     expect(screen.getByRole("status", notFeed)).toHaveTextContent("That one's already been checked out.");
 });
@@ -360,7 +360,7 @@ test("More opens a sheet per unit: Opened and Froze it, and Defrosted only for a
         within(first)
             .getAllByRole("button")
             .map((b) => b.textContent),
-    ).toEqual(["Opened", "Froze it", "Different day?"]);
+    ).toEqual(["Open", "Froze it", "Different day?"]);
     expect(screen.getByRole("button", { name: "More actions for Unit 1" })).toHaveAttribute(
         "aria-expanded",
         "true",
@@ -372,7 +372,7 @@ test("More opens a sheet per unit: Opened and Froze it, and Defrosted only for a
         within(second)
             .getAllByRole("button")
             .map((b) => b.textContent),
-    ).toEqual(["Opened", "Defrosted", "Different day?"]);
+    ).toEqual(["Open", "Defrosted", "Different day?"]);
     expect(screen.queryByRole("group", { name: /Unit 1/ })).not.toBeInTheDocument(); // one sheet at a time
 });
 
@@ -382,7 +382,7 @@ test("Opened today: the unit updates with its pill, the date, the storage hint, 
     setup([pesto([unit("u1")]), pesto([openedJar]), pesto([unit("u1")])], { markUnit, undoStateChange });
 
     fireEvent.click(await screen.findByRole("button", { name: "More actions for Unit 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Opened" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
     expect(await screen.findByText("Marked as opened")).toBeInTheDocument();
     expect(markUnit).toHaveBeenCalledWith("u1", "opened", undefined);

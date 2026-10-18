@@ -78,7 +78,7 @@ function setup(overrides: Partial<Record<"checkOut" | "undoCheckOut", ReturnType
     return api;
 }
 
-const checkOutButton = (name: string) => screen.getByRole("button", { name: `Check out one ${name}` });
+const checkOutButton = (name: string) => screen.getByRole("button", { name: `Remove one ${name}` });
 
 afterEach(() => vi.useRealTimers());
 

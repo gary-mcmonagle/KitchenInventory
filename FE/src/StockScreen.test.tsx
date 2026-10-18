@@ -51,8 +51,8 @@ test("named products without an estimate are in Later, in the API's order, with 
     expect(within(section).getByText("2 items")).toBeInTheDocument();
     const rows = within(section).getAllByRole("listitem");
     expect(rows.map((r) => r.textContent)).toEqual([
-        "BBeef GravyBisto · 230g · ×2OpenedCheck out",
-        "Wwalnut halves200gOpenedCheck out",
+        "BBeef GravyBisto · 230g · ×2OpenRemove",
+        "Wwalnut halves200gOpenRemove",
     ]);
     expect(screen.getByText("3 items · 0 to use first")).toBeInTheDocument(); // header summary: units
     expect(screen.queryByRole("region", { name: /Waiting for a name/ })).not.toBeInTheDocument();
@@ -117,7 +117,7 @@ test("Use first and Later with the mockup's badges, notes, summary and disclaime
     expect(within(yoghurt).getByText("Bought 6 Oct · keeps about 2 weeks")).toBeInTheDocument();
     expect(within(beans).getByText("Est. Oct 2028").className).toMatch(/_later_/);
     expect(within(beans).getByText("Bought 4 Oct · keeps about 2 years")).toBeInTheDocument();
-    expect(walnuts.textContent).toBe("WWalnutsBisto · 230gOpenedCheck out"); // no estimate yet: no badge or note
+    expect(walnuts.textContent).toBe("WWalnutsBisto · 230gOpenRemove"); // no estimate yet: no badge or note
 
     const sections = screen.getAllByRole("region").map((r) => r.getAttribute("aria-labelledby"));
     expect(sections).toEqual(["section-use-first", "section-later", "section-waiting-for-a-name"]);
@@ -162,7 +162,7 @@ test("Check out and the name link on named rows, Name it on unnamed rows, nothin
     await screen.findByRole("region", { name: /Later/ });
     expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
         "Mark one Beef Gravy as opened",
-        "Check out one Beef Gravy",
+        "Remove one Beef Gravy",
         "Name it",
     ]);
     const unnamed = screen.getByRole("region", { name: /Waiting for a name/ });
@@ -311,7 +311,7 @@ test("Opened sits above Check out, opens the next one with an Undo toast, and is
 
     const open = await screen.findByRole("button", { name: "Mark one Pesto as opened" });
     const buttons = within(open.parentElement!).getAllByRole("button");
-    expect(buttons.map((b) => b.textContent)).toEqual(["Opened", "Check out"]); // Opened first, above
+    expect(buttons.map((b) => b.textContent)).toEqual(["Open", "Remove"]); // Opened first, above
     fireEvent.click(open);
 
     expect(await screen.findByText("Marked Pesto as opened")).toBeInTheDocument();

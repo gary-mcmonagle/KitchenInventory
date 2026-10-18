@@ -318,7 +318,7 @@ function Detail({
                                             className={styles.checkOut}
                                             disabled={busy}
                                             onClick={() => onCheckOut(unit)}
-                                            aria-label={`Check out unit ${i + 1}`}
+                                            aria-label={`Remove unit ${i + 1}`}
                                         >
                                             <svg
                                                 width="18"
@@ -331,9 +331,12 @@ function Detail({
                                                 strokeLinejoin="round"
                                                 aria-hidden="true"
                                             >
-                                                <path d="M5 12.5l4.5 4.5L19 7.5" />
+                                                <path d="M4 7h16" />
+                                                <path d="M10 11v6M14 11v6" />
+                                                <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+                                                <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                                             </svg>
-                                            Check out
+                                            Remove
                                         </button>
                                     </div>
                                 </div>
@@ -426,7 +429,7 @@ function StateSheet({
                         disabled={busy}
                         onClick={() => pick("opened")}
                     >
-                        Opened
+                        Open
                     </button>
                 )}
                 {!isFrozen(unit) && (
