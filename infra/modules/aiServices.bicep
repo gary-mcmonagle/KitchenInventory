@@ -1,4 +1,4 @@
-// Azure AI Services (Foundry) for photo recognition (spike #41): a vision model that names what's in a photo, plus
+// Azure AI Services (Foundry) for photo recognition (spike #41; the API uses it from #58): a vision model that names what's in a photo, plus
 // Document Intelligence (Read) for the OCR comparison, in one multi-service account. No keys: local auth disabled.
 // Models are Standard deployments, so images are processed in this region (UK South), not globally.
 
@@ -13,6 +13,9 @@ param name string
 
 @description('Object ID of a person allowed to call the models (Cognitive Services User), e.g. for the spike scripts. Empty skips it.')
 param userPrincipalId string = ''
+
+@description('Managed identities that call the models (Cognitive Services User): the API app, for photo recognition (#58).')
+param appPrincipalIds array = []
 
 @description('Thousands of tokens per minute for each model deployment (household volume is tiny).')
 @minValue(1)
@@ -72,6 +75,18 @@ resource gpt41mini 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01'
   }
   dependsOn: [gpt4o] // deployments on one account are created one at a time
 }
+
+resource apps 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
+  for principalId in appPrincipalIds: {
+    scope: account
+    name: guid(account.id, principalId, cognitiveServicesUser)
+    properties: {
+      principalId: principalId
+      principalType: 'ServicePrincipal'
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesUser)
+    }
+  }
+]
 
 resource user 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(userPrincipalId)) {
   scope: account

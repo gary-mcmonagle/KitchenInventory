@@ -82,6 +82,10 @@ var suffix = take(uniqueString(subscription().id, resourceGroupName), 6)
 // depend on the vault module, which in turn needs the API app's identity for its role assignment.
 var keyVaultName = 'kv-${appName}-${suffix}'
 
+// Photo recognition (#58): the endpoint follows from the account's name (its custom subdomain), so the API app's
+// settings don't depend on the module that grants the API app its role.
+var aiServicesName = 'ais-${appName}-${suffix}'
+
 module monitoring 'modules/monitoring.bicep' = {
   scope: rg
   name: 'monitoring'
@@ -205,6 +209,9 @@ module api 'modules/functionApp.bicep' = {
       JEV_BASE_URL: 'https://api.typesafe.ai'
       JEV_MODEL: jevModel
       JEV_API_KEY: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=jev-api-key)'
+      // Photo recognition (#58, spike #41): gpt-4o on Foundry, called with the app's identity.
+      AI_SERVICES_ENDPOINT: 'https://${aiServicesName}.cognitiveservices.azure.com/'
+      PHOTO_MODEL_DEPLOYMENT: 'gpt-4o'
     }, signalRSettings)
   }
 }
@@ -263,8 +270,9 @@ module aiServices 'modules/aiServices.bicep' = {
   params: {
     location: location
     tags: tags
-    name: 'ais-${appName}-${suffix}'
+    name: aiServicesName
     userPrincipalId: verifierPrincipalId
+    appPrincipalIds: [api.outputs.principalId]
   }
 }
 
