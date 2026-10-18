@@ -14,7 +14,9 @@ public sealed class RecordScanTests
     private readonly FakeDevices devices = new();
     private readonly ListLogger logger = new();
 
-    private RecordScan UseCase() => new(scanEvents, devices, new FixedClock(Now), logger);
+    private readonly FakeFeed feed = new();
+
+    private RecordScan UseCase() => new(scanEvents, devices, feed.Notifier(), new FixedClock(Now), logger);
 
     private static RecordScanCommand Valid(
         string? scanId = ScanId, string? barcode = "5000354922831", string? deviceId = "scanner-in",
@@ -46,6 +48,33 @@ public sealed class RecordScanTests
         var recorded = Assert.IsType<RecordScanResult.Recorded>(second);
         Assert.True(recorded.WasAlreadyRecorded);
         Assert.Single(scanEvents.Stored);
+    }
+
+    [Fact]
+    public async Task A_stored_scan_is_sent_to_the_feed_once_and_never_for_a_resend()
+    {
+        await UseCase().ExecuteAsync(Valid(), CancellationToken.None);
+        await UseCase().ExecuteAsync(Valid(), CancellationToken.None);
+
+        var sent = Assert.IsType<CupboardTracker.Application.ScanFeed.ScanReceived>(Assert.Single(feed.Sent));
+        Assert.Equal((Guid.Parse(ScanId), "scanner-in", Role.In, "5000354922831", Now),
+            (sent.ScanId, sent.DeviceId, sent.Role, sent.Barcode, sent.OccurredAt));
+    }
+
+    [Fact]
+    public async Task A_feed_failure_never_fails_ingest()
+    {
+        feed.Fail = true;
+
+        Assert.IsType<RecordScanResult.Recorded>(await UseCase().ExecuteAsync(Valid(), CancellationToken.None));
+        Assert.Single(scanEvents.Stored);
+    }
+
+    [Fact]
+    public async Task Invalid_scans_send_nothing()
+    {
+        await UseCase().ExecuteAsync(Valid(barcode: "12"), CancellationToken.None);
+        Assert.Empty(feed.Sent);
     }
 
     [Fact]

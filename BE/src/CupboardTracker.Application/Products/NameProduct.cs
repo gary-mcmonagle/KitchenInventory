@@ -1,3 +1,4 @@
+using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Application.Users;
 using Microsoft.Extensions.Logging;
 
@@ -65,7 +66,8 @@ public abstract record NameProductResult
 /// every unit shows the name and future check-ins never look it up. Only applies while the product is still unnamed:
 /// the lookup-retry timer and two people naming at once can't overwrite each other.
 /// </summary>
-public sealed partial class NameProduct(IProductRepository products, TimeProvider clock, ILogger<NameProduct> logger)
+public sealed partial class NameProduct(
+    IProductRepository products, ScanFeedNotifier feed, TimeProvider clock, ILogger<NameProduct> logger)
 {
     public const int MaxNameLength = ProductDetailsInput.MaxNameLength;
     public const int MaxDetailLength = ProductDetailsInput.MaxDetailLength;
@@ -97,6 +99,7 @@ public sealed partial class NameProduct(IProductRepository products, TimeProvide
         }
 
         LogNamed(productId, user.ObjectId);
+        await feed.NotifyAsync(new ProductNamed(productId, input.Name, clock.GetUtcNow()), cancellationToken);
         return new NameProductResult.Named(productId, input.Name);
     }
 

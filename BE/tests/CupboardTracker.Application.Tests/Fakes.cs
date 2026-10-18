@@ -219,6 +219,29 @@ internal sealed class FakeUnmatched : IUnmatchedCheckOutRepository
         Task.FromResult(Records.TryAdd(unmatched.ScanId, unmatched));
 }
 
+/// <summary>Records what the scan feed would send; can be told to fail (#54).</summary>
+internal sealed class FakeFeed : CupboardTracker.Application.ScanFeed.IScanFeedPublisher
+{
+    public List<CupboardTracker.Application.ScanFeed.ScanFeedEvent> Sent { get; } = [];
+
+    public bool Fail { get; set; }
+
+    public Task PublishAsync(CupboardTracker.Application.ScanFeed.ScanFeedEvent feedEvent, CancellationToken cancellationToken)
+    {
+        if (Fail)
+        {
+            throw new InvalidOperationException("SignalR is down");
+        }
+
+        Sent.Add(feedEvent);
+        return Task.CompletedTask;
+    }
+
+    public CupboardTracker.Application.ScanFeed.ScanFeedNotifier Notifier(
+        ListLogger<CupboardTracker.Application.ScanFeed.ScanFeedNotifier>? logger = null) =>
+        new(this, logger ?? new ListLogger<CupboardTracker.Application.ScanFeed.ScanFeedNotifier>());
+}
+
 internal static class TestSettings
 {
     public static readonly TimeZoneInfo London = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");

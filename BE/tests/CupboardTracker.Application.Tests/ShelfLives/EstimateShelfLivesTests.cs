@@ -106,7 +106,7 @@ public sealed class EstimateShelfLivesTests
         var id = Guid.NewGuid();
         products.Products[id] = Product.NotFound(id, "20055363", Now, 1);
         var unit = InStock(id, Now.AddDays(-1));
-        await new NameProduct(products, new FixedClock(Now), new ListLogger<NameProduct>()).ExecuteAsync(
+        await new NameProduct(products, new FakeFeed().Notifier(), new FixedClock(Now), new ListLogger<NameProduct>()).ExecuteAsync(
             id, new NameProductCommand("Plain naan", null, null), new CurrentUser(Guid.NewGuid(), "Gary"), CancellationToken.None);
 
         await UseCase().ExecuteAsync(CancellationToken.None);

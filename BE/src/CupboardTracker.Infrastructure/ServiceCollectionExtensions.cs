@@ -5,12 +5,14 @@ using CupboardTracker.Application.Hubs;
 using CupboardTracker.Application.Notifications;
 using CupboardTracker.Application.Ping;
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Application.Scans;
 using CupboardTracker.Application.ShelfLives;
 using CupboardTracker.Application.Stock;
 using CupboardTracker.Infrastructure.Cosmos;
 using CupboardTracker.Infrastructure.Email;
 using CupboardTracker.Infrastructure.Jev;
+using CupboardTracker.Infrastructure.SignalR;
 using CupboardTracker.Infrastructure.OpenFoodFacts;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
@@ -42,6 +44,15 @@ public static class ServiceCollectionExtensions
                 ?? throw new InvalidOperationException("The COSMOS_DATABASE app setting is missing.");
             return new CosmosContainers(client, database);
         });
+        // Live scan feed (#54): both apps send through SignalR, best-effort; the API app also negotiates and catches up.
+        services.AddSingleton(sp => SignalROptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<SignalRScanFeed>();
+        services.AddSingleton<IScanFeedPublisher>(sp => sp.GetRequiredService<SignalRScanFeed>());
+        services.AddTransient<ScanFeedNotifier>();
+        services.AddSingleton<IScanFeedQueries, CosmosScanFeedQueries>();
+        services.AddTransient<GetScanFeed>();
+        services.AddTransient<DismissFeedItem>();
+
         services.AddSingleton<IScanEventRepository, CosmosScanEventRepository>();
         services.AddSingleton<IDeviceRepository, CosmosDeviceRepository>();
         services.AddTransient<RecordScan>();

@@ -41,8 +41,12 @@ public sealed record Product(
     Guid? NamedBy = null,
     ShelfLife? ShelfLife = null,
     DateTimeOffset? EditedAt = null,
-    Guid? EditedBy = null)
+    Guid? EditedBy = null,
+    DateTimeOffset? FeedDismissedAt = null)
 {
+    /// <summary>Someone dismissed its amber "No match" toast (#54). Hides the toast only; a newer check-in shows it again.</summary>
+    public Product DismissedFromFeed(DateTimeOffset at) => this with { FeedDismissedAt = at };
+
     /// <summary>Known but not yet estimated: the shelf-life timer picks it up (#52). Unknown items get no shelf life.</summary>
     public bool NeedsShelfLife => Status == ProductStatus.Known && ShelfLife is null;
 

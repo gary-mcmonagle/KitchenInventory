@@ -18,7 +18,9 @@ public sealed class NameProductTests
     private readonly FakeProducts products = new();
     private readonly FakeUnits units = new();
 
-    private NameProduct UseCase() => new(products, clock, new ListLogger<NameProduct>());
+    private readonly FakeFeed feed = new();
+
+    private NameProduct UseCase() => new(products, feed.Notifier(), clock, new ListLogger<NameProduct>());
 
     private Guid Store(Product product)
     {
@@ -107,7 +109,7 @@ public sealed class NameProductTests
     public async Task A_later_check_in_uses_the_manual_name_with_no_lookup()
     {
         var resolver = new ProductResolver(products, lookup, clock, new ListLogger<ProductResolver>());
-        var checkIn = new CheckInScan(resolver, units, TestSettings.Stock(), new ListLogger<CheckInScan>());
+        var checkIn = new CheckInScan(resolver, units, TestSettings.Stock(), new FakeFeed().Notifier(), clock, new ListLogger<CheckInScan>());
         await checkIn.ExecuteAsync(TestScans.Make(Barcode, Role.In), CancellationToken.None); // no match on OFF
         Assert.Single(lookup.Calls);
         var id = products.Lookups[Barcode];

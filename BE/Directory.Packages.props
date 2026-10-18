@@ -16,6 +16,8 @@
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
     <PackageVersion Include="Azure.Communication.Email" Version="1.1.0" />
+    <!-- Live scan feed (#54): send and negotiate over REST with managed identity -->
+    <PackageVersion Include="Microsoft.Azure.SignalR.Management" Version="1.33.1" />
     <!-- Bearer-token validation in the API app (#36) -->
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
     <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.23.0" />

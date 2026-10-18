@@ -181,7 +181,7 @@ public sealed class ItemDetailTests
         products.Lookups["4056489899112"] = milk;
         var resolver = new ProductResolver(products, new FakeLookup(), clock, new ListLogger<ProductResolver>());
         var scan = TestScans.Make("4056489899112", Role.In, at: Now);
-        await new CheckInScan(resolver, units, TestSettings.Stock(), new ListLogger<CheckInScan>()).ExecuteAsync(scan, CancellationToken.None);
+        await new CheckInScan(resolver, units, TestSettings.Stock(), new FakeFeed().Notifier(), clock, new ListLogger<CheckInScan>()).ExecuteAsync(scan, CancellationToken.None);
         Assert.Equal(Today.AddDays(14), units.Units[scan.ScanId].Unit.EstimatedExpiryDate);
     }
 

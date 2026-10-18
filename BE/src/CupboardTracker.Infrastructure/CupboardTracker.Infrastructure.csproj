@@ -14,5 +14,6 @@
     <PackageReference Include="Azure.Identity" />
     <PackageReference Include="Azure.Communication.Email" />
     <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Azure.SignalR.Management" />
   </ItemGroup>
 </Project>
