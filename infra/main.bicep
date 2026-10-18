@@ -44,6 +44,12 @@ param entraApiClientId string = ''
 @description('Client IDs allowed to call the API with a user token: the SPA, and the Azure CLI for verification (#36).')
 param entraAllowedClientIds string = ''
 
+@description('Object ID of the person who sets secrets with deploy/secrets.sh (Key Vault Secrets Officer). Empty skips it.')
+param vaultOfficerPrincipalId string = ''
+
+@description('Jev model version, pinned (spike #40: aliases move when a release ships).')
+param jevModel string = 'jev-1.13.0'
+
 @description('Minutes a hub may be silent before the offline alert email (#44).')
 @minValue(1)
 param offlineThresholdMinutes int = 20
@@ -71,6 +77,10 @@ resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
 
 // Short, stable suffix for globally unique names (storage, Cosmos, Function apps).
 var suffix = take(uniqueString(subscription().id, resourceGroupName), 6)
+
+// Key Vault (#42). Named here, not taken from the module's output, so the API app's Key Vault references don't
+// depend on the vault module, which in turn needs the API app's identity for its role assignment.
+var keyVaultName = 'kv-${appName}-${suffix}'
 
 module monitoring 'modules/monitoring.bicep' = {
   scope: rg
@@ -169,6 +179,10 @@ module api 'modules/functionApp.bicep' = {
       ENTRA_TENANT_ID: tenant().tenantId
       ENTRA_API_CLIENT_ID: entraApiClientId
       ENTRA_ALLOWED_CLIENT_IDS: entraAllowedClientIds
+      // Jev (#52): the key is a Key Vault reference, resolved by the platform with the app's identity (#42).
+      JEV_BASE_URL: 'https://api.typesafe.ai'
+      JEV_MODEL: jevModel
+      JEV_API_KEY: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=jev-api-key)'
     }
   }
 }
@@ -192,6 +206,19 @@ module communicationAccess 'modules/communicationAccess.bicep' = {
   params: {
     communicationServiceName: communication.outputs.communicationServiceName
     principalId: api.outputs.principalId
+  }
+}
+
+module keyVault 'modules/keyVault.bicep' = {
+  scope: rg
+  name: 'key-vault'
+  params: {
+    location: location
+    tags: tags
+    name: keyVaultName
+    // Only the API app needs a secret (Jev); ingest has none.
+    secretReaderPrincipalIds: [api.outputs.principalId]
+    vaultOfficerPrincipalId: vaultOfficerPrincipalId
   }
 }
 
@@ -233,4 +260,5 @@ output staticWebAppHostname string = staticWebApp.outputs.defaultHostname
 output communicationServiceName string = communication.outputs.communicationServiceName
 output emailSender string = communication.outputs.senderAddress
 output errorAlertRuleName string = errorAlert.outputs.ruleName
+output keyVaultName string = keyVault.outputs.name
 output logAnalyticsWorkspaceName string = 'log-${appName}-tracker'
