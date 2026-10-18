@@ -3,9 +3,11 @@
 #
 # Usage:
 #   AZURE_CONFIG_DIR=~/.azure-cupboard-deployer az login --tenant <tenantId>      # once in a while, interactive with MFA
-#   AZURE_CONFIG_DIR=~/.azure-cupboard-deployer deploy/entra.sh [--swa-host <hostname>] [--yes]
+#   AZURE_CONFIG_DIR=~/.azure-cupboard-deployer deploy/entra.sh [--swa-host <hostname>]... [--yes]
 #
-#   --swa-host   the Static Web App's hostname, added as an SPA redirect URI (http://localhost:5173/ is always there)
+#   --swa-host   a hostname the app is served from, added as an SPA redirect URI; give it once per hostname, e.g. the
+#                Static Web App's default hostname AND its custom domain. The list REPLACES the current one, so pass
+#                every hostname each time (http://localhost:5173/ is always there).
 #   --yes        don't ask for confirmation
 #
 # Safe to re-run: the registrations are matched by uniqueName and updated in place. Never run it with Gary's own
@@ -17,11 +19,11 @@ RG=rg-cupboard-tracker
 DEPLOYMENT=cupboard-entra
 DEPLOYER_PREFIX=cupboard-deployer@
 
-SWA_HOST=""
+SWA_HOSTS=()
 YES=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --swa-host) SWA_HOST=${2:?--swa-host needs a hostname}; shift 2 ;;
+    --swa-host) SWA_HOSTS+=("${2:?--swa-host needs a hostname}"); shift 2 ;;
     --yes) YES=true; shift ;;
     -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
@@ -37,10 +39,10 @@ USER_NAME=$(az account show --query user.name -o tsv 2>/dev/null) \
 [[ "$USER_NAME" == "$DEPLOYER_PREFIX"* ]] || fail "Signed in as $USER_NAME, not cupboard-deployer. Sign in as the deployer."
 
 URIS='"http://localhost:5173/"'
-if [[ -n "$SWA_HOST" ]]; then
-  [[ "$SWA_HOST" =~ ^[a-z0-9.-]+$ ]] || fail "--swa-host must be a bare hostname, e.g. nice-sea-0123.azurestaticapps.net"
-  URIS="$URIS,\"https://$SWA_HOST/\""
-fi
+for host in ${SWA_HOSTS[@]+"${SWA_HOSTS[@]}"}; do  # (bash 3.2: an empty array is "unbound" under set -u)
+  [[ "$host" =~ ^[a-z0-9.-]+$ ]] || fail "--swa-host must be a bare hostname, e.g. nice-sea-0123.azurestaticapps.net"
+  URIS="$URIS,\"https://$host/\""
+done
 
 echo "Signed in as: $USER_NAME (profile $AZURE_CONFIG_DIR)"
 echo "Deploying infra/entra.bicep to $RG as deployment '$DEPLOYMENT'"

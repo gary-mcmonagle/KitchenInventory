@@ -5,6 +5,10 @@ param location = 'uksouth'
 param resourceGroupName = 'rg-cupboard-tracker'
 param appName = 'cupboard'
 
+// The Static Web App's custom domain (set up in the portal by Gary, 2026-10-18), allowed in CORS. Sign-in also needs it
+// as an SPA redirect URI: deploy/entra.sh --swa-host <default> --swa-host kitchen.garymcmonagle.com.
+param customDomains = ['kitchen.garymcmonagle.com']
+
 // Set by deploy/infra.sh from the live apps, so re-running infra never resets the deployed commit.
 param ingestCommitSha = readEnvironmentVariable('INGEST_COMMIT_SHA', 'not-deployed')
 param apiCommitSha = readEnvironmentVariable('API_COMMIT_SHA', 'not-deployed')

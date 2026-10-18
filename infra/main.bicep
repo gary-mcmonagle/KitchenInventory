@@ -54,6 +54,9 @@ param jevModel string = 'jev-1.13.0'
 @minValue(1)
 param offlineThresholdMinutes int = 20
 
+@description('Custom domains set up on the Static Web App by hand (e.g. kitchen.garymcmonagle.com): allowed in CORS for the API and SignalR, next to its default hostname.')
+param customDomains array = []
+
 @description('Maximum Flex Consumption instances per Function app (a cost guard; household load is tiny).')
 @minValue(1)
 @maxValue(1000)
@@ -77,6 +80,13 @@ resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
 
 // Short, stable suffix for globally unique names (storage, Cosmos, Function apps).
 var suffix = take(uniqueString(subscription().id, resourceGroupName), 6)
+
+// Where the React app runs: the Static Web App's default hostname, its custom domains, and Vite's dev server.
+var appOrigins = concat(
+  ['https://${staticWebApp.outputs.defaultHostname}'],
+  map(customDomains, d => 'https://${d}'),
+  ['http://localhost:5173']
+)
 
 // Key Vault (#42). Named here, not taken from the module's output, so the API app's Key Vault references don't
 // depend on the vault module, which in turn needs the API app's identity for its role assignment.
@@ -136,10 +146,7 @@ module signalR 'modules/signalR.bicep' = {
     location: location
     tags: tags
     name: 'sigr-${appName}-${suffix}'
-    allowedOrigins: [
-      'https://${staticWebApp.outputs.defaultHostname}'
-      'http://localhost:5173'
-    ]
+    allowedOrigins: appOrigins
   }
 }
 
@@ -182,10 +189,7 @@ module api 'modules/functionApp.bicep' = {
     maximumInstanceCount: functionMaximumInstanceCount
     instanceMemoryMB: functionInstanceMemoryMB
     // The React app calls the API directly from the browser (#37): the Static Web App, and Vite's dev server.
-    corsAllowedOrigins: [
-      'https://${staticWebApp.outputs.defaultHostname}'
-      'http://localhost:5173'
-    ]
+    corsAllowedOrigins: appOrigins
     appSettings: union({
       COMMIT_SHA: apiCommitSha
       COSMOS_ENDPOINT: cosmos.outputs.endpoint
