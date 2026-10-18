@@ -11,7 +11,6 @@ import {
 import {
     boughtDate,
     groupBarcode,
-    initial,
     keepsAbout,
     longDate,
     metaLine,
@@ -22,6 +21,7 @@ import {
     untilSentence,
     type ExpiryTone,
 } from "./format";
+import { ProductTile } from "./ProductTile";
 import { editPath, navigate } from "./router";
 import { TOAST_MS } from "./StockScreen";
 import styles from "./Item.module.css";
@@ -247,9 +247,12 @@ function Detail({
     return (
         <>
             <div className={styles.heading}>
-                <div className={styles.tile} aria-hidden="true">
-                    {initial(product.displayName)}
-                </div>
+                <ProductTile
+                    className={styles.tile}
+                    name={product.displayName}
+                    icon={product.icon}
+                    aisleId={product.aisleId}
+                />
                 <div className={styles.headingText}>
                     <h1 className={styles.name}>{product.displayName}</h1>
                     {meta && <div className={styles.meta}>{meta}</div>}

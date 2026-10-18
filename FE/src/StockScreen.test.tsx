@@ -19,6 +19,9 @@ const product = (overrides: Partial<StockProduct>): StockProduct => ({
     frozenCount: 0,
     soonestState: null,
     soonestStateOn: null,
+    aisleId: "other",
+    icon: null,
+    useFirst: false,
     ...overrides,
 });
 
@@ -47,7 +50,7 @@ test("named products without an estimate are in Later, in the API's order, with 
     );
     render(<StockScreen api={api} />);
 
-    const section = await screen.findByRole("region", { name: /Later/ });
+    const section = await screen.findByRole("region", { name: "Other" }); // no aisle yet (#71)
     expect(within(section).getByText("2 items")).toBeInTheDocument();
     const rows = within(section).getAllByRole("listitem");
     expect(rows.map((r) => r.textContent)).toEqual([
@@ -56,7 +59,6 @@ test("named products without an estimate are in Later, in the API's order, with 
     ]);
     expect(screen.getByText("3 items · 0 to use first")).toBeInTheDocument(); // header summary: units
     expect(screen.queryByRole("region", { name: /Waiting for a name/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: /Use first/ })).not.toBeInTheDocument();
 });
 
 test("Use first and Later with the mockup's badges, notes, summary and disclaimer", async () => {
@@ -64,6 +66,7 @@ test("Use first and Later with the mockup's badges, notes, summary and disclaime
         stockOf(
             product({
                 displayName: "Hummus",
+                aisleId: "chilledDeli",
                 section: "useFirst",
                 soonestEstimatedExpiryDate: "2026-10-15",
                 daysUntilSoonest: -1,
@@ -71,6 +74,7 @@ test("Use first and Later with the mockup's badges, notes, summary and disclaime
             }),
             product({
                 displayName: "Semi-skimmed milk",
+                aisleId: "dairyEggs",
                 count: 2,
                 section: "useFirst",
                 soonestEstimatedExpiryDate: "2026-10-18",
@@ -79,6 +83,7 @@ test("Use first and Later with the mockup's badges, notes, summary and disclaime
             }),
             product({
                 displayName: "Greek yoghurt",
+                aisleId: "dairyEggs",
                 section: "later",
                 soonestEstimatedExpiryDate: "2026-10-20",
                 daysUntilSoonest: 4,
@@ -86,6 +91,7 @@ test("Use first and Later with the mockup's badges, notes, summary and disclaime
             }),
             product({
                 displayName: "Baked beans",
+                aisleId: "tinsJars",
                 section: "later",
                 soonestEstimatedExpiryDate: "2028-10-03",
                 daysUntilSoonest: 718,
@@ -97,30 +103,43 @@ test("Use first and Later with the mockup's badges, notes, summary and disclaime
     );
     render(<StockScreen api={api} />);
 
-    const useFirst = await screen.findByRole("region", { name: /Use first/ });
+    const deli = await screen.findByRole("region", { name: "Chilled & deli" });
     expect(screen.getByText("7 items · 2 to use first")).toBeInTheDocument();
     expect(
         screen.getByText(
             "Dates are estimates: the day it was bought plus how long that kind of food usually keeps.",
         ),
     ).toBeInTheDocument();
-    expect(within(useFirst).getByText("2 items")).toBeInTheDocument();
-    const [hummus, milk] = within(useFirst).getAllByRole("listitem");
+    const [hummus] = within(deli).getAllByRole("listitem");
+    expect(within(deli).getByText("1 to use first").className).toMatch(/_aislePillExpired_/);
+    const dairy = screen.getByRole("region", { name: "Dairy & eggs" });
+    expect(within(dairy).getByText("1 to use first").className).not.toMatch(/_aislePillExpired_/);
+    expect(within(dairy).getByText("2 items")).toBeInTheDocument();
+    const [milk, yoghurt] = within(dairy).getAllByRole("listitem"); // use first first, then the rest
     expect(within(hummus).getByText("Est. expired").className).toMatch(/_expired_/);
     expect(within(hummus).getByText("Bought 10 Oct · keeps about 5 days")).toBeInTheDocument();
     expect(within(milk).getByText("Est. 2 days").className).toMatch(/_soon_/);
     expect(within(milk).getByText("Bought 11 Oct · keeps about 7 days")).toBeInTheDocument();
 
-    const later = screen.getByRole("region", { name: /Later/ });
-    const [yoghurt, beans, walnuts] = within(later).getAllByRole("listitem");
+    const [beans] = within(screen.getByRole("region", { name: "Tins & jars" })).getAllByRole("listitem");
+    const [walnuts] = within(screen.getByRole("region", { name: "Other" })).getAllByRole("listitem");
     expect(within(yoghurt).getByText("Est. 4 days").className).toMatch(/_later_/);
     expect(within(yoghurt).getByText("Bought 6 Oct · keeps about 2 weeks")).toBeInTheDocument();
     expect(within(beans).getByText("Est. Oct 2028").className).toMatch(/_later_/);
     expect(within(beans).getByText("Bought 4 Oct · keeps about 2 years")).toBeInTheDocument();
     expect(walnuts.textContent).toBe("WWalnutsBisto · 230gOpenRemove"); // no estimate yet: no badge or note
 
-    const sections = screen.getAllByRole("region").map((r) => r.getAttribute("aria-labelledby"));
-    expect(sections).toEqual(["section-use-first", "section-later", "section-waiting-for-a-name"]);
+    // Aisles in shop order (#71), then Waiting for a name.
+    const sections = screen
+        .getAllByRole("region")
+        .map((r) => r.getAttribute("aria-label") ?? r.getAttribute("aria-labelledby"));
+    expect(sections).toEqual([
+        "Dairy & eggs",
+        "Chilled & deli",
+        "Tins & jars",
+        "Other",
+        "section-waiting-for-a-name",
+    ]);
 });
 
 test("unnamed products wait for a name, with the grouped barcode and scan date", async () => {
@@ -159,8 +178,10 @@ test("Check out and the name link on named rows, Name it on unnamed rows, nothin
     );
     render(<StockScreen api={api} />);
 
-    await screen.findByRole("region", { name: /Later/ });
+    await screen.findByRole("region", { name: "Other" });
     expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
+        "Use first · 0",
+        "Other1 item",
         "Mark one Beef Gravy as opened",
         "Remove one Beef Gravy",
         "Name it",
@@ -328,4 +349,106 @@ test("Opened is greyed out when every unit is in the freezer", async () => {
     render(<StockScreen api={api} />);
 
     expect(await screen.findByRole("button", { name: "Mark one Peas as opened" })).toBeDisabled();
+});
+
+// ---- Aisles (#71) and icons (#72)
+
+const aisleStock = () =>
+    stockOf(
+        product({
+            displayName: "Bananas",
+            aisleId: "fruitVeg",
+            icon: "banana",
+            section: "useFirst",
+            useFirst: true,
+            daysUntilSoonest: 1,
+            soonestEstimatedExpiryDate: "2026-10-19",
+        }),
+        product({ displayName: "Leeks", aisleId: "fruitVeg", icon: null }),
+        product({ displayName: "Beef Gravy", aisleId: "saucesOils", icon: "bottle-one" }),
+        product({ displayName: "Mystery", aisleId: "other", icon: null }),
+        product({ displayName: "Unknown item (1)", status: "noMatch", barcode: "1" }),
+    );
+
+test("aisles start collapsed unless they have something to use first, and the choice is remembered", async () => {
+    window.localStorage.removeItem("cupboard.aisles.open");
+    const { api } = fakeApi(aisleStock());
+    const { unmount } = render(<StockScreen api={api} />);
+
+    const fruit = await screen.findByRole("button", { name: /Fruit & veg/ });
+    expect(fruit).toHaveAttribute("aria-expanded", "true");
+    expect(fruit).toHaveTextContent("Fruit & veg1 to use first2 items");
+    const sauces = screen.getByRole("button", { name: /Sauces, oils & condiments/ });
+    expect(sauces).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Beef Gravy")).not.toBeInTheDocument();
+
+    fireEvent.click(sauces);
+    expect(await screen.findByText("Beef Gravy")).toBeInTheDocument();
+    unmount();
+
+    render(<StockScreen api={fakeApi(aisleStock()).api} />);
+    expect(await screen.findByText("Beef Gravy")).toBeInTheDocument(); // remembered on this device
+});
+
+test("broken storage falls back to the defaults", async () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("blocked");
+    });
+    render(<StockScreen api={fakeApi(aisleStock()).api} />);
+
+    expect(await screen.findByRole("button", { name: /Fruit & veg/ })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+    );
+    expect(screen.getByRole("button", { name: /Other/ })).toHaveAttribute("aria-expanded", "false");
+    getItem.mockRestore();
+});
+
+test("Use first shows only what needs using, in expanded aisles, and turning it off restores the view", async () => {
+    window.localStorage.removeItem("cupboard.aisles.open");
+    render(<StockScreen api={fakeApi(aisleStock()).api} />);
+    const toggle = await screen.findByRole("button", { name: "Use first · 1" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"))).toEqual(["Fruit & veg"]);
+    expect(screen.getByText("Bananas")).toBeInTheDocument();
+    expect(screen.queryByText("Leeks")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unknown item")).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(screen.getByRole("button", { name: /Sauces/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Leeks")).toBeInTheDocument();
+});
+
+test("with nothing to use first, the toggle still works and says so", async () => {
+    render(
+        <StockScreen api={fakeApi(stockOf(product({ displayName: "Leeks", aisleId: "fruitVeg" }))).api} />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Use first · 0" }));
+
+    expect(screen.getByText("Nothing needs using up right now.")).toBeInTheDocument();
+});
+
+test("tiles show the product's icon, else its aisle's, else the letter", async () => {
+    render(<StockScreen api={fakeApi(aisleStock()).api} />);
+
+    const tile = (name: string) =>
+        (screen.getByText(name).closest("li") as HTMLElement).querySelector("[aria-hidden='true']")!;
+    await screen.findByText("Bananas");
+    expect(tile("Bananas").querySelector("svg")).not.toBeNull();
+    expect(tile("Leeks").querySelector("svg")).not.toBeNull(); // the Fruit & veg icon
+    expect(tile("Mystery").textContent).toBe("M"); // Other: the letter
+});
+
+test("grouping: shop order, use first first within an aisle, unknown items apart", async () => {
+    const { groupByAisle } = await import("./StockScreen");
+    const groups = groupByAisle(aisleStock().products);
+
+    expect(groups.map((g) => g.aisle.id)).toEqual(["fruitVeg", "saucesOils", "other"]);
+    expect(groups[0].products.map((p) => p.displayName)).toEqual(["Bananas", "Leeks"]);
+    expect([groups[0].useFirstCount, groups[0].anyExpired]).toEqual([1, false]);
 });

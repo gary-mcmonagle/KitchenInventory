@@ -50,6 +50,12 @@ export interface StockProduct {
     /** When the soonest unit's date is from being opened, frozen or defrosted: which, and since when (YYYY-MM-DD). */
     soonestState: UnitState | null;
     soonestStateOn: string | null;
+    /** Its aisle (#71): "other" until Jev has chosen one. */
+    aisleId: string;
+    /** Its icon (#72); null: show the aisle's icon, or the letter. */
+    icon: string | null;
+    /** Expired or due within 3 days. */
+    useFirst: boolean;
 }
 
 /** Opened, frozen, defrosted (#65). */
@@ -111,6 +117,11 @@ export interface Product {
     defrosted: StateShelfLife | null;
     openedCount: number;
     frozenCount: number;
+    /** #71, #72: null until Jev has chosen; source "jev" or "manual". */
+    aisleId: string | null;
+    aisleSource: string | null;
+    icon: string | null;
+    iconSource: string | null;
 }
 
 export interface ProductUnit {
@@ -306,6 +317,16 @@ export class ApiClient {
     /** Puts a unit's estimate back as it was before its last state change (#65). */
     undoStateChange(unitId: string): Promise<{ productId: string; unit: ProductUnit }> {
         return this.send("POST", `/api/units/${encodeURIComponent(unitId)}/undo-state-change`);
+    }
+
+    /** Puts a product in an aisle by hand (#71); Jev never overwrites it. */
+    setAisle(productId: string, aisle: string): Promise<{ productId: string; aisle: string }> {
+        return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/aisle`, { aisle });
+    }
+
+    /** Sets a product's icon by hand (#72), or null to let Jev choose again. */
+    setIcon(productId: string, icon: string | null): Promise<{ productId: string; icon: string | null }> {
+        return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/icon`, { icon });
     }
 
     /** Sets how long a product keeps once opened, by hand (#65): for units opened from now on. */

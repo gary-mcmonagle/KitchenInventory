@@ -397,3 +397,90 @@
     color: var(--muted);
     opacity: 1;
 }
+
+/* Aisles (#71): a collapsible header in the section-title style, at least 44 px tall. */
+.aisleHeader {
+    width: 100%;
+    min-height: var(--touch);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 2px;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+    text-align: left;
+    cursor: pointer;
+}
+
+.aisleHeader:disabled {
+    cursor: default;
+}
+
+.aisleName {
+    flex: 1;
+    min-width: 0;
+}
+
+.aislePill {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 12px;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.aislePillExpired {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}
+
+.chevron {
+    flex: none;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+}
+
+.aisleHeader[aria-expanded="false"] .chevron {
+    transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chevron {
+        transition: none;
+    }
+}
+
+/* The Use first toggle (#71), styled as the mockup's filter chips. */
+.chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.chip {
+    min-height: var(--touch);
+    padding: 0 16px;
+    border-radius: var(--radius-chip);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.chip[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #ffffff;
+}

@@ -53,6 +53,10 @@ const milk = (overrides: Partial<Product> = {}): Product => ({
     defrosted: { days: 2, storage: "fridge", source: "jev" },
     openedCount: 0,
     frozenCount: 0,
+    aisleId: null,
+    aisleSource: null,
+    icon: null,
+    iconSource: null,
     units: [
         unit("u1"),
         unit("u2", {

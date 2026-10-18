@@ -155,6 +155,14 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Frozen** – a unit put in the freezer. Its estimate becomes the freeze date plus how long the product keeps in the freezer, and it's checked out last. Shown with a **Frozen** label.
 
+**Aisle** – where a product sits on the stock list, like a supermarket (#71). A fixed list in shop order: Fruit & veg, Bakery, Meat & fish, Dairy & eggs, Chilled & deli, Frozen, Pasta, rice & grains, Tins & jars, Sauces, oils & condiments, Baking & spices, Breakfast & cereal, Snacks & sweets, Drinks, Other. Jev picks each product's aisle once; Gary can change it in Edit details. Aisles collapse, start open only when they have something to use first, and list use-first items first.
+- In code: `Aisles`, `aisleId`
+
+**Use first view** – the stock list's **Use first** toggle (#71): only the products that need using, grouped by aisle, every aisle open. Off by default, never remembered.
+
+**Product icon** – the picture in a product's tile instead of its first letter (#72): an IconPark Outline icon drawn in the tile's green, picked by Jev from a curated food set, or by Gary in Edit details. When Jev isn't sure, the tile shows the product's aisle icon; the letter is the last resort.
+- In code: `ProductIcons`, `ProductTile`, `icon`
+
 **Later** – the stock list section for named products that aren't in Use first, including those with no estimate yet.
 
 **Shelf life** – how long a product usually keeps after it's bought, unopened and in its usual storage. Estimated once per product by Jev; a cautious estimate is used when Jev isn't confident. It can be set by hand in item detail ("set by you"), which applies to units bought from then on and is never overwritten by Jev.

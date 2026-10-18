@@ -22,6 +22,10 @@ const unknown: Product = {
     defrosted: null,
     openedCount: 0,
     frozenCount: 0,
+    aisleId: null,
+    aisleSource: null,
+    icon: null,
+    iconSource: null,
 };
 
 function deferred<T>() {
@@ -194,3 +198,43 @@ test("Name it in the stock list opens the naming screen for that product", async
 });
 
 afterEach(() => window.history.pushState(null, "", "/"));
+
+test("Edit details: the aisle is saved with the form, and an icon is picked from a searchable grid (#71, #72)", async () => {
+    const known: Product = {
+        ...unknown,
+        status: "known",
+        displayName: "Sourdough",
+        aisleId: "other",
+        aisleSource: "jev",
+        icon: "cake",
+        iconSource: "jev",
+    };
+    const api = {
+        product: vi.fn(async () => known),
+        editDetails: vi.fn(async () => ({ productId: "p-1", displayName: "Sourdough" })),
+        setAisle: vi.fn(async () => ({ productId: "p-1", aisle: "bakery" })),
+        setIcon: vi.fn(async (_id: string, icon: string | null) => ({ productId: "p-1", icon })),
+    };
+    window.history.pushState(null, "", "/products/p-1/edit");
+    render(<NameScreen api={api as unknown as ApiClient} productId="p-1" mode="edit" />);
+
+    fireEvent.change(await screen.findByLabelText("Aisle"), { target: { value: "bakery" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByLabelText("Search icons"), { target: { value: "bre" } });
+    const grid = screen.getByRole("group", { name: "Icons" });
+    expect(
+        within(grid)
+            .getAllByRole("button")
+            .map((b) => b.getAttribute("aria-label")),
+    ).toEqual(["bread", "bread machine", "bread one"]);
+    await act(async () => fireEvent.click(within(grid).getByRole("button", { name: "bread" })));
+    expect(api.setIcon).toHaveBeenCalledWith("p-1", "bread");
+    expect(screen.getByText("Chosen by you")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Let Jev choose" })));
+    expect(api.setIcon).toHaveBeenLastCalledWith("p-1", null);
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    expect(api.setAisle).toHaveBeenCalledWith("p-1", "bakery");
+});

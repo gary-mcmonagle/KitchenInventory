@@ -12,14 +12,15 @@ import {
     boughtNote,
     expiryBadge,
     groupBarcode,
-    initial,
     itemsLabel,
     metaLine,
     scannedLabel,
     stateNote,
     todayLine,
 } from "./format";
+import { AISLES, type AisleInfo } from "./aisles";
 import { takeFlash } from "./flash";
+import { ProductTile } from "./ProductTile";
 import { itemPath, namePath, navigate } from "./router";
 import styles from "./Stock.module.css";
 import { ScanFeedView } from "./ScanFeedView";
@@ -76,11 +77,63 @@ function insertSorted(products: StockProduct[], product: StockProduct): StockPro
     return at < 0 ? [...products, product] : [...products.slice(0, at), product, ...products.slice(at)];
 }
 
-const SECTION_TITLES: Record<StockSection, string> = {
-    useFirst: "Use first",
-    later: "Later",
-    waitingForName: "Waiting for a name",
+/** One aisle on the stock list (#71): its products, use first first, then the rest by soonest, then name. */
+export interface AisleGroup {
+    aisle: AisleInfo;
+    products: StockProduct[];
+    useFirstCount: number;
+    anyExpired: boolean;
+}
+
+const bySoonest = (a: StockProduct, b: StockProduct) => {
+    if (a.soonestEstimatedExpiryDate !== b.soonestEstimatedExpiryDate) {
+        if (a.soonestEstimatedExpiryDate === null) return 1;
+        if (b.soonestEstimatedExpiryDate === null) return -1;
+        return a.soonestEstimatedExpiryDate.localeCompare(b.soonestEstimatedExpiryDate);
+    }
+    return a.displayName.localeCompare(b.displayName, "en", { sensitivity: "base" });
 };
+
+/** Named products by aisle, in shop order, empty aisles left out: the API's grouping (GET /api/stock `aisles`), worked
+ * out here from the flat list so a check-out or undo can update the screen at once. */
+export function groupByAisle(products: StockProduct[]): AisleGroup[] {
+    const known = products.filter((p) => p.section !== "waitingForName");
+    return AISLES.map((aisle) => {
+        const inAisle = known.filter(
+            (p) => (AISLES.some((a) => a.id === p.aisleId) ? p.aisleId : "other") === aisle.id,
+        );
+        const products = [
+            ...inAisle.filter((p) => p.section === "useFirst").sort(bySoonest),
+            ...inAisle.filter((p) => p.section !== "useFirst").sort(bySoonest),
+        ];
+        return {
+            aisle,
+            products,
+            useFirstCount: products.filter((p) => p.section === "useFirst").length,
+            anyExpired: products.some((p) => (p.daysUntilSoonest ?? 0) < 0),
+        };
+    }).filter((g) => g.products.length > 0);
+}
+
+const OPEN_KEY = "cupboard.aisles.open";
+
+/** Gary's own open/closed choice per aisle, on this device (#71). Storage can fail: then the defaults apply. */
+function readOpen(): Record<string, boolean> {
+    try {
+        const raw = window.localStorage.getItem(OPEN_KEY);
+        return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeOpen(open: Record<string, boolean>) {
+    try {
+        window.localStorage.setItem(OPEN_KEY, JSON.stringify(open));
+    } catch {
+        // Not remembered on this device; the screen still works.
+    }
+}
 
 type Phase = "loading" | "ready" | "error" | "noAccess";
 
@@ -269,10 +322,30 @@ export function StockScreen({
         setPull(0);
     };
 
-    const sections = SECTION_ORDER.map((section) => ({
-        section,
-        products: stock?.products.filter((p) => p.section === section) ?? [],
-    })).filter((s) => s.products.length > 0);
+    const [openState, setOpenState] = useState<Record<string, boolean>>(readOpen);
+    const [useFirstOnly, setUseFirstOnly] = useState(false); // never remembered: always off on open
+    const toggleAisle = (group: AisleGroup) =>
+        setOpenState((current) => {
+            const next = {
+                ...current,
+                [group.aisle.id]: !(current[group.aisle.id] ?? group.useFirstCount > 0),
+            };
+            writeOpen(next);
+            return next;
+        });
+
+    const all = stock?.products ?? [];
+    const groups = groupByAisle(useFirstOnly ? all.filter((p) => p.section === "useFirst") : all);
+    const waiting = useFirstOnly ? [] : all.filter((p) => p.section === "waitingForName");
+    const renderKnown = (p: StockProduct) => (
+        <KnownRow
+            key={p.productId}
+            product={p}
+            busy={inFlight.has(p.productId)}
+            onCheckOut={() => void checkOut(p)}
+            onOpen={() => void openOne(p)}
+        />
+    );
 
     return (
         <div
@@ -342,23 +415,42 @@ export function StockScreen({
                     </p>
                 )}
 
-                {sections.map(({ section, products }) => (
-                    <Section key={section} title={SECTION_TITLES[section]} count={products.length}>
-                        {products.map((p) =>
-                            section === "waitingForName" ? (
-                                <UnnamedRow key={p.productId} product={p} />
-                            ) : (
-                                <KnownRow
-                                    key={p.productId}
-                                    product={p}
-                                    busy={inFlight.has(p.productId)}
-                                    onCheckOut={() => void checkOut(p)}
-                                    onOpen={() => void openOne(p)}
-                                />
-                            ),
-                        )}
-                    </Section>
+                {stock && stock.products.length > 0 && (
+                    <div className={styles.chips}>
+                        <button
+                            type="button"
+                            className={styles.chip}
+                            aria-pressed={useFirstOnly}
+                            onClick={() => setUseFirstOnly((on) => !on)}
+                        >
+                            {`Use first · ${stock.useFirstCount}`}
+                        </button>
+                    </div>
+                )}
+
+                {useFirstOnly && groups.length === 0 && (
+                    <p className={styles.empty}>Nothing needs using up right now.</p>
+                )}
+
+                {groups.map((group) => (
+                    <AisleSection
+                        key={group.aisle.id}
+                        group={group}
+                        open={useFirstOnly || (openState[group.aisle.id] ?? group.useFirstCount > 0)}
+                        canCollapse={!useFirstOnly}
+                        onToggle={() => toggleAisle(group)}
+                    >
+                        {group.products.map(renderKnown)}
+                    </AisleSection>
                 ))}
+
+                {waiting.length > 0 && (
+                    <Section title="Waiting for a name" count={waiting.length}>
+                        {waiting.map((p) => (
+                            <UnnamedRow key={p.productId} product={p} />
+                        ))}
+                    </Section>
+                )}
             </div>
 
             {toast && (
@@ -383,6 +475,65 @@ export function StockScreen({
                 </div>
             )}
         </div>
+    );
+}
+
+/** A collapsible aisle (#71): a full-width header button with the name, the count, an amber (or red) "n to use first"
+ * pill and a chevron. */
+function AisleSection({
+    group,
+    open,
+    canCollapse,
+    onToggle,
+    children,
+}: {
+    group: AisleGroup;
+    open: boolean;
+    canCollapse: boolean;
+    onToggle: () => void;
+    children: React.ReactNode;
+}) {
+    const listId = `aisle-${group.aisle.id}`;
+    return (
+        <section className={styles.section} aria-label={group.aisle.name}>
+            <button
+                type="button"
+                className={styles.aisleHeader}
+                aria-expanded={open}
+                aria-controls={listId}
+                disabled={!canCollapse}
+                onClick={onToggle}
+            >
+                <span className={styles.aisleName}>{group.aisle.name}</span>
+                {group.useFirstCount > 0 && (
+                    <span
+                        className={`${styles.aislePill} ${group.anyExpired ? styles.aislePillExpired : ""}`}
+                    >
+                        {`${group.useFirstCount} to use first`}
+                    </span>
+                )}
+                <span className={styles.sectionCount}>{itemsLabel(group.products.length)}</span>
+                <svg
+                    className={styles.chevron}
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                >
+                    <path d="M6 9l6 6 6-6" />
+                </svg>
+            </button>
+            {open && (
+                <ul id={listId} className={styles.list}>
+                    {children}
+                </ul>
+            )}
+        </section>
     );
 }
 
@@ -428,9 +579,12 @@ function KnownRow({
     return (
         <li className={styles.row}>
             <div className={styles.rowMain}>
-                <div className={styles.tile} aria-hidden="true">
-                    {initial(product.displayName)}
-                </div>
+                <ProductTile
+                    className={styles.tile}
+                    name={product.displayName}
+                    icon={product.icon}
+                    aisleId={product.aisleId}
+                />
                 <div className={styles.text}>
                     <a
                         className={`${styles.name} ${styles.nameLink}`}

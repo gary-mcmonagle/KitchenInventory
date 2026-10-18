@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, SignInRequiredError, type ApiClient, type FieldErrors, type Product } from "./api";
 import { groupBarcode, relativeTime } from "./format";
+import { AISLES } from "./aisles";
+import { Icon, ICON_NAMES, ProductTile } from "./ProductTile";
 import { itemPath, navigate } from "./router";
 import styles from "./Name.module.css";
 
@@ -37,6 +39,7 @@ export function NameScreen({
     const [name, setName] = useState("");
     const [brand, setBrand] = useState("");
     const [size, setSize] = useState("");
+    const [aisle, setAisle] = useState("");
     const [errors, setErrors] = useState<Errors>({});
     const [formError, setFormError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -52,6 +55,7 @@ export function NameScreen({
                     setName(p.displayName);
                     setBrand(p.brand ?? "");
                     setSize(p.size ?? "");
+                    setAisle(p.aisleId ?? "");
                 }
             })
             .catch((error: unknown) => {
@@ -87,8 +91,11 @@ export function NameScreen({
                 brand: brand.trim() || undefined,
                 size: size.trim() || undefined,
             };
-            if (editing) await api.editDetails(productId, details);
-            else await api.nameProduct(productId, details);
+            if (editing) {
+                await api.editDetails(productId, details);
+                // The aisle (#71) is saved with the form, only when it changed.
+                if (aisle && aisle !== product?.aisleId) await api.setAisle(productId, aisle);
+            } else await api.nameProduct(productId, details);
             back();
         } catch (error) {
             if (error instanceof SignInRequiredError) return;
@@ -188,7 +195,36 @@ export function NameScreen({
                                 onChange={setSize}
                                 error={errors.size}
                             />
+                            {editing && (
+                                <div className={styles.field}>
+                                    <label htmlFor="aisle" className={styles.label}>
+                                        Aisle
+                                    </label>
+                                    <select
+                                        id="aisle"
+                                        className={styles.input}
+                                        value={aisle}
+                                        onChange={(e) => setAisle(e.target.value)}
+                                    >
+                                        {!aisle && <option value="">Not sorted yet</option>}
+                                        {AISLES.map((a) => (
+                                            <option key={a.id} value={a.id}>
+                                                {a.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
+                        {editing && (
+                            <IconPicker
+                                api={api}
+                                product={product}
+                                onChange={(icon, source) =>
+                                    setProduct({ ...product, icon, iconSource: source })
+                                }
+                            />
+                        )}
 
                         {formError && (
                             <p className={styles.notice} role="alert">
@@ -242,6 +278,105 @@ function Field(props: {
                 <span id={errorId} className={styles.error}>
                     {props.error}
                 </span>
+            )}
+        </div>
+    );
+}
+
+/**
+ * The product's icon (#72): Change opens a searchable grid of the bundled icons; picking one saves at once and is
+ * never overwritten by Jev. "Let Jev choose" clears it, so the next timer run picks again.
+ */
+function IconPicker({
+    api,
+    product,
+    onChange,
+}: {
+    api: ApiClient;
+    product: Product;
+    onChange: (icon: string | null, source: string | null) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const [error, setError] = useState<string | null>(null);
+    const q = query.trim().toLowerCase().replace(/\s+/g, "-");
+    const names = ICON_NAMES.filter((n) => !q || n.includes(q));
+
+    const save = async (icon: string | null) => {
+        setError(null);
+        try {
+            await api.setIcon(product.productId, icon);
+            onChange(icon, icon ? "manual" : null);
+            setOpen(false);
+        } catch (e) {
+            if (e instanceof SignInRequiredError) return;
+            setError("Couldn't save the icon. Try again.");
+        }
+    };
+
+    return (
+        <div className={styles.iconField}>
+            <span className={styles.label}>Icon</span>
+            <div className={styles.iconRow}>
+                <ProductTile
+                    className={styles.iconTile}
+                    name={product.displayName}
+                    icon={product.icon}
+                    aisleId={product.aisleId}
+                />
+                <span className={styles.iconNote}>
+                    {product.iconSource === "manual"
+                        ? "Chosen by you"
+                        : product.icon
+                          ? "Chosen for you"
+                          : "Not chosen yet"}
+                </span>
+                <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-expanded={open}
+                    onClick={() => setOpen((o) => !o)}
+                >
+                    Change
+                </button>
+            </div>
+            {open && (
+                <div className={styles.iconPicker}>
+                    <input
+                        type="search"
+                        className={styles.input}
+                        aria-label="Search icons"
+                        placeholder="Search icons, e.g. bread"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && e.preventDefault()} // don't submit the form
+                    />
+                    <div className={styles.iconGrid} role="group" aria-label="Icons">
+                        {names.map((n) => (
+                            <button
+                                key={n}
+                                type="button"
+                                className={styles.iconChoice}
+                                aria-label={n.replace(/-/g, " ")}
+                                aria-pressed={product.icon === n}
+                                onClick={() => void save(n)}
+                            >
+                                <Icon name={n} />
+                            </button>
+                        ))}
+                        {names.length === 0 && <span className={styles.iconNote}>No icon matches that.</span>}
+                    </div>
+                    {product.iconSource === "manual" && (
+                        <button type="button" className={styles.iconButton} onClick={() => void save(null)}>
+                            Let Jev choose
+                        </button>
+                    )}
+                </div>
+            )}
+            {error && (
+                <p className={styles.notice} role="alert">
+                    {error}
+                </p>
             )}
         </div>
     );

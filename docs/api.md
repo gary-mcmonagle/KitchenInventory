@@ -146,6 +146,9 @@ The stock list (#49, #52): every product with units in stock, grouped, put in se
 | `daysUntilSoonest` | Days from today (UK calendar date) to that date; negative once it's passed, `0` on the day. `null` with it. |
 | `shelfLifeDays` | The product's shelf life, for the "keeps about …" note (the soonest unit was bought on `soonestEstimatedExpiryDate − shelfLifeDays`). `null` until estimated. |
 | `openedCount`, `frozenCount` | In-stock units opened, and in the freezer now (#65): the row's **Opened** / **n frozen** pills. |
+| `aisleId`, `icon`, `useFirst` | Its aisle (#71; `other` until Jev has chosen), its icon (#72; `null`: show the aisle's icon, or the letter for `other`) and whether it's in Use first. |
+| `aisles` | Known products **by aisle in shop order** (#71): `[{ aisleId, name, icon, itemCount, useFirstCount, anyExpired, products: [...] }]`, empty aisles left out. Within an aisle: use first (soonest first), then the rest by soonest estimated expiry, then name. The UI's Use first view filters this in the app. |
+| `waitingForName` | Unknown items (`noMatch` / `lookupFailed`), newest first, apart from the aisles. |
 | `soonestState`, `soonestStateOn` | When the soonest unit's date comes from being `opened`, `frozen` or `defrosted` (#65): which, and since when (`YYYY-MM-DD`). The row then says "Opened 12 Oct" instead of the bought note. `null` otherwise. |
 
 The UI's badge: `Est. expired` (red), `Est. today` / `Est. tomorrow` / `Est. n days` up to 14 days (amber at 3 days or fewer, green above), then `Est. 2 Nov`, or `Est. Oct 2028` when it's over a year away. The digest's Use first section uses the same text (`ExpiryBadge`).
@@ -205,6 +208,8 @@ A product, for naming (#51) and item detail (#53).
 | `usualStorage` | Where it's kept sealed (`cupboard`, `fridge`, `freezer`), from its shelf life; `null` until estimated. |
 | `opened`, `frozen`, `defrosted` | How long it keeps once opened, in the freezer, and once defrosted, and where to keep it then (#65): `{ days, storage, source }`, `source` `jev` or `manual` (only `opened` can be set by hand). `null` until the shelf-life timer has asked Jev. |
 | `openedCount`, `frozenCount` | In-stock units opened, and in the freezer now. |
+| `aisleId`, `aisleSource` | Its aisle (#71) and who chose it (`jev` / `manual`); `null` until the shelf-life timer has asked Jev. |
+| `icon`, `iconSource` | Its icon name (#72, IconPark Outline) and who chose it; `icon` is `null` when Jev wasn't sure (below 0.3), so the UI shows the aisle's icon. |
 | `units` | In-stock units in **check-out order**: **opened first, in the freezer last** (#65), then soonest estimated expiry (none last), then oldest check-in. Item detail labels them Unit 1…n. |
 | `units[].expirySource` | `shelfLife` (bought date + shelf life), `manual` (set in item detail), or `opened` / `frozen` / `defrosted` (#65: what its estimate is from now); `null` with no date yet. |
 | `units[].openedOn`, `frozenOn`, `defrostedOn` | `YYYY-MM-DD` (UK) when marked, or `null`. Frozen now = `frozenOn` set and `defrostedOn` not. |
@@ -252,6 +257,18 @@ The latest action decides, and a manual date is replaced (Undo brings it back; e
 - **400** `{ "error": "…" }`: a bad date, in the future, or before it was bought.
 - **404** `{ "error": "No such unit." }`
 - **409** `{ "error": "…" }`: not in stock, Defrosted on a unit that isn't frozen, or changed while saving.
+
+### `PUT /api/products/{productId}/aisle`
+
+Puts a known product in an aisle by hand (#71): `{ "aisle": "bakery" }`, one of the 14 aisle IDs (`fruitVeg`, `bakery`, `meatFish`, `dairyEggs`, `chilledDeli`, `frozen`, `pastaRiceGrains`, `tinsJars`, `saucesOils`, `bakingSpices`, `breakfastCereal`, `snacksSweets`, `drinks`, `other`). Sets `aisleSource: manual`; Jev never overwrites it.
+
+- **200** `{ "productId": "…", "aisle": "bakery" }`; **400** not an aisle; **404**; **409** not known yet (name it first), or changed while saving.
+
+### `PUT /api/products/{productId}/icon`
+
+Sets a known product's icon by hand (#72): `{ "icon": "bread" }`, one of the curated IconPark names (`ProductIcons.Names`), sets `iconSource: manual`, never overwritten. `{ "icon": null }` clears it ("Let Jev choose"): the next timer run asks Jev again.
+
+- **200** `{ "productId": "…", "icon": "bread" }`; **400** not one of the icons; **404**; **409** as above.
 
 ### `POST /api/products/{productId}/opened`
 

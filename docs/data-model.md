@@ -189,6 +189,13 @@ Written only by the **shelf-life timer**, with an ETag-guarded replace that appl
 | `…ShelfLifeSource`, `…ShelfLifeConfidence`, `…LowConfidence` | Per state, as for the shelf life. `openedShelfLifeSource: manual` when set in item detail (`PUT /api/products/{id}/opened-shelf-life`); Jev never overwrites it. |
 | `stateEstimatedAt` | When Jev answered. Absent until then (the timer's query). |
 
+**Aisle and icon (#71, #72):**
+
+| Field | Notes |
+|---|---|
+| `aisle`, `aisleSource`, `aisleConfidence`, `aisleEstimatedAt` | The product's aisle ID (one of the 14 in `Aisles.cs`), `jev` or `manual` (`PUT /api/products/{id}/aisle`; never overwritten), Jev's confidence, and when. Absent until classified: the stock list shows it under **Other**. |
+| `icon`, `iconSource`, `iconConfidence`, `iconEstimatedAt` | The icon name (one of `ProductIcons.Names`), `jev` or `manual`, confidence, when. `icon` is absent when Jev was below 0.3; `iconSource` present means "answered". "Let Jev choose" removes all four, so the timer asks again. |
+
 **Reserved, not used yet:** `icon`.
 
 ### Store-label check-in (#58)
@@ -279,6 +286,9 @@ Each retry ends in `known` (found), `noMatch` (not found; final) or `lookupFaile
 2. Query in-stock units with no `estimatedExpiryDate` (cross-partition) and, for those whose product now has a shelf life, set it (ETag-guarded; a unit checked out meanwhile is skipped). Units opened, frozen or defrosted wait for step 4 instead.
 3. **State estimates (#65):** query `known` products with a shelf life but no `stateEstimatedAt`, at most **20 per run**, and ask Jev five questions in **one request** (`docs/spikes/65-jev-unit-state.py`): where to keep it once opened, and how long it keeps once opened, in the freezer, and once defrosted (and where). Same level rule as the shelf life. A manual "once opened" is kept. This also filled existing stock on the first runs after deploy (no separate backfill).
 4. Query units with `estimatePending: true` and, where their product now has the estimate for their state, set the date and storage.
+5. **Aisle and icon (#71, #72):** query `known` products with no `aisle` or no `iconSource`, at most **40 per run**, and ask Jev in **one request** whatever's missing: a `choice` over the 14 aisles (with short descriptions) and a `choice` over the 131 curated IconPark icons ([spike #60](spikes/60-iconify-icons.md)). A manual aisle or icon is never asked again or overwritten. An icon below **0.3** confidence is stored with no name (`iconSource: jev`, no `icon`), so it isn't asked again and the UI shows the aisle's icon. No separate backfill: existing products are filled over the first runs.
+
+Each step takes at most **40 products per run** (raised from 20 for the initial stock take); runs never overlap.
 
 This covers every way a product becomes known: Open Food Facts at check-in, the lookup-retry timer, and naming in the app. It also did the **one-off fill** of existing stock on the first runs after deploy. Check-in and naming never wait for Jev. **If Jev is unreachable** (429/529, 5xx or timeouts after 3 tries) the run logs a warning and stops; products stay unestimated and the next run tries again. A refused request (400/401/413/415/422) logs an error. With no key yet (`JEV_API_KEY` unresolved), it logs a warning and does nothing. Everything it writes is derived data, and a re-run changes nothing already done.
 

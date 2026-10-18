@@ -29,6 +29,9 @@ const gravy: StockProduct = {
     frozenCount: 0,
     soonestState: null,
     soonestStateOn: null,
+    aisleId: "other",
+    icon: null,
+    useFirst: false,
 };
 const naan: StockProduct = {
     ...gravy,

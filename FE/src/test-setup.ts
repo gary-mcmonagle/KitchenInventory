@@ -1,4 +1,9 @@
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
+
+// The suite runs many screens in parallel; under load the default 1 s for findBy… was occasionally too short (flaky
+// first tests in NameScreen and ItemScreen). 3 s still fails fast on a real miss.
+configure({ asyncUtilTimeout: 3000 });
 
 // No real SignalR in tests: screens get a connection that never connects (the scan feed's own tests inject a fake).
 vi.mock("@microsoft/signalr", async (importOriginal) => {
@@ -32,3 +37,31 @@ console.warn = (...args: unknown[]) => {
     if (typeof args[0] === "string" && args[0].startsWith("Scan feed")) return;
     warn(...args);
 };
+
+// Aisles start collapsed unless they have something to use first (#71). Most tests are about rows, so every aisle
+// starts open; the aisle tests clear this to check the real defaults.
+beforeEach(() => {
+    window.localStorage.setItem(
+        "cupboard.aisles.open",
+        JSON.stringify(
+            Object.fromEntries(
+                [
+                    "fruitVeg",
+                    "bakery",
+                    "meatFish",
+                    "dairyEggs",
+                    "chilledDeli",
+                    "frozen",
+                    "pastaRiceGrains",
+                    "tinsJars",
+                    "saucesOils",
+                    "bakingSpices",
+                    "breakfastCereal",
+                    "snacksSweets",
+                    "drinks",
+                    "other",
+                ].map((id) => [id, true]),
+            ),
+        ),
+    );
+});
