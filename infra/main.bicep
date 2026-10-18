@@ -44,7 +44,7 @@ param entraApiClientId string = ''
 @description('Client IDs allowed to call the API with a user token: the SPA, and the Azure CLI for verification (#36).')
 param entraAllowedClientIds string = ''
 
-@description('Object ID of the person who sets secrets with deploy/secrets.sh (Key Vault Secrets Officer). Empty skips it.')
+@description('Object ID of the person who sets secrets by hand in the portal (Key Vault Secrets Officer). Empty skips it.')
 param vaultOfficerPrincipalId string = ''
 
 @description('Jev model version, pinned (spike #40: aliases move when a release ships).')

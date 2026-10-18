@@ -118,7 +118,7 @@ export VERIFIER_PRINCIPAL_ID
 echo "Verifier (read-only access): ${VERIFIER_PRINCIPAL_ID:-none}"
 # Setting secrets (Key Vault Secrets Officer, #42) goes to the same signed-in user unless set explicitly.
 export VAULT_OFFICER_PRINCIPAL_ID=${VAULT_OFFICER_PRINCIPAL_ID:-$VERIFIER_PRINCIPAL_ID}
-echo "Secrets officer (deploy/secrets.sh): ${VAULT_OFFICER_PRINCIPAL_ID:-none}"
+echo "Secrets officer (sets secrets in the portal): ${VAULT_OFFICER_PRINCIPAL_ID:-none}"
 INGEST_COMMIT_SHA=${INGEST_COMMIT_SHA:-not-deployed}
 API_COMMIT_SHA=${API_COMMIT_SHA:-not-deployed}
 

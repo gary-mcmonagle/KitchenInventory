@@ -1,6 +1,6 @@
 // Key Vault for true third-party secrets (#42), such as the Jev API key. Azure services use managed identities instead.
 // RBAC authorisation only (no access policies), soft delete and purge protection on. Secrets are set by
-// deploy/secrets.sh, never by a template, so no secret value ever appears here or in a deployment's history.
+// Gary by hand (portal), never by a template, so no secret value ever appears here or in a deployment's history.
 
 @description('Azure region.')
 param location string
@@ -14,7 +14,7 @@ param name string
 @description('Managed identities that read secrets through Key Vault references (Key Vault Secrets User). Only apps that need a secret.')
 param secretReaderPrincipalIds array
 
-@description('Object ID of the person who sets and rotates secrets with deploy/secrets.sh (Key Vault Secrets Officer). Empty skips it.')
+@description('Object ID of the person who sets and rotates secrets by hand (Key Vault Secrets Officer). Empty skips it.')
 param vaultOfficerPrincipalId string = ''
 
 // Built-in role IDs.
