@@ -4,13 +4,40 @@
 // The list must match BE/src/CupboardTracker.Domain/Products/ProductIcons.cs (a backend test checks it).
 import { readFileSync, writeFileSync } from "node:fs";
 
-const set = JSON.parse(readFileSync(new URL("../node_modules/@iconify-json/icon-park-outline/icons.json", import.meta.url)));
-const meta = JSON.parse(readFileSync(new URL("../node_modules/@iconify-json/icon-park-outline/metadata.json", import.meta.url)));
+const set = JSON.parse(
+    readFileSync(new URL("../node_modules/@iconify-json/icon-park-outline/icons.json", import.meta.url)),
+);
+const meta = JSON.parse(
+    readFileSync(new URL("../node_modules/@iconify-json/icon-park-outline/metadata.json", import.meta.url)),
+);
 
-export const EXTRAS = ["apple", "bottle", "cup", "powder", "seedling", "leaves", "snowflake", "pill", "pig", "shopping"];
+export const EXTRAS = [
+    "apple",
+    "bottle",
+    "cup",
+    "powder",
+    "seedling",
+    "leaves",
+    "snowflake",
+    "pill",
+    "pig",
+    "shopping",
+];
 export const AISLE_ICONS = [
-    "vegetables", "bread", "fish", "milk", "sandwich", "snowflake", "rice", "canned-fruit", "bottle-one", "chili",
-    "bowl", "candy", "tea-drink", "shopping-cart",
+    "vegetables",
+    "bread",
+    "fish",
+    "milk",
+    "sandwich",
+    "snowflake",
+    "rice",
+    "canned-fruit",
+    "bottle-one",
+    "chili",
+    "bowl",
+    "candy",
+    "tea-drink",
+    "shopping-cart",
 ];
 
 const names = [...new Set([...meta.categories.Foods, ...EXTRAS, ...AISLE_ICONS])].sort();
