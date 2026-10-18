@@ -166,7 +166,7 @@ A barcode that Open Food Facts couldn't be reached for (`lookupFailed`) looks li
 | Field | Notes |
 |---|---|
 | `shelfLifeDays` | The estimate in days: one of Jev's ten worded levels (2, 4, 7, 14, 30, 90, 180, 365, 730, 1095). |
-| `shelfLifeSource` | `jev`. (A manual shelf life comes with item detail, #53, and is never overwritten.) |
+| `shelfLifeSource` | `jev`, or `manual` when set in item detail (#53, `PUT /api/products/{id}/shelf-life`; confidence 1). Jev never overwrites a manual shelf life, and a manual one applies to units bought from then on. |
 | `shelfLifeConfidence` | Jev's confidence in the score, 0–1. |
 | `jevLowConfidence` | `true` when that confidence was below **0.5**, so the cautious **25th-percentile** level was used instead of the median. |
 | `storage` | The **usual storage** Jev chose: `cupboard`, `fridge` or `freezer`. The estimate is for that storage. Not shown in the UI yet. |
@@ -174,7 +174,9 @@ A barcode that Open Food Facts couldn't be reached for (`lookupFailed`) looks li
 
 Written only by the **shelf-life timer**, with an ETag-guarded replace that applies only while the product is still `known` with no shelf life.
 
-**Reserved, not used yet:** `icon`. Later features add fields such as `editedAt` and `editedBy`; they document them here when they land.
+**Edited details** (#53, `PUT /api/products/{id}/details`): a known product's name, brand and size corrected in item detail. It sets `source: manual` plus `editedAt` and `editedBy` (Entra object ID), ETag-guarded. Known products are never looked up again, so nothing overwrites the edit.
+
+**Reserved, not used yet:** `icon`.
 
 ### Barcode lookup document
 
@@ -277,7 +279,8 @@ This covers every way a product becomes known: Open Food Facts at check-in, the 
 | `checkedOutAt`, `checkOutScanId` | Set when checked out: the check-out scan's `scannedAt` and ID, or for a check-out in the app the time it happened and `checkOutScanId: null`. |
 | `checkOutSource` | `scanner` (check-out scans) or `ui` (check-out from the stock list, #50). |
 | `checkedOutBy` | For `ui` check-outs, the user's Entra object ID (`oid`); `null` for scanner check-outs. |
-| `estimatedExpiryDate` | `YYYY-MM-DD` (#52): the **bought date** (`checkedInAt` as a UK calendar date, Europe/London) plus the product's `shelfLifeDays`. Absent or `null` until the product has a shelf life. Set at check-in if the product already has one; otherwise filled in by the shelf-life timer. Never changed once set. |
+| `estimatedExpiryDate` | `YYYY-MM-DD` (#52): the **bought date** (`checkedInAt` as a UK calendar date, Europe/London) plus the product's `shelfLifeDays`. Absent or `null` until the product has a shelf life. Set at check-in if the product already has one; otherwise filled in by the shelf-life timer. Changed afterwards only by a person, in item detail. |
+| `expirySource` | Where that date came from (#53): `shelfLife`, or `manual` when set in item detail (`PUT /api/units/{id}/estimated-expiry`). A manual date is never recalculated. Absent on dates written before #53, which all came from the shelf life. |
 
 The unit doesn't copy the product's status or name: the product is always one point read away. (The earlier `productStatus` field is gone, because every unit now has a product, including `lookupFailed` ones.)
 

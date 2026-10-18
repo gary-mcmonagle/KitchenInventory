@@ -22,4 +22,12 @@ public sealed record ShelfLife(
     int Days, Storage UsualStorage, double Confidence, bool LowConfidence, string Source, DateTimeOffset EstimatedAt)
 {
     public const string JevSource = "jev";
+
+    /// <summary>Set by a person in item detail (#53). Jev never overwrites it.</summary>
+    public const string ManualSource = "manual";
+
+    public bool IsManual => Source == ManualSource;
+
+    public static ShelfLife Manual(int days, Storage usualStorage, DateTimeOffset at) =>
+        new(days, usualStorage, 1, false, ManualSource, at);
 }

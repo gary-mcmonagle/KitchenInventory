@@ -149,7 +149,7 @@ test("unnamed products wait for a name, with the grouped barcode and scan date",
     expect(within(rows[1]).getByText("Barcode 2005 5363 · ×2")).toBeInTheDocument();
 });
 
-test("Check out on named rows, Name it on unnamed rows, nothing else tappable", async () => {
+test("Check out and the name link on named rows, Name it on unnamed rows, nothing else tappable", async () => {
     const { api } = fakeApi(
         stockOf(product({}), product({ status: "noMatch", displayName: "Unknown item (1)" })),
     );
@@ -166,7 +166,8 @@ test("Check out on named rows, Name it on unnamed rows, nothing else tappable", 
             .getAllByRole("button")
             .map((b) => b.textContent),
     ).toEqual(["Name it"]);
-    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    // Only the known product's name is a link, to item detail (#53).
+    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual(["Beef Gravy"]);
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
 });

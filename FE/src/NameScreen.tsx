@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, SignInRequiredError, type ApiClient, type FieldErrors, type Product } from "./api";
 import { groupBarcode, relativeTime } from "./format";
-import { navigate } from "./router";
+import { itemPath, navigate } from "./router";
 import styles from "./Name.module.css";
 
 export const MAX_NAME = 100;
@@ -20,8 +20,18 @@ export function validate(name: string, brand: string, size: string): Errors {
     return errors;
 }
 
-/** "Name this product" (#51): the manual parts of project/NameIt.dc.html. */
-export function NameScreen({ api, productId }: { api: ApiClient; productId: string }) {
+/** "Name this product" (#51): the manual parts of project/NameIt.dc.html. In edit mode (#53), the same form corrects
+ * a known product's details: "Edit product", prefilled, Save and Cancel, back to item detail. */
+export function NameScreen({
+    api,
+    productId,
+    mode = "name",
+}: {
+    api: ApiClient;
+    productId: string;
+    mode?: "name" | "edit";
+}) {
+    const editing = mode === "edit";
     const [product, setProduct] = useState<Product | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [name, setName] = useState("");
@@ -35,7 +45,15 @@ export function NameScreen({ api, productId }: { api: ApiClient; productId: stri
     useEffect(() => {
         let live = true;
         api.product(productId)
-            .then((p) => live && setProduct(p))
+            .then((p) => {
+                if (!live) return;
+                setProduct(p);
+                if (editing && p.status === "known") {
+                    setName(p.displayName);
+                    setBrand(p.brand ?? "");
+                    setSize(p.size ?? "");
+                }
+            })
             .catch((error: unknown) => {
                 if (!live || error instanceof SignInRequiredError) return;
                 setLoadError(
@@ -47,13 +65,13 @@ export function NameScreen({ api, productId }: { api: ApiClient; productId: stri
         return () => {
             live = false;
         };
-    }, [api, productId]);
+    }, [api, productId, editing]);
 
     useEffect(() => {
         if (product) nameInput.current?.focus();
     }, [product]);
 
-    const back = () => navigate("/");
+    const back = () => navigate(editing ? itemPath(productId) : "/");
 
     const save = async (e: FormEvent) => {
         e.preventDefault();
@@ -64,19 +82,25 @@ export function NameScreen({ api, productId }: { api: ApiClient; productId: stri
         if (Object.keys(found).length > 0) return;
         setSaving(true);
         try {
-            await api.nameProduct(productId, {
+            const details = {
                 name: name.trim(),
                 brand: brand.trim() || undefined,
                 size: size.trim() || undefined,
-            });
-            navigate("/");
+            };
+            if (editing) await api.editDetails(productId, details);
+            else await api.nameProduct(productId, details);
+            back();
         } catch (error) {
             if (error instanceof SignInRequiredError) return;
             if (error instanceof ApiError && error.status === 400) {
                 setErrors((error.body as FieldErrors | undefined)?.errors ?? {});
                 setFormError("Check the details.");
             } else if (error instanceof ApiError && error.status === 409) {
-                setFormError("This product already has a name.");
+                setFormError(
+                    editing
+                        ? "This product changed while you were editing. Go back and try again."
+                        : "This product already has a name.",
+                );
             } else {
                 setFormError("Couldn't save. Try again.");
             }
@@ -84,7 +108,8 @@ export function NameScreen({ api, productId }: { api: ApiClient; productId: stri
         }
     };
 
-    const unnamed = product && product.status !== "known";
+    // The form shows for an unknown product when naming, and for a known one when editing.
+    const showForm = product && (editing ? product.status === "known" : product.status !== "known");
 
     return (
         <form className={styles.screen} onSubmit={(e) => void save(e)} noValidate>
@@ -104,7 +129,7 @@ export function NameScreen({ api, productId }: { api: ApiClient; productId: stri
                         <path d="M15 5l-7 7 7 7" />
                     </svg>
                 </button>
-                <h1 className={styles.title}>Name this product</h1>
+                <h1 className={styles.title}>{editing ? "Edit product" : "Name this product"}</h1>
             </div>
 
             <div className={styles.content}>
@@ -115,16 +140,18 @@ export function NameScreen({ api, productId }: { api: ApiClient; productId: stri
                 )}
                 {!product && !loadError && <p className={styles.context}>Loading…</p>}
 
-                {product && !unnamed && (
+                {product && !showForm && (
                     <p className={styles.notice} role="alert">
-                        This product already has a name: {product.displayName}.
+                        {editing
+                            ? "This product has no name yet: name it from the stock list."
+                            : `This product already has a name: ${product.displayName}.`}
                     </p>
                 )}
 
-                {unnamed && (
+                {showForm && (
                     <>
                         <div className={styles.context}>
-                            {product.latestCheckedInAt && (
+                            {!editing && product.latestCheckedInAt && (
                                 <span>
                                     Scanned {relativeTime(product.latestCheckedInAt)}
                                     {product.latestDeviceRole === "in" && " on the check-in scanner"}
@@ -173,13 +200,13 @@ export function NameScreen({ api, productId }: { api: ApiClient; productId: stri
             </div>
 
             <div className={styles.bar}>
-                {unnamed && (
+                {showForm && (
                     <button type="submit" className={styles.save} disabled={saving}>
-                        {saving ? "Saving…" : "Save product"}
+                        {saving ? "Saving…" : editing ? "Save" : "Save product"}
                     </button>
                 )}
                 <button type="button" className={styles.notNow} onClick={back}>
-                    Not now
+                    {editing ? "Cancel" : "Not now"}
                 </button>
             </div>
         </form>

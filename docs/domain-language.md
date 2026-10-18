@@ -129,9 +129,15 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Estimated expiry date** – shelf life plus the bought date (the check-in date). Always an estimate; never scanned or read from the pack. Shown as a badge: "Est. tomorrow", "Est. 4 days", "Est. 2 Nov".
 
+**Item detail** – the screen for one known product, opened from its name in the stock list: each unit in the house with its bought and estimated dates, check-out of a particular unit, correcting a unit's date or the product's shelf life, and editing its details.
+
+**Edit details** – correcting a known product's name, brand or size in item detail. Like naming, it makes the name manual, so nothing overwrites it.
+
 **Later** – the stock list section for named products that aren't in Use first, including those with no estimate yet.
 
-**Shelf life** – how long a product usually keeps after it's bought, unopened and in its usual storage. Estimated once per product by Jev; a cautious estimate is used when Jev isn't confident.
+**Shelf life** – how long a product usually keeps after it's bought, unopened and in its usual storage. Estimated once per product by Jev; a cautious estimate is used when Jev isn't confident. It can be set by hand in item detail ("set by you"), which applies to units bought from then on and is never overwritten by Jev.
+
+**Set by you** – a date or shelf life a person set in item detail (`manual`), as opposed to an estimate. Never recalculated.
 
 **Usual storage** – where a product is normally kept before it's opened: cupboard, fridge or freezer. Jev chooses it with the shelf life, and the estimate is for that storage.
 

@@ -1,0 +1,334 @@
+/* Item detail (#53), matching project/Item.dc.html. */
+.screen {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 20px 8px 4px;
+}
+
+.back {
+    width: var(--touch);
+    height: var(--touch);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    cursor: pointer;
+}
+
+.headerLabel {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.content {
+    flex: 1;
+    padding: 8px var(--page-x) 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.heading {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+}
+
+.tile {
+    flex: none;
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.headingText {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.name {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.2;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.meta {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+/* "Edit details": a secondary text link, like the mockup's "Open Scanners" style. */
+.link {
+    align-self: flex-start;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-dark);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.useBy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px;
+    border-radius: var(--radius-card);
+}
+
+.useByLabel {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.useByDate {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.useByText {
+    font-size: 14px;
+}
+
+.expired {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}
+
+.soon {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.later {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.neutral {
+    background: var(--pending-bg);
+    color: var(--ink-strong);
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.cardTitle {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.units {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.unit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 48px;
+    padding: 4px 0;
+}
+
+.unit + .unit {
+    border-top: 1px solid var(--border-soft);
+}
+
+.unitText {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.unitName {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.unitMeta {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.checkOut {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: var(--radius-button);
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.checkOut:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.label {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.input {
+    height: 48px;
+    box-sizing: border-box;
+    padding: 0 12px;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-button);
+    background: var(--surface);
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.primary,
+.secondary {
+    flex: 1;
+    min-height: 48px;
+    border-radius: var(--radius-button);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.primary {
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.primary:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.secondary {
+    border: 1px solid var(--input-border);
+    background: var(--surface);
+    color: var(--ink);
+}
+
+.shelf {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.help {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.error {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--warn-fg);
+}
+
+.muted {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.notice {
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: var(--radius-input);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 24px;
+    max-width: calc(var(--design-width) - 32px);
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 6px 6px 16px;
+    min-height: 52px;
+    background: var(--ink);
+    color: #ffffff;
+    border-radius: var(--radius-input);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.undo {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    color: var(--toast-action);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}

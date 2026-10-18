@@ -18,7 +18,7 @@ import {
     scannedLabel,
     todayLine,
 } from "./format";
-import { namePath, navigate } from "./router";
+import { itemPath, namePath, navigate } from "./router";
 import styles from "./Stock.module.css";
 
 const PULL_TO_REFRESH = 70; // px
@@ -341,7 +341,16 @@ function KnownRow({
                     {initial(product.displayName)}
                 </div>
                 <div className={styles.text}>
-                    <span className={styles.name}>{product.displayName}</span>
+                    <a
+                        className={`${styles.name} ${styles.nameLink}`}
+                        href={itemPath(product.productId)}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            navigate(itemPath(product.productId));
+                        }}
+                    >
+                        {product.displayName}
+                    </a>
                     {meta && <span className={styles.meta}>{meta}</span>}
                 </div>
                 {badge && <span className={`${styles.badge} ${styles[badge.tone]}`}>{badge.text}</span>}

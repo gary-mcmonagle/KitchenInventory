@@ -85,7 +85,7 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         return count > 0;
     }
 
-    private static JsonObject Write(Unit unit, JsonObject? existing)
+    internal static JsonObject Write(Unit unit, JsonObject? existing)
     {
         var document = existing ?? new JsonObject();
         document["id"] = unit.UnitId.ToString("D");
@@ -102,12 +102,13 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         if (unit.EstimatedExpiryDate is { } expiry)
         {
             document["estimatedExpiryDate"] = expiry.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            document["expirySource"] = unit.ExpirySource == ExpirySource.Manual ? "manual" : "shelfLife";
         }
 
         return document;
     }
 
-    private static Unit ToUnit(JsonObject d) => new(
+    internal static Unit ToUnit(JsonObject d) => new(
         Guid.Parse(CosmosJson.Text(d["id"])!),
         Guid.Parse(CosmosJson.Text(d["productId"])!),
         CosmosJson.Text(d["barcode"]),
@@ -120,7 +121,14 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         CosmosJson.Text(d["checkOutSource"]),
         DateOnly.TryParseExact(CosmosJson.Text(d["estimatedExpiryDate"]), "yyyy-MM-dd", CultureInfo.InvariantCulture,
             DateTimeStyles.None, out var date) ? date : null,
-        Guid.TryParse(CosmosJson.Text(d["checkedOutBy"]), out var by) ? by : null);
+        Guid.TryParse(CosmosJson.Text(d["checkedOutBy"]), out var by) ? by : null,
+        CosmosJson.Text(d["expirySource"]) switch
+        {
+            "manual" => ExpirySource.Manual,
+            "shelfLife" => ExpirySource.ShelfLife,
+            // Dates written before #53 have no source; they all came from the shelf life.
+            _ => d["estimatedExpiryDate"] is not null ? ExpirySource.ShelfLife : null,
+        });
 }
 
 /// <summary>Unmatched check-outs (id = scan ID), partitioned by /id (docs/data-model.md).</summary>

@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { SignInRequiredError, type ApiClient } from "./api";
 import styles from "./App.module.css";
+import { ItemScreen } from "./ItemScreen";
 import { NameScreen } from "./NameScreen";
-import { matchNamePath, usePath } from "./router";
+import { matchEditPath, matchItemPath, matchNamePath, usePath } from "./router";
 import { StockScreen } from "./StockScreen";
 
-/** The signed-in app: the stock list (with a muted footer for verification), or naming a product. */
+/** The signed-in app: the stock list (with a muted footer for verification), item detail, or naming or editing a
+ * product. */
 export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     const path = usePath();
     const [footer, setFooter] = useState(`UI ${buildSha}`);
@@ -27,10 +29,16 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     }, [api, buildSha]);
 
     const naming = matchNamePath(path);
+    const editing = matchEditPath(path);
+    const item = matchItemPath(path);
     return (
         <main className={styles.page}>
             {naming ? (
                 <NameScreen key={naming} api={api} productId={naming} />
+            ) : editing ? (
+                <NameScreen key={`edit-${editing}`} api={api} productId={editing} mode="edit" />
+            ) : item ? (
+                <ItemScreen key={item} api={api} productId={item} />
             ) : (
                 <>
                     <StockScreen api={api} />

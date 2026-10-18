@@ -166,23 +166,68 @@ Put a checked-out unit back in stock, clearing its check-out details. **Idempote
 
 ### `GET /api/products/{productId}`
 
-A product (#51; later item detail).
+A product, for naming (#51) and item detail (#53).
 
 ```json
 {
   "productId": "…",
-  "barcode": "501001234567",
-  "status": "noMatch",
-  "displayName": "Unknown item (501001234567)",
-  "brand": null,
-  "size": null,
-  "inStockCount": 1,
+  "barcode": "4056489899112",
+  "status": "known",
+  "displayName": "SEMI-SKIMMED BRITISH MILK",
+  "brand": "Dairy Manor",
+  "size": "2.272 L",
+  "inStockCount": 2,
   "latestCheckedInAt": "2026-10-17T17:42:00.000Z",
-  "latestDeviceRole": "in"
+  "latestDeviceRole": "in",
+  "shelfLifeDays": 7,
+  "shelfLifeSource": "jev",
+  "units": [
+    { "unitId": "…", "checkedInAt": "2026-10-13T09:00:00.000Z", "estimatedExpiryDate": "2026-10-20", "expirySource": "shelfLife", "daysUntilExpiry": 2 },
+    { "unitId": "…", "checkedInAt": "2026-10-17T17:42:00.000Z", "estimatedExpiryDate": "2026-10-25", "expirySource": "manual", "daysUntilExpiry": 7 }
+  ]
 }
 ```
 
-`latestCheckedInAt` and `latestDeviceRole` (`in` / `out`, from the device that checked in the newest in-stock unit) are `null` when nothing's in stock. **404** `{ "error": "No such product." }`.
+| Field | Notes |
+|---|---|
+| `latestCheckedInAt`, `latestDeviceRole` | `in` / `out`, from the device that checked in the newest in-stock unit; `null` when nothing's in stock. |
+| `shelfLifeDays`, `shelfLifeSource` | The product's shelf life and who set it (`jev` or `manual`); `null` until estimated. |
+| `units` | In-stock units in **check-out order**: soonest estimated expiry first (none last), then oldest check-in. Item detail labels them Unit 1…n. |
+| `units[].expirySource` | `shelfLife` (bought date + shelf life) or `manual` (set in item detail); `null` with no date yet. |
+| `units[].daysUntilExpiry` | Days from today (UK) to its date; negative once passed. `null` with no date. |
+
+**404** `{ "error": "No such product." }`.
+
+### `POST /api/units/{unitId}/check-out`
+
+Check out **that** unit, from item detail (#53). No body. Recorded like a stock-list check-out: `checkOutSource: "ui"`, `checkedOutBy` = the caller. ETag-guarded. Undo with `POST /api/units/{unitId}/undo-check-out`.
+
+- **200** `{ "unitId": "…", "productId": "…", "displayName": "…", "remainingCount": 1 }`
+- **404** `{ "error": "No such unit." }`
+- **409** `{ "error": "That unit isn't in stock." }`: already checked out (or a scanner took it meanwhile). Nothing changed.
+
+### `PUT /api/units/{unitId}/estimated-expiry`
+
+Correct **one** unit's estimated expiry date (#53): `{ "date": "2026-10-25" }`. Sets `estimatedExpiryDate` and `expirySource: "manual"`. A manual date is never recalculated (no shelf-life fill or change touches it). Other units are unchanged.
+
+- **200** `{ "unitId": "…", "productId": "…", "estimatedExpiryDate": "2026-10-25", "expirySource": "manual" }`
+- **400** `{ "error": "…" }`: not a real `YYYY-MM-DD` date between 2000-01-01 and 2100-12-31.
+- **404** `{ "error": "No such unit." }`; **409** `{ "error": "…" }`: not in stock, or changed while saving.
+
+### `PUT /api/products/{productId}/shelf-life`
+
+Set a product's shelf life by hand (#53): `{ "days": 14 }` (whole number, 1–3650). Sets `shelfLifeDays` and `shelfLifeSource: "manual"`; Jev never overwrites it. It applies to **units bought from now on**: units that already have a date keep it (in-stock units with no date yet get one from it on the next shelf-life run). Only for `known` products.
+
+- **200** `{ "productId": "…", "shelfLifeDays": 14, "shelfLifeSource": "manual" }`
+- **400** `{ "error": "…" }`; **404** `{ "error": "No such product." }`; **409** `{ "error": "…" }`: not known yet (name it first), or changed while saving.
+
+### `PUT /api/products/{productId}/details`
+
+Correct a **known** product's details (#53): `{ "name": "Semi-skimmed milk", "brand": "Dairy Manor", "size": "2 pint" }`, with the same rules as naming (below). Sets `source: manual`, `displayName`, `brand`, `size`, `editedAt` and `editedBy`. Known products are never looked up again, so nothing overwrites it. Its shelf life is kept.
+
+- **200** `{ "productId": "…", "displayName": "…", "brand": "…", "size": null }`
+- **400** `{ "error": "Check the details.", "errors": { "name": "Enter a name." } }`
+- **404** `{ "error": "No such product." }`; **409** `{ "error": "…" }`: still unknown (use the name endpoint), or changed while saving.
 
 ### `PUT /api/products/{productId}/name`
 

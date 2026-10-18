@@ -4,14 +4,17 @@ using System.Text.Json;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Domain;
 using CupboardTracker.Domain.Products;
+using CupboardTracker.Domain.Stock;
 using CupboardTracker.Functions.Api.Auth;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 
 namespace CupboardTracker.Functions.Api.Stock;
 
-/// <summary>A product, and naming an unknown one (#51). Both need a signed-in user. See docs/api.md.</summary>
-public sealed class ProductFunctions(GetProduct getProduct, NameProduct nameProduct)
+/// <summary>A product, naming an unknown one (#51), and editing a known one in item detail (#53). All need a signed-in
+/// user. See docs/api.md.</summary>
+public sealed class ProductFunctions(
+    GetProduct getProduct, NameProduct nameProduct, EditProductDetails editDetails, SetShelfLife setShelfLife)
 {
     public const int MaxBodyBytes = 4 * 1024;
 
@@ -46,6 +49,68 @@ public sealed class ProductFunctions(GetProduct getProduct, NameProduct nameProd
 
         var (status, body) = ToResponse(await nameProduct.ExecuteAsync(productId, command, context.GetCurrentUser(), cancellationToken));
         return await JsonAsync(request, status, body);
+    }
+
+    /// <summary><c>PUT /api/products/{productId}/details</c> with <c>{ name, brand?, size? }</c>: known products only.</summary>
+    [Function("editProductDetails")]
+    public async Task<HttpResponseData> EditDetails(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "products/{productId:guid}/details")] HttpRequestData request,
+        Guid productId,
+        FunctionContext context,
+        CancellationToken cancellationToken)
+    {
+        using var buffer = new MemoryStream();
+        await request.Body.CopyToAsync(buffer, cancellationToken);
+        var (command, error) = ParseName(buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+        if (command is null)
+        {
+            return await JsonAsync(request, HttpStatusCode.BadRequest, new { error, errors = new Dictionary<string, string>() });
+        }
+
+        var (status, body) = ToResponse(await editDetails.ExecuteAsync(productId, command, context.GetCurrentUser(), cancellationToken));
+        return await JsonAsync(request, status, body);
+    }
+
+    /// <summary><c>PUT /api/products/{productId}/shelf-life</c> with <c>{ days }</c>: for units bought from now on.</summary>
+    [Function("setShelfLife")]
+    public async Task<HttpResponseData> ShelfLife(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "products/{productId:guid}/shelf-life")] HttpRequestData request,
+        Guid productId,
+        FunctionContext context,
+        CancellationToken cancellationToken)
+    {
+        using var buffer = new MemoryStream();
+        await request.Body.CopyToAsync(buffer, cancellationToken);
+        var (days, error) = ParseDays(buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+        if (error is not null)
+        {
+            return await JsonAsync(request, HttpStatusCode.BadRequest, new { error });
+        }
+
+        var (status, body) = ToResponse(await setShelfLife.ExecuteAsync(productId, days, context.GetCurrentUser(), cancellationToken));
+        return await JsonAsync(request, status, body);
+    }
+
+    internal static (int? Days, string? Error) ParseDays(ReadOnlySpan<byte> body)
+    {
+        if (body.Length > MaxBodyBytes)
+        {
+            return (null, "Body is too large.");
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body.ToArray());
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("days", out var value)
+                && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var days)
+                ? (days, null)
+                : (null, "Body must be { \"days\": <whole number> }.");
+        }
+        catch (JsonException)
+        {
+            return (null, "Body must be a JSON object.");
+        }
     }
 
     internal static (NameProductCommand? Command, string? Error) ParseName(ReadOnlySpan<byte> body)
@@ -91,6 +156,40 @@ public sealed class ProductFunctions(GetProduct getProduct, NameProduct nameProd
         inStockCount = view.InStockCount,
         latestCheckedInAt = view.LatestCheckedInAt?.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
         latestDeviceRole = view.LatestDeviceRole?.ToWireName(),
+        shelfLifeDays = view.ShelfLifeDays,
+        shelfLifeSource = view.ShelfLifeSource,
+        units = view.InStockUnits.Select(u => new
+        {
+            unitId = u.UnitId,
+            checkedInAt = u.CheckedInAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+            estimatedExpiryDate = u.EstimatedExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            expirySource = u.ExpirySource switch
+            {
+                ExpirySource.Manual => "manual",
+                ExpirySource.ShelfLife => "shelfLife",
+                _ => null,
+            },
+            daysUntilExpiry = u.DaysUntilExpiry,
+        }),
+    };
+
+    internal static (HttpStatusCode Status, object Body) ToResponse(EditProductDetailsResult result) => result switch
+    {
+        EditProductDetailsResult.Saved s => (HttpStatusCode.OK,
+            new { productId = s.ProductId, displayName = s.DisplayName, brand = s.Brand, size = s.Size }),
+        EditProductDetailsResult.Invalid i => (HttpStatusCode.BadRequest, new { error = "Check the details.", errors = i.Errors }),
+        EditProductDetailsResult.NotFound => (HttpStatusCode.NotFound, new { error = "No such product." }),
+        EditProductDetailsResult.Conflict c => (HttpStatusCode.Conflict, new { error = c.Reason }),
+        _ => throw new ArgumentOutOfRangeException(nameof(result)),
+    };
+
+    internal static (HttpStatusCode Status, object Body) ToResponse(SetShelfLifeResult result) => result switch
+    {
+        SetShelfLifeResult.Saved s => (HttpStatusCode.OK, new { productId = s.ProductId, shelfLifeDays = s.Days, shelfLifeSource = "manual" }),
+        SetShelfLifeResult.Invalid i => (HttpStatusCode.BadRequest, new { error = i.Error }),
+        SetShelfLifeResult.NotFound => (HttpStatusCode.NotFound, new { error = "No such product." }),
+        SetShelfLifeResult.Conflict c => (HttpStatusCode.Conflict, new { error = c.Reason }),
+        _ => throw new ArgumentOutOfRangeException(nameof(result)),
     };
 
     internal static (HttpStatusCode Status, object Body) ToResponse(NameProductResult result) => result switch

@@ -84,3 +84,36 @@ export function boughtNote(soonestIsoDate: string, shelfLifeDays: number): strin
     const date = bought.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
     return `Bought ${date} · keeps about ${keepsAbout(shelfLifeDays)}`;
 }
+
+/** "Sunday 18 October", from a YYYY-MM-DD date. */
+export function longDate(isoDate: string): string {
+    return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        timeZone: "UTC",
+    });
+}
+
+/** "18 Oct", from a YYYY-MM-DD date. */
+export function shortDate(isoDate: string): string {
+    return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        timeZone: "UTC",
+    });
+}
+
+/** "13 Oct": a check-in time as its UK calendar date. */
+export function boughtDate(iso: string): string {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: UK });
+}
+
+/** The use-by card's first sentence: "In 2 days.", "Tomorrow.", "Today.", "Expired 3 days ago.". */
+export function untilSentence(daysUntil: number): string {
+    if (daysUntil < -1) return `Expired ${-daysUntil} days ago.`;
+    if (daysUntil === -1) return "Expired yesterday.";
+    if (daysUntil === 0) return "Today.";
+    if (daysUntil === 1) return "Tomorrow.";
+    return `In ${daysUntil} days.`;
+}

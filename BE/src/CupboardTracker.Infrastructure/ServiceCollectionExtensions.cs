@@ -65,6 +65,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<UndoCheckOut>();
         services.AddTransient<GetProduct>();
         services.AddTransient<NameProduct>();
+        services.AddTransient<EditProductDetails>();
+        services.AddTransient<SetShelfLife>();
+        services.AddTransient<CheckOutUnit>();
+        services.AddTransient<SetUnitExpiry>();
         services.AddSingleton(sp => StockSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
 
         // Shelf life and estimated expiry dates (#52): Jev, keyed from Key Vault through an app setting (#42).
