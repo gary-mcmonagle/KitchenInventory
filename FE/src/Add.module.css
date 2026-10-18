@@ -151,10 +151,20 @@
     gap: 4px;
 }
 
-.check {
+/* A 24 px box with a 44 px touch target. */
+.checkArea {
     flex: none;
     width: var(--touch);
     height: var(--touch);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.check {
+    width: 24px;
+    height: 24px;
     margin: 0;
     accent-color: var(--accent);
     cursor: pointer;

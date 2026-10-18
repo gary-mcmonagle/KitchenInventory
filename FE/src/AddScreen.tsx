@@ -471,13 +471,15 @@ function RowView({
     return (
         <li className={row.checked ? styles.row : `${styles.row} ${styles.rowOff}`}>
             <div className={styles.rowMain}>
-                <input
-                    type="checkbox"
-                    className={styles.check}
-                    checked={row.checked}
-                    aria-label={`Add ${row.name || "this item"}`}
-                    onChange={(e) => onChange(row.key, { checked: e.target.checked })}
-                />
+                <label className={styles.checkArea}>
+                    <input
+                        type="checkbox"
+                        className={styles.check}
+                        checked={row.checked}
+                        aria-label={`Add ${row.name || "this item"}`}
+                        onChange={(e) => onChange(row.key, { checked: e.target.checked })}
+                    />
+                </label>
                 <div className={styles.rowText}>
                     <label htmlFor={nameId} className={styles.visuallyHidden}>
                         Name
