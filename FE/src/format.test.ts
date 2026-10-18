@@ -89,3 +89,20 @@ test("item detail dates show the year only when it isn't this year", async () =>
     // New Year's Eve, 23:30 UTC on 31 Dec is still 31 Dec in the UK (GMT).
     expect(shortDate("2027-01-02", new Date("2026-12-31T23:30:00Z"))).toBe("2 Jan 2027");
 });
+
+test("scanners screen times (UK time)", async () => {
+    const { dayTime, timeDay, interval } = await import("./format");
+    const now = new Date("2026-10-18T08:00:00Z"); // 09:00 BST
+    expect(dayTime("2026-10-18T07:15:00Z", now)).toBe("today 08:15");
+    expect(dayTime("2026-10-17T17:42:00Z", now)).toBe("yesterday 18:42");
+    expect(dayTime("2026-10-15T11:20:00Z", now)).toBe("15 Oct 12:20");
+    expect(timeDay("2026-10-18T07:15:00Z", now)).toBe("08:15 today");
+    expect(timeDay("2026-10-17T17:42:00Z", now)).toBe("18:42 yesterday");
+    expect(timeDay("2026-10-14T18:03:00Z", now)).toBe("14 Oct, 19:03");
+    expect([interval(120), interval(60), interval(300), interval(30)]).toEqual([
+        "2 minutes",
+        "1 minute",
+        "5 minutes",
+        "30 seconds",
+    ]);
+});

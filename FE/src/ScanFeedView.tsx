@@ -1,4 +1,4 @@
-import { namePath, navigate } from "./router";
+import { namePath, navigate, SCANNERS_PATH } from "./router";
 import { toastSubtitle, visibleToasts, type FeedState, type FeedToast } from "./scanFeed";
 import styles from "./Feed.module.css";
 
@@ -19,7 +19,21 @@ export function ScanFeedView({
             {shown.map((toast) => (
                 <Toast key={toast.scanId} toast={toast} now={now} onDismiss={onDismiss} />
             ))}
-            {more > 0 && <div className={styles.more}>+{more} more waiting.</div>}
+            {more > 0 && (
+                <div className={styles.more}>
+                    +{more} more waiting.{" "}
+                    <a
+                        className={styles.moreLink}
+                        href={SCANNERS_PATH}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            navigate(SCANNERS_PATH);
+                        }}
+                    >
+                        Open Scanners to see them all.
+                    </a>
+                </div>
+            )}
         </div>
     );
 }

@@ -16,6 +16,8 @@ export function navigate(path: string): void {
     window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+export const SCANNERS_PATH = "/scanners";
+
 export const namePath = (productId: string) => `/products/${encodeURIComponent(productId)}/name`;
 export const itemPath = (productId: string) => `/products/${encodeURIComponent(productId)}`;
 export const editPath = (productId: string) => `/products/${encodeURIComponent(productId)}/edit`;

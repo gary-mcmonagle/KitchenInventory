@@ -81,6 +81,15 @@ public sealed class CosmosHubRepository(CosmosContainers containers) : IHubRepos
             ["lastSeenAt"] = CosmosJson.Timestamp(hub.LastSeenAt),
             ["offlineAlertSentAt"] = CosmosJson.Timestamp(hub.OfflineAlertSentAt),
             ["lastHeartbeat"] = lastHeartbeat,
+            // #55: each receiver's presence and since when ("Unplugged since …").
+            ["scannerStates"] = new JsonArray(hub.Scanners
+                .Select(s => (JsonNode?)new JsonObject
+                {
+                    ["deviceId"] = s.DeviceId,
+                    ["present"] = s.Present,
+                    ["since"] = CosmosJson.Timestamp(s.Since),
+                })
+                .ToArray()),
         };
     }
 
@@ -100,7 +109,14 @@ public sealed class CosmosHubRepository(CosmosContainers containers) : IHubRepos
                 CosmosJson.Text(heartbeat["clientSha"]) ?? "",
                 heartbeat["uptimeSeconds"]?.GetValue<long>() ?? 0,
                 (heartbeat["usbInputDevices"] as JsonArray)?.Select(n => CosmosJson.Text(n) ?? "").ToList() ?? [],
-                scanners));
+                scanners),
+            (document["scannerStates"] as JsonArray)?
+                .OfType<JsonObject>()
+                .Select(s => new ScannerState(
+                    CosmosJson.Text(s["deviceId"]) ?? "",
+                    s["present"]?.GetValue<bool>() ?? false,
+                    CosmosJson.ParseTimestamp(s["since"]) ?? DateTimeOffset.MinValue))
+                .ToList());
     }
 
     private static Versioned<Hub> Versioned(JsonObject document) =>

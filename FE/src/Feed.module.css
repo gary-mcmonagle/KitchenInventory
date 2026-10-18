@@ -119,3 +119,9 @@
     font-weight: 600;
     color: var(--warn-fg);
 }
+
+.moreLink {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}

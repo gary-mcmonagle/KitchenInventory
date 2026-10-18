@@ -28,4 +28,10 @@ public interface IUnmatchedCheckOutRepository
 
     /// <summary>Records it (id = scan ID). False if it already exists (a replay).</summary>
     Task<bool> CreateIfNotExistsAsync(UnmatchedCheckOut unmatched, CancellationToken cancellationToken);
+
+    /// <summary>The record, or null if there's none for that scan.</summary>
+    Task<UnmatchedCheckOut?> GetAsync(Guid scanId, CancellationToken cancellationToken);
+
+    /// <summary>Marks it dismissed (#55). Keeps the first dismissal if it's already dismissed.</summary>
+    Task DismissAsync(Guid scanId, Guid userId, DateTimeOffset at, CancellationToken cancellationToken);
 }

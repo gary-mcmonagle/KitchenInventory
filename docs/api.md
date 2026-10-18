@@ -243,6 +243,38 @@ Name an unknown item (#51): `{ "name": "Smoked paprika", "brand": "Schwartz", "s
 - **404** `{ "error": "No such product." }`
 - **409** `{ "error": "This product already has a name.", "displayName": "…" }`: it's known (or was named or looked up meanwhile). Renaming known products isn't this endpoint.
 
+### `GET /api/scanners`
+
+The scanners screen (#55): is everything working, and what needs sorting.
+
+```json
+{
+  "generatedAt": "2026-10-18T08:00:00.000Z",
+  "hub": { "hubId": "cupboard-pi", "lastSeenAt": "…", "heartbeatIntervalSeconds": 120, "offlineThresholdMinutes": 20, "online": true },
+  "devices": [{ "deviceId": "scanner-in", "role": "in", "present": true, "presentSince": "…", "absentSince": null, "lastScanAt": "…" }],
+  "noMatchCheckIns": [{ "productId": "…", "barcode": "501001234567", "status": "noMatch", "scannedAt": "…", "unitId": "…", "inStockCount": 1 }],
+  "unmatchedCheckOuts": [{ "scanId": "…", "barcode": "20055363", "productId": null, "displayName": null, "scannedAt": "…" }],
+  "recentlyCheckedOut": [{ "unitId": "…", "productId": "…", "displayName": "Beef Gravy", "checkedOutAt": "…", "source": "scanner" }]
+}
+```
+
+| Field | Notes |
+|---|---|
+| `hub` | The most recently heard hub; `null` before the first heartbeat. `online` is false once it's been silent for longer than `OFFLINE_THRESHOLD_MINUTES` (the offline alert's rule). `heartbeatIntervalSeconds` is the API's copy of the Pi's `HEARTBEAT_INTERVAL_SECONDS` (default 120), for display. |
+| `devices` | Each scanner, check-in first. `present` is whether its **receiver** is plugged into the hub, per the latest heartbeats: `null` until reported. `presentSince` / `absentSince` say since when. |
+| `noMatchCheckIns` | Every product still `noMatch` / `lookupFailed` with something in stock, newest check-in first (its newest unit). Includes ones dismissed from the scan feed. |
+| `unmatchedCheckOuts` | Every **undismissed** unmatched check-out, newest first. `displayName` only for a named product; otherwise the app shows `Unknown item <barcode>`. |
+| `recentlyCheckedOut` | Units checked out in the last **48 hours**, newest first; `source` is `scanner` or `ui`. Undo with `POST /api/units/{unitId}/undo-check-out`, which works the same for scanner check-outs. |
+
+`Cache-Control: no-store`.
+
+### `POST /api/unmatched-check-outs/{scanId}/dismiss`
+
+Dismisses an unmatched check-out (reviewed, nothing to do). No body. **Idempotent**: the first dismissal's time and user are kept. Stock is never changed.
+
+- **200** `{ "scanId": "…", "dismissed": true }`
+- **404** `{ "error": "No such unmatched check-out." }`
+
 ## Live scan feed (#54)
 
 Every open app gets scan feed events through **Azure SignalR** (Free, Serverless; hub `ScanFeed`; [spike #38](spikes/38-signalr-scan-feed.md)). The feed is a hint: the API is the source of truth, and the app catches up after every (re)connect. Events are broadcast to every connection (all signed-in household members). Sending is best-effort: a SignalR failure is a warning in the logs and never fails a scan, its processing, naming or dismissal.

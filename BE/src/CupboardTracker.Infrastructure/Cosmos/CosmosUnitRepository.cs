@@ -142,6 +142,47 @@ public sealed class CosmosUnmatchedCheckOutRepository(CosmosContainers container
         return await CosmosJson.ReadAsync(response, cancellationToken) is not null;
     }
 
+    public async Task<UnmatchedCheckOut?> GetAsync(Guid scanId, CancellationToken cancellationToken)
+    {
+        var id = scanId.ToString("D");
+        using var response = await containers.UnmatchedCheckOuts.ReadItemStreamAsync(
+            id, new PartitionKey(id), cancellationToken: cancellationToken);
+        return await CosmosJson.ReadAsync(response, cancellationToken) is { } d ? ToUnmatched(d) : null;
+    }
+
+    public async Task DismissAsync(Guid scanId, Guid userId, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        var id = scanId.ToString("D");
+        // A patch, so it can't overwrite anything else; a second dismissal just rewrites the same fields.
+        using var response = await containers.UnmatchedCheckOuts.PatchItemStreamAsync(
+            id, new PartitionKey(id),
+            [
+                PatchOperation.Set("/dismissed", true),
+                PatchOperation.Set("/dismissedAt", CosmosJson.Timestamp(at)),
+                PatchOperation.Set("/dismissedBy", userId.ToString("D")),
+            ],
+            new PatchItemRequestOptions { FilterPredicate = "FROM c WHERE NOT IS_DEFINED(c.dismissed) OR c.dismissed = false" },
+            cancellationToken);
+        if (response.StatusCode is HttpStatusCode.PreconditionFailed)
+        {
+            return; // already dismissed: keep the first
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    internal static UnmatchedCheckOut ToUnmatched(JsonObject d) => new(
+        Guid.Parse(CosmosJson.Text(d["id"])!),
+        CosmosJson.Text(d["barcode"]) ?? "",
+        Guid.TryParse(CosmosJson.Text(d["productId"]), out var productId) ? productId : null,
+        CosmosJson.Text(d["deviceId"]) ?? "",
+        CosmosJson.ParseTimestamp(d["scannedAt"]) ?? DateTimeOffset.MinValue,
+        CosmosJson.ParseTimestamp(d["recordedAt"]) ?? DateTimeOffset.MinValue,
+        d["dismissed"] is JsonValue v && v.TryGetValue<bool>(out var dismissed) && dismissed
+            ? CosmosJson.ParseTimestamp(d["dismissedAt"]) ?? DateTimeOffset.MinValue
+            : null,
+        Guid.TryParse(CosmosJson.Text(d["dismissedBy"]), out var by) ? by : null);
+
     public async Task<bool> CreateIfNotExistsAsync(UnmatchedCheckOut unmatched, CancellationToken cancellationToken)
     {
         var id = unmatched.ScanId.ToString("D");

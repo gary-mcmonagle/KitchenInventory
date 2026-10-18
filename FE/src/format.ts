@@ -123,3 +123,33 @@ export function untilSentence(daysUntil: number): string {
     if (daysUntil === 1) return "Tomorrow.";
     return `In ${daysUntil} days.`;
 }
+
+/** "today 08:15", "yesterday 18:42", "15 Oct 12:20" (UK time). */
+export function dayTime(iso: string, now: Date = new Date()): string {
+    const at = new Date(iso);
+    const time = at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: UK });
+    const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: UK });
+    if (day(at) === day(now)) return `today ${time}`;
+    if (day(at) === day(new Date(now.getTime() - 86400000))) return `yesterday ${time}`;
+    return `${at.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: UK })} ${time}`;
+}
+
+/** "08:15 today", "18:42 yesterday", "15 Oct, 12:20" (UK time): for "Unplugged since …". */
+export function timeDay(iso: string, now: Date = new Date()): string {
+    const [day, time] = splitDayTime(dayTime(iso, now));
+    return day === "today" || day === "yesterday" ? `${time} ${day}` : `${day}, ${time}`;
+}
+
+function splitDayTime(text: string): [string, string] {
+    const i = text.lastIndexOf(" ");
+    return [text.slice(0, i), text.slice(i + 1)];
+}
+
+/** "2 minutes", "1 minute", "30 seconds": how often the hub reports in. */
+export function interval(seconds: number): string {
+    if (seconds % 60 === 0) {
+        const minutes = seconds / 60;
+        return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+    }
+    return `${seconds} seconds`;
+}

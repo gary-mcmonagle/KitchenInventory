@@ -46,8 +46,9 @@ public sealed partial class RecordHeartbeat(IHubRepository hubs, TimeProvider cl
         for (var attempt = 0; attempt < MaxAttempts; attempt++)
         {
             var now = clock.GetUtcNow();
-            var hub = new Hub(hubId, LastSeenAt: now, OfflineAlertSentAt: null, details!);
             var existing = await hubs.GetAsync(hubId, cancellationToken);
+            var scanners = Hub.NextScannerStates(existing?.Value.Scanners ?? [], details!.Scanners, now);
+            var hub = new Hub(hubId, LastSeenAt: now, OfflineAlertSentAt: null, details, scanners);
             if (existing is null)
             {
                 if (await hubs.TryCreateAsync(hub, cancellationToken))

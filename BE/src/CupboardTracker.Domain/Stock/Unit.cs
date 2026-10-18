@@ -63,4 +63,9 @@ public sealed record Unit(
 
 /// <summary>A check-out scan with no unit in stock to remove (unknown barcode, or nothing in stock).</summary>
 public sealed record UnmatchedCheckOut(
-    Guid ScanId, string Barcode, Guid? ProductId, string DeviceId, DateTimeOffset ScannedAt, DateTimeOffset RecordedAt);
+    Guid ScanId, string Barcode, Guid? ProductId, string DeviceId, DateTimeOffset ScannedAt, DateTimeOffset RecordedAt,
+    DateTimeOffset? DismissedAt = null, Guid? DismissedBy = null)
+{
+    /// <summary>Dismissed on the scanners screen (#55): reviewed, nothing to do. Stays dismissed.</summary>
+    public bool IsDismissed => DismissedAt is not null;
+}

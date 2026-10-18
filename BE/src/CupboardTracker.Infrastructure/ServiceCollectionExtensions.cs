@@ -6,6 +6,7 @@ using CupboardTracker.Application.Notifications;
 using CupboardTracker.Application.Ping;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.ScanFeed;
+using CupboardTracker.Application.Scanners;
 using CupboardTracker.Application.Scans;
 using CupboardTracker.Application.ShelfLives;
 using CupboardTracker.Application.Stock;
@@ -98,6 +99,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<INotifier, AcsEmailNotifier>();
         services.AddTransient<CheckHubsOffline>();
 
+        // Scanners screen (#55).
+        services.AddSingleton(sp => ScannersSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<IScannersQueries, CosmosScannersQueries>();
+        services.AddTransient<GetScanners>();
+        services.AddTransient<DismissUnmatchedCheckOut>();
+
         // The 9pm daily digest (API timer), through the same notifier.
         services.AddSingleton<IDigestQueries, CosmosDigestQueries>();
         services.AddSingleton<ISentDigestRepository, CosmosSentDigestRepository>();
@@ -106,6 +113,13 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    /// <summary>HEARTBEAT_INTERVAL_SECONDS (the Pi's setting, default 120): only shown on the scanners screen.</summary>
+    internal static ScannersSettings ScannersSettingsFromConfiguration(IConfiguration config) =>
+        new(int.TryParse(config["HEARTBEAT_INTERVAL_SECONDS"], System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds >= 10
+            ? TimeSpan.FromSeconds(seconds)
+            : ScannersSettings.DefaultHeartbeatInterval);
 
     /// <summary>USE_FIRST_DAYS (default 3) and the household's time zone (#52).</summary>
     internal static StockSettings StockSettingsFromConfiguration(IConfiguration config)
