@@ -3,6 +3,23 @@
 **Question:** how do we give every product a clean, consistent icon from Iconify to replace the initial-letter tile?
 Which icon set, how does each product get its icon, how are icons served, and what licences apply?
 
+> **Decision (Gary, 2026-10-18): IconPark Outline**, not the recommended Fluent Emoji Flat. Line icons drawn in the
+> tile's accent green keep today's calm look. Everything else stands, adjusted for IconPark:
+> - **Curated list:** IconPark's **Foods** category (121) plus these extras from outside it: \`apple\`, \`bottle\`, \`cup\`,
+>   \`powder\`, \`seedling\`, \`leaves\`, \`snowflake\`, \`pill\`, \`pig\`, \`shopping\`. IconPark has no salt, butter, coffee or jar,
+>   so those products get the nearest match or the aisle icon.
+> - **Fallback threshold 0.3**, not 0.5. IconPark's confidences run lower: 16 picks were below 0.5, including right ones
+>   (chilli for hot sauce 0.46, orange for Easy Peelers 0.46, bottle for mayo 0.37). Below 0.3, every pick was close or
+>   wrong (gravy → pot 0.28, sweetener → candy 0.27, test item → cup 0.26, ham → bone 0.25, baked beans → vegetables 0.20).
+> - **Aisle icons** (for #71): Fruit & veg \`vegetables\`, Bakery \`bread\`, Meat & fish \`fish\`, Dairy & eggs \`milk\`,
+>   Chilled & deli \`sandwich\`, Frozen \`snowflake\`, Pasta, rice & grains \`rice\`, Tins & jars \`canned-fruit\`, Sauces, oils &
+>   condiments \`bottle-one\`, Baking & spices \`chili\`, Breakfast & cereal \`bowl\`, Snacks & sweets \`candy\`, Drinks
+>   \`tea-drink\`, Other \`shopping-cart\`.
+> - **Colour:** the SVGs use \`currentColor\`, so the tile's colour (\`--accent-dark\` on \`--accent-tint\`) draws them, in both
+>   themes. ~131 icons, ~50 KB raw.
+> - **Licence:** Apache 2.0 (no on-screen credit); \`THIRD_PARTY_NOTICES.md\` carries IconPark's licence text.
+> - The emoji-in-the-digest idea doesn't apply (IconPark icons aren't emoji): the digest stays text only.
+
 **Answer (recommendation):** use **Fluent Emoji Flat**. Pick each product's icon with **Jev**, choosing from that set's
 own **Food & Drink category** (136 icons) plus about 10 extras, once per product on the shelf-life timer, as with shelf
 life. When Jev's confidence is **below 0.5**, use the product's **aisle icon** instead (from the aisles feature, #71),
@@ -217,7 +234,6 @@ so the build has no runtime dependency. The whole set is 9 MB, so only the curat
    > **Verification:** after the timer has run, Gary skims the stock list for silly icons and fixes any with the
    > picker; a new product gets an icon a few minutes after it's known.
 
-2. **[Task] Emoji characters in the digest** (optional): a name → emoji table for the curated icons, so the 9pm email
-   shows 🍞 next to each line.
+2. ~~[Task] Emoji characters in the digest~~: dropped with Gary's choice of IconPark (not emoji).
 3. **In #71:** add an icon to each aisle in the domain list (the draft mapping in the script), for the fallback and,
    optionally, the aisle headers.
