@@ -11,12 +11,17 @@ const product = (overrides: Partial<StockProduct>): StockProduct => ({
     count: 1,
     latestCheckedInAt: "2026-10-17T18:00:00.000Z",
     status: "known",
+    section: overrides.status && overrides.status !== "known" ? "waitingForName" : "later",
+    soonestEstimatedExpiryDate: null,
+    daysUntilSoonest: null,
+    shelfLifeDays: null,
     ...overrides,
 });
 
 const stockOf = (...products: StockProduct[]): Stock => ({
     generatedAt: "2026-10-17T22:00:00.000Z",
     totalUnits: products.reduce((n, p) => n + p.count, 0),
+    useFirstCount: products.filter((p) => p.section === "useFirst").length,
     products,
 });
 
@@ -29,7 +34,7 @@ function fakeApi(...responses: Array<Stock | Error>) {
     return { api: { stock } as unknown as ApiClient, stock };
 }
 
-test("named products in one section, in the API's order, with counts and meta lines", async () => {
+test("named products without an estimate are in Later, in the API's order, with counts and meta lines", async () => {
     const { api } = fakeApi(
         stockOf(
             product({ displayName: "Beef Gravy", count: 2 }),
@@ -38,15 +43,80 @@ test("named products in one section, in the API's order, with counts and meta li
     );
     render(<StockScreen api={api} />);
 
-    const section = await screen.findByRole("region", { name: /In stock/ });
+    const section = await screen.findByRole("region", { name: /Later/ });
     expect(within(section).getByText("2 items")).toBeInTheDocument();
     const rows = within(section).getAllByRole("listitem");
     expect(rows.map((r) => r.textContent)).toEqual([
         "BBeef GravyBisto · 230g · ×2Check out",
         "Wwalnut halves200gCheck out",
     ]);
-    expect(screen.getByText("3 items")).toBeInTheDocument(); // header summary: units
+    expect(screen.getByText("3 items · 0 to use first")).toBeInTheDocument(); // header summary: units
     expect(screen.queryByRole("region", { name: /Waiting for a name/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /Use first/ })).not.toBeInTheDocument();
+});
+
+test("Use first and Later with the mockup's badges, notes, summary and disclaimer", async () => {
+    const { api } = fakeApi(
+        stockOf(
+            product({
+                displayName: "Hummus",
+                section: "useFirst",
+                soonestEstimatedExpiryDate: "2026-10-15",
+                daysUntilSoonest: -1,
+                shelfLifeDays: 5,
+            }),
+            product({
+                displayName: "Semi-skimmed milk",
+                count: 2,
+                section: "useFirst",
+                soonestEstimatedExpiryDate: "2026-10-18",
+                daysUntilSoonest: 2,
+                shelfLifeDays: 7,
+            }),
+            product({
+                displayName: "Greek yoghurt",
+                section: "later",
+                soonestEstimatedExpiryDate: "2026-10-20",
+                daysUntilSoonest: 4,
+                shelfLifeDays: 14,
+            }),
+            product({
+                displayName: "Baked beans",
+                section: "later",
+                soonestEstimatedExpiryDate: "2028-10-03",
+                daysUntilSoonest: 718,
+                shelfLifeDays: 730,
+            }),
+            product({ displayName: "Walnuts", section: "later" }),
+            product({ displayName: "Unknown item (1)", status: "noMatch", barcode: "1" }),
+        ),
+    );
+    render(<StockScreen api={api} />);
+
+    const useFirst = await screen.findByRole("region", { name: /Use first/ });
+    expect(screen.getByText("7 items · 2 to use first")).toBeInTheDocument();
+    expect(
+        screen.getByText(
+            "Dates are estimates: the day it was bought plus how long that kind of food usually keeps.",
+        ),
+    ).toBeInTheDocument();
+    expect(within(useFirst).getByText("2 items")).toBeInTheDocument();
+    const [hummus, milk] = within(useFirst).getAllByRole("listitem");
+    expect(within(hummus).getByText("Est. expired").className).toMatch(/_expired_/);
+    expect(within(hummus).getByText("Bought 10 Oct · keeps about 5 days")).toBeInTheDocument();
+    expect(within(milk).getByText("Est. 2 days").className).toMatch(/_soon_/);
+    expect(within(milk).getByText("Bought 11 Oct · keeps about 7 days")).toBeInTheDocument();
+
+    const later = screen.getByRole("region", { name: /Later/ });
+    const [yoghurt, beans, walnuts] = within(later).getAllByRole("listitem");
+    expect(within(yoghurt).getByText("Est. 4 days").className).toMatch(/_later_/);
+    expect(within(yoghurt).getByText("Bought 6 Oct · keeps about 2 weeks")).toBeInTheDocument();
+    expect(within(beans).getByText("Est. Oct 2028").className).toMatch(/_later_/);
+    expect(within(beans).getByText("Bought 4 Oct · keeps about 2 years")).toBeInTheDocument();
+    expect(walnuts.textContent).toBe("WWalnutsBisto · 230gCheck out"); // no estimate yet: no badge or note
+
+    const sections = screen.getAllByRole("region").map((r) => r.getAttribute("aria-labelledby"));
+    expect(sections).toEqual(["section-use-first", "section-later", "section-waiting-for-a-name"]);
 });
 
 test("unnamed products wait for a name, with the grouped barcode and scan date", async () => {
@@ -85,7 +155,7 @@ test("Check out on named rows, Name it on unnamed rows, nothing else tappable", 
     );
     render(<StockScreen api={api} />);
 
-    await screen.findByRole("region", { name: /In stock/ });
+    await screen.findByRole("region", { name: /Later/ });
     expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
         "Check out one Beef Gravy",
         "Name it",
@@ -108,7 +178,7 @@ test("empty stock", async () => {
     expect(await screen.findByText(/Nothing in stock yet\./)).toHaveTextContent(
         "Nothing in stock yet.Scan something in.",
     );
-    expect(screen.getByText("0 items")).toBeInTheDocument();
+    expect(screen.getByText("0 items · 0 to use first")).toBeInTheDocument();
 });
 
 test("loading shows skeleton rows, then the list", async () => {
@@ -143,19 +213,19 @@ test("no access shows a short message", async () => {
 test("returning to the app reloads the list", async () => {
     const { api, stock } = fakeApi(stockOf(product({ count: 2 })), stockOf(product({ count: 3 })));
     render(<StockScreen api={api} />);
-    await screen.findByText("2 items");
+    await screen.findByText("2 items · 0 to use first");
 
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
     await act(async () => document.dispatchEvent(new Event("visibilitychange")));
 
-    expect(await screen.findByText("3 items")).toBeInTheDocument();
+    expect(await screen.findByText("3 items · 0 to use first")).toBeInTheDocument();
     expect(stock).toHaveBeenCalledTimes(2);
 });
 
 test("pull to refresh reloads the list", async () => {
     const { api, stock } = fakeApi(stockOf(product({ count: 2 })), stockOf(product({ count: 4 })));
     const { container } = render(<StockScreen api={api} />);
-    await screen.findByText("2 items");
+    await screen.findByText("2 items · 0 to use first");
     const surface = container.firstElementChild!;
 
     fireEvent.touchStart(surface, { touches: [{ clientY: 100 }] });
@@ -163,14 +233,14 @@ test("pull to refresh reloads the list", async () => {
     expect(screen.getByText("Release to refresh")).toBeInTheDocument();
     await act(async () => fireEvent.touchEnd(surface));
 
-    expect(await screen.findByText("4 items")).toBeInTheDocument();
+    expect(await screen.findByText("4 items · 0 to use first")).toBeInTheDocument();
     expect(stock).toHaveBeenCalledTimes(2);
 });
 
 test("a short pull doesn't refresh", async () => {
     const { api, stock } = fakeApi(stockOf(product({ count: 2 })));
     const { container } = render(<StockScreen api={api} />);
-    await screen.findByText("2 items");
+    await screen.findByText("2 items · 0 to use first");
     const surface = container.firstElementChild!;
 
     fireEvent.touchStart(surface, { touches: [{ clientY: 100 }] });

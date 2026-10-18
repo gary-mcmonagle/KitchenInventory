@@ -71,10 +71,19 @@ public static class BuildDailyDigest
     /// <summary>The sections, in order. Null means "leave this section out".</summary>
     private static IEnumerable<Section?> Sections(DigestData data)
     {
+        yield return UseFirst(data);
         yield return Activity(data);
         yield return InStock(data);
         yield return UnknownItems(data);
     }
+
+    private static Section? UseFirst(DigestData data) =>
+        data.UseFirstLines.Count == 0
+            ? null
+            : new Section("Use first", [
+                new UseFirstLines(data.UseFirstLines),
+                new Note("Dates are estimates: the day it was bought plus how long that kind of food usually keeps."),
+            ]);
 
     private static Section Activity(DigestData data)
     {
@@ -149,6 +158,22 @@ public static class BuildDailyDigest
             {
                 html.Append(CultureInfo.InvariantCulture, $"<li style=\"margin:2px 0\">{E(Line(item))}</li>");
                 text.AppendLine("  " + Line(item));
+            }
+
+            html.Append("</ul>");
+        }
+    }
+
+    private sealed record UseFirstLines(IReadOnlyList<DigestUseFirstLine> Items) : Part
+    {
+        public override void Render(StringBuilder html, StringBuilder text)
+        {
+            html.Append("<ul style=\"margin:0;padding-left:20px\">");
+            foreach (var item in Items)
+            {
+                var line = $"{Line(new DigestLine(item.Name, item.Count))} · {item.Badge}";
+                html.Append(CultureInfo.InvariantCulture, $"<li style=\"margin:2px 0\">{E(line)}</li>");
+                text.AppendLine("  " + line);
             }
 
             html.Append("</ul>");

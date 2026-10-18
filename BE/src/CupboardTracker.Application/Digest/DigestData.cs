@@ -7,8 +7,12 @@ public sealed record DigestData(
     IReadOnlyList<DigestLine> CheckedIn,
     IReadOnlyList<DigestLine> CheckedOut,
     IReadOnlyList<DigestLine> InStock,
-    IReadOnlyList<DigestLine> UnknownInStock)
+    IReadOnlyList<DigestLine> UnknownInStock,
+    IReadOnlyList<DigestUseFirstLine>? UseFirst = null)
 {
+    /// <summary>Products to use first (#52), soonest first. Empty: the section is left out.</summary>
+    public IReadOnlyList<DigestUseFirstLine> UseFirstLines => UseFirst ?? [];
+
     public int CheckedInCount => CheckedIn.Sum(l => l.Count);
 
     public int CheckedOutCount => CheckedOut.Sum(l => l.Count);
@@ -18,3 +22,6 @@ public sealed record DigestData(
 
 /// <summary>One product (or unknown barcode) and how many units.</summary>
 public sealed record DigestLine(string Name, int Count);
+
+/// <summary>A product to use first: how many units, and the badge text for its soonest one ("Est. tomorrow").</summary>
+public sealed record DigestUseFirstLine(string Name, int Count, string Badge);

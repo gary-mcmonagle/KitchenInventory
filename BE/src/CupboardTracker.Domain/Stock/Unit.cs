@@ -35,6 +35,8 @@ public sealed record Unit(
             CheckedOutBy = userId,
         };
 
+    public Unit WithEstimatedExpiry(DateOnly date) => this with { EstimatedExpiryDate = date };
+
     /// <summary>Back in stock, as if it had never been checked out.</summary>
     public Unit UndoCheckOut() =>
         this with

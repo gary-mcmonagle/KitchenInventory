@@ -25,6 +25,9 @@ export interface Me {
 
 export type StockStatus = "known" | "noMatch" | "lookupFailed";
 
+/** Which part of the stock list a product is in (#52). */
+export type StockSection = "useFirst" | "later" | "waitingForName";
+
 export interface StockProduct {
     productId: string;
     barcode: string | null;
@@ -34,12 +37,21 @@ export interface StockProduct {
     count: number;
     latestCheckedInAt: string;
     status: StockStatus;
+    section: StockSection;
+    /** YYYY-MM-DD: the soonest estimated expiry date of its units; null until it has an estimate. */
+    soonestEstimatedExpiryDate: string | null;
+    /** Days from today (UK) to that date: negative once passed. */
+    daysUntilSoonest: number | null;
+    shelfLifeDays: number | null;
 }
 
-/** GET /api/stock: grouped and sorted by the API (named A–Z, then unnamed, newest first). */
+/** GET /api/stock: grouped, put in sections and sorted by the API (Use first and Later by soonest estimated expiry,
+ * then name; Waiting for a name newest first). */
 export interface Stock {
     generatedAt: string;
     totalUnits: number;
+    /** Products in Use first. */
+    useFirstCount: number;
     products: StockProduct[];
 }
 

@@ -104,12 +104,13 @@ Auth: an **Entra ID bearer token** for the API registration (`aud` = the API's c
 
 ### `GET /api/stock`
 
-The stock list (#49): every product with units in stock, grouped and sorted so the UI does no aggregation. Only `inStock` units count.
+The stock list (#49, #52): every product with units in stock, grouped, put in sections and sorted so the UI does no aggregation. Only `inStock` units count.
 
 ```json
 {
   "generatedAt": "2026-10-17T22:00:00.000Z",
   "totalUnits": 30,
+  "useFirstCount": 2,
   "products": [
     {
       "productId": "bddb7749-2e2b-4ddd-937f-f44bb613eae3",
@@ -119,7 +120,11 @@ The stock list (#49): every product with units in stock, grouped and sorted so t
       "size": "230g",
       "count": 2,
       "latestCheckedInAt": "2026-10-17T18:16:15.743Z",
-      "status": "known"
+      "status": "known",
+      "section": "later",
+      "soonestEstimatedExpiryDate": "2027-10-17",
+      "daysUntilSoonest": 365,
+      "shelfLifeDays": 365
     }
   ]
 }
@@ -128,13 +133,20 @@ The stock list (#49): every product with units in stock, grouped and sorted so t
 | Field | Notes |
 |---|---|
 | `totalUnits` | All in-stock units (the header's "n items"). |
-| `products` | Named products (`status: "known"`) first, alphabetical ignoring case; then unnamed ones (`noMatch`, `lookupFailed`), most recently scanned first. |
+| `useFirstCount` | Products in `useFirst` (the header's "m to use first"). |
+| `products` | By section: `useFirst`, then `later`, then `waitingForName`. Within Use first and Later: soonest estimated expiry first (no estimate last), then name ignoring case. Waiting for a name: most recently scanned first. |
 | `barcode` | The product's first barcode, else the unit's. `null` for a product without one. |
 | `displayName` | From the product cache; `Unknown item (<barcode>)` for unnamed products (the UI shows "Unknown item"). |
 | `brand`, `size` | From the cached product; `null` when missing. |
 | `count` | In-stock units of this product. |
 | `latestCheckedInAt` | The newest of those units' check-in times (UTC). |
 | `status` | `known`, `noMatch` or `lookupFailed`. |
+| `section` | `useFirst`: a known product whose soonest unit is estimated expired or due within `USE_FIRST_DAYS` (app setting, default **3**) days. `later`: every other known product, including those with no estimate yet. `waitingForName`: `noMatch` and `lookupFailed`. |
+| `soonestEstimatedExpiryDate` | `YYYY-MM-DD`: the earliest `estimatedExpiryDate` of its in-stock units. `null` until it has an estimate. |
+| `daysUntilSoonest` | Days from today (UK calendar date) to that date; negative once it's passed, `0` on the day. `null` with it. |
+| `shelfLifeDays` | The product's shelf life, for the "keeps about …" note (the soonest unit was bought on `soonestEstimatedExpiryDate − shelfLifeDays`). `null` until estimated. |
+
+The UI's badge: `Est. expired` (red), `Est. today` / `Est. tomorrow` / `Est. n days` up to 14 days (amber at 3 days or fewer, green above), then `Est. 2 Nov`, or `Est. Oct 2028` when it's over a year away. The digest's Use first section uses the same text (`ExpiryBadge`).
 
 `Cache-Control: no-store`.
 

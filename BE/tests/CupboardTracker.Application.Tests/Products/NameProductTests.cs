@@ -107,7 +107,7 @@ public sealed class NameProductTests
     public async Task A_later_check_in_uses_the_manual_name_with_no_lookup()
     {
         var resolver = new ProductResolver(products, lookup, clock, new ListLogger<ProductResolver>());
-        var checkIn = new CheckInScan(resolver, units, new ListLogger<CheckInScan>());
+        var checkIn = new CheckInScan(resolver, units, TestSettings.Stock(), new ListLogger<CheckInScan>());
         await checkIn.ExecuteAsync(TestScans.Make(Barcode, Role.In), CancellationToken.None); // no match on OFF
         Assert.Single(lookup.Calls);
         var id = products.Lookups[Barcode];

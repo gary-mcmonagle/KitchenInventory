@@ -69,7 +69,7 @@ public sealed class SendDailyDigestTests
 
     private SendDailyDigest UseCase() => new(
         queries, products, sent, notifier,
-        new DigestSettings(TimeZoneInfo.FindSystemTimeZoneById("Europe/London")), clock, logger);
+        new DigestSettings(TimeZoneInfo.FindSystemTimeZoneById("Europe/London")), TestSettings.Stock(), clock, logger);
 
     [Fact]
     public async Task Groups_counts_sorts_and_separates_unknown_items()
@@ -84,6 +84,35 @@ public sealed class SendDailyDigestTests
         Assert.Equal([new DigestLine("Unknown item (20055363)", 1)], data.UnknownInStock);
         Assert.Equal([new DigestLine("pg tips", 1), new DigestLine("Unknown item (20055363)", 1)], data.CheckedIn);
         Assert.Empty(data.CheckedOut);
+    }
+
+    [Fact]
+    public async Task Use_first_lists_named_products_due_within_three_days_soonest_first_with_their_badge()
+    {
+        var today = new DateOnly(2026, 10, 17);
+        queries.InStock.AddRange([
+            new(Tea, "5000208000000", today.AddDays(3)),
+            new(Tea, "5000208000000", today.AddDays(40)),   // the soonest unit decides
+            new(Bisto, "5000354922831", today.AddDays(-2)),
+            new(Naan, "20055363", today),                    // unknown items aren't in Use first
+        ]);
+
+        var data = await UseCase().GatherAsync(DigestWindow.EndingOn(today, TimeZoneInfo.Utc), CancellationToken.None);
+
+        Assert.Equal(
+            [new DigestUseFirstLine("Bisto Gravy", 1, "Est. expired"), new DigestUseFirstLine("pg tips", 2, "Est. 3 days")],
+            data.UseFirstLines);
+    }
+
+    [Fact]
+    public async Task Nothing_due_soon_means_no_use_first()
+    {
+        var today = new DateOnly(2026, 10, 17);
+        queries.InStock.AddRange([new(Tea, "5000208000000", today.AddDays(4)), new(Bisto, "5000354922831")]);
+
+        var data = await UseCase().GatherAsync(DigestWindow.EndingOn(today, TimeZoneInfo.Utc), CancellationToken.None);
+
+        Assert.Empty(data.UseFirstLines);
     }
 
     [Fact]

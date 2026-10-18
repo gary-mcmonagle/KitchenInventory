@@ -27,6 +27,7 @@ public sealed class StockFunction(GetStock getStock)
     {
         generatedAt = Timestamp(view.GeneratedAt),
         totalUnits = view.TotalUnits,
+        useFirstCount = view.UseFirstCount,
         products = view.Products.Select(p => new
         {
             productId = p.ProductId,
@@ -42,6 +43,15 @@ public sealed class StockFunction(GetStock getStock)
                 StockProductStatus.NoMatch => "noMatch",
                 _ => "lookupFailed",
             },
+            section = p.Section switch
+            {
+                StockSection.UseFirst => "useFirst",
+                StockSection.Later => "later",
+                _ => "waitingForName",
+            },
+            soonestEstimatedExpiryDate = p.SoonestEstimatedExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            daysUntilSoonest = p.DaysUntilSoonest,
+            shelfLifeDays = p.ShelfLifeDays,
         }),
     };
 

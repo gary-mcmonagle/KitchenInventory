@@ -11,6 +11,26 @@ public sealed class BuildDailyDigestTests
         new(Friday, checkedIn ?? [], checkedOut ?? [], inStock ?? [], unknown ?? []);
 
     [Fact]
+    public void Use_first_comes_first_with_badges_when_there_is_any()
+    {
+        var data = Data(checkedIn: [new("PG Tips", 1)], inStock: [new("Milk", 2), new("PG Tips", 1)]) with
+        {
+            UseFirst = [new("Milk", 2, "Est. tomorrow"), new("Hummus & <dip>", 1, "Est. expired")],
+        };
+
+        var email = BuildDailyDigest.Build(data);
+
+        var text = email.PlainText.ReplaceLineEndings("\n");
+        Assert.Contains("Use first\n  Milk ×2 · Est. tomorrow\n  Hummus & <dip> ×1 · Est. expired\nDates are estimates", text, StringComparison.Ordinal);
+        Assert.True(text.IndexOf("Use first", StringComparison.Ordinal) < text.IndexOf("Today's activity", StringComparison.Ordinal));
+        Assert.Contains("Hummus &amp; &lt;dip&gt;", email.Html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Use_first_is_left_out_when_empty() =>
+        Assert.DoesNotContain("Use first", BuildDailyDigest.Build(Data(inStock: [new("Milk", 1)])).PlainText, StringComparison.Ordinal);
+
+    [Fact]
     public void Activity_day_subject_counts_units_in_and_out()
     {
         Assert.Equal("Cupboard Tracker – Fri 16 Oct: 3 in",

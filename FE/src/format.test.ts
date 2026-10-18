@@ -40,3 +40,41 @@ test("relative times, in UK time", async () => {
     expect(relativeTime("2026-10-17T17:42:00Z", now)).toBe("yesterday at 18:42");
     expect(relativeTime("2026-10-12T17:42:00Z", now)).toBe("on 12 Oct at 18:42");
 });
+
+test("expiry badges: text and colour at the boundaries (as the API's ExpiryBadge)", async () => {
+    const { expiryBadge } = await import("./format");
+    const on = (days: number) => {
+        const date = new Date(Date.UTC(2026, 9, 18 + days)).toISOString().slice(0, 10);
+        return expiryBadge(days, date);
+    };
+    expect(on(-1)).toEqual({ text: "Est. expired", tone: "expired" });
+    expect(on(0)).toEqual({ text: "Est. today", tone: "soon" });
+    expect(on(1)).toEqual({ text: "Est. tomorrow", tone: "soon" });
+    expect(on(3)).toEqual({ text: "Est. 3 days", tone: "soon" });
+    expect(on(4)).toEqual({ text: "Est. 4 days", tone: "later" });
+    expect(on(14)).toEqual({ text: "Est. 14 days", tone: "later" });
+    expect(on(15)).toEqual({ text: "Est. 2 Nov", tone: "later" });
+    expect(on(365)).toEqual({ text: "Est. 18 Oct", tone: "later" });
+    expect(on(366)).toEqual({ text: "Est. Oct 2027", tone: "later" });
+});
+
+test("shelf life in words, and the bought note", async () => {
+    const { keepsAbout, boughtNote } = await import("./format");
+    expect([2, 4, 7, 14, 30, 90, 180, 365, 730, 1095].map(keepsAbout)).toEqual([
+        "2 days",
+        "4 days",
+        "7 days",
+        "2 weeks",
+        "a month",
+        "3 months",
+        "6 months",
+        "a year",
+        "2 years",
+        "3 years",
+    ]);
+    expect(keepsAbout(1)).toBe("1 day");
+    expect(keepsAbout(21)).toBe("3 weeks");
+    // The soonest unit expires on 15 Oct and keeps 5 days: it was bought on 10 Oct.
+    expect(boughtNote("2026-10-15", 5)).toBe("Bought 10 Oct · keeps about 5 days");
+    expect(boughtNote("2027-01-02", 7)).toBe("Bought 26 Dec · keeps about 7 days");
+});
