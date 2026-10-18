@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Spike #75 proof of concept: sends one push to every saved subscription. Not part of BE/; never deployed.
+       No packages: aes128gcm (RFC 8291) and VAPID (RFC 8292) with in-box crypto, in WebPushSender.cs. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

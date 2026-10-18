@@ -1,0 +1,6 @@
+# Push subscriptions are capability URLs (anyone holding one can't read pushes, but can send them with our key's help);
+# VAPID keys never live in the repo at all.
+subscriptions.json
+*.env
+send/bin/
+send/obj/
