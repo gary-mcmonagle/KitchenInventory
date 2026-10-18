@@ -394,6 +394,7 @@ test("Opened today: the unit updates with its pill, the date, the storage hint, 
         "Opened 18 Oct; Pesto keeps about 4 days once opened. Keep in the fridge.",
     );
     expect(screen.queryByRole("group", { name: /Unit 1:/ })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Use by date for unit 1")).toHaveValue("2026-10-22"); // the fix form follows the new date
 
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Undo" })));
 

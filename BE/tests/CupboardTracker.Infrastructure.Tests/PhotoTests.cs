@@ -217,6 +217,26 @@ public sealed class UnitStateDocumentTests
     }
 
     [Fact]
+    public void An_undo_chain_round_trips()
+    {
+        var frozen = Jar() with
+        {
+            ExpirySource = ExpirySource.Frozen, FrozenOn = new DateOnly(2026, 10, 18), CurrentStorage = Storage.Freezer,
+            BeforeStateChange = Jar().Snapshot(),
+        };
+        var defrosted = frozen with
+        {
+            ExpirySource = ExpirySource.Defrosted, DefrostedOn = new DateOnly(2026, 10, 20), CurrentStorage = Storage.Fridge,
+            BeforeStateChange = frozen.Snapshot(),
+        };
+
+        var read = CosmosUnitRepository.ToUnit(Stored(CosmosUnitRepository.Write(defrosted, null)));
+
+        Assert.Equal(defrosted, read);
+        Assert.Equal(Jar().Snapshot() with { }, read.BeforeStateChange!.Before);
+    }
+
+    [Fact]
     public void A_pending_unit_with_no_date_keeps_its_source_and_a_cleared_date_is_removed()
     {
         var pending = Jar() with

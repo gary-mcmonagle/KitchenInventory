@@ -325,7 +325,7 @@ This covers every way a product becomes known: Open Food Facts at check-in, the 
 | `openedOn`, `frozenOn`, `defrostedOn` | `YYYY-MM-DD` (UK) when the unit was marked opened, frozen or defrosted in item detail (#65). In the freezer now = `frozenOn` set and `defrostedOn` absent. Absent otherwise. |
 | `currentStorage` | Where to keep it in its current state (`cupboard` / `fridge` / `freezer`). Absent for sealed units (the product's `storage` applies). |
 | `estimatePending` | `true` while its state's estimate is missing from the product: the date is the old one until the shelf-life timer fills it in. Absent otherwise. |
-| `beforeStateChange` | The estimate fields (`estimatedExpiryDate`, `expirySource`, the three dates, `currentStorage`, `estimatePending`) as they were before the last state change, for **Undo** (`POST /api/units/{id}/undo-state-change`; one level). Absent when there's nothing to undo. Cleared fields are **removed** from the document, so Undo never leaves an old value behind. |
+| `beforeStateChange` | The estimate fields (`estimatedExpiryDate`, `expirySource`, the three dates, `currentStorage`, `estimatePending`) as they were before the last state change, for **Undo** (`POST /api/units/{id}/undo-state-change`), with the snapshot before that in `before` (up to 5 deep), so each change can be undone in turn. Absent when there's nothing to undo. Cleared fields are **removed** from the document, so Undo never leaves an old value behind. |
 
 The unit doesn't copy the product's status or name: the product is always one point read away. (The earlier `productStatus` field is gone, because every unit now has a product, including `lookupFailed` ones.)
 

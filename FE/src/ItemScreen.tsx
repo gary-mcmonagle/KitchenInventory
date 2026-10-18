@@ -355,7 +355,7 @@ function Detail({
 
             {product.units.length > 0 && (
                 <FixEstimate
-                    key={product.units.map((u) => u.unitId).join()}
+                    key={product.units.map((u) => `${u.unitId}:${u.estimatedExpiryDate}`).join()}
                     api={api}
                     product={product}
                     onSaved={onSaved}

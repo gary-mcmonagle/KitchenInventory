@@ -246,7 +246,7 @@ Marks a unit opened, frozen or defrosted (#65), from item detail's **More** shee
 - **Frozen:** freeze date + `frozen.days`. In the freezer.
 - **Defrosted** (frozen units only): defrost date + `defrosted.days`. Keep it in `defrosted.storage`.
 
-The latest action decides, and a manual date is replaced (Undo brings it back). With no product estimate yet, the state is saved with the old date and `estimatePending: true`, and the timer fills it in. **Idempotent:** marking it again changes nothing.
+The latest action decides, and a manual date is replaced (Undo brings it back; each change can be undone in turn). With no product estimate yet, the state is saved with the old date and `estimatePending: true`, and the timer fills it in. **Idempotent:** marking it again changes nothing.
 
 - **200** `{ "productId": "…", "unit": { …as in GET /api/products/{productId} } }`
 - **400** `{ "error": "…" }`: a bad date, in the future, or before it was bought.
@@ -255,7 +255,7 @@ The latest action decides, and a manual date is replaced (Undo brings it back). 
 
 ### `POST /api/units/{unitId}/undo-state-change`
 
-Puts the unit's estimate fields back exactly as before its last state change (one level). No body. **200** as above; **404**; **409** when there's nothing to undo or it isn't in stock.
+Puts the unit's estimate fields back exactly as before its last state change. Call it again to undo the change before that (up to 5 back). No body. **200** as above; **404**; **409** when there's nothing to undo or it isn't in stock.
 
 ### `PUT /api/products/{productId}/opened-shelf-life`
 

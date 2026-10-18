@@ -25,7 +25,11 @@ public enum ExpirySource
     Defrosted,
 }
 
-/// <summary>A unit's estimate fields as they were before a state change, so Undo puts them back exactly (#65).</summary>
+/// <summary>
+/// A unit's estimate fields as they were before a state change, so Undo puts them back exactly (#65). <see cref="Before"/>
+/// is the snapshot before that, so each change can be undone in turn (froze it, defrosted, then Undo, Undo), up to
+/// <see cref="MaxDepth"/> back.
+/// </summary>
 public sealed record UnitEstimateSnapshot(
     DateOnly? EstimatedExpiryDate,
     ExpirySource? ExpirySource,
@@ -33,7 +37,15 @@ public sealed record UnitEstimateSnapshot(
     DateOnly? FrozenOn,
     DateOnly? DefrostedOn,
     Products.Storage? CurrentStorage,
-    bool EstimatePending);
+    bool EstimatePending,
+    UnitEstimateSnapshot? Before = null)
+{
+    public const int MaxDepth = 5;
+
+    /// <summary>This snapshot with at most <paramref name="depth"/> levels kept.</summary>
+    public UnitEstimateSnapshot Trimmed(int depth = MaxDepth) =>
+        this with { Before = depth <= 1 ? null : Before?.Trimmed(depth - 1) };
+}
 
 /// <summary>One physical item in the house. Created on check-in (id = the check-in scan ID); checked out, never deleted.</summary>
 public sealed record Unit(
@@ -64,9 +76,11 @@ public sealed record Unit(
     public bool IsFrozen => FrozenOn is not null && DefrostedOn is null;
 
     public UnitEstimateSnapshot Snapshot() =>
-        new(EstimatedExpiryDate, ExpirySource, OpenedOn, FrozenOn, DefrostedOn, CurrentStorage, EstimatePending);
+        new UnitEstimateSnapshot(
+            EstimatedExpiryDate, ExpirySource, OpenedOn, FrozenOn, DefrostedOn, CurrentStorage, EstimatePending, BeforeStateChange)
+            .Trimmed();
 
-    /// <summary>Back to the estimate fields before the last state change (#65); one level only.</summary>
+    /// <summary>Back to the estimate fields before the last state change (#65); the one before that can be undone next.</summary>
     public Unit UndoStateChange() =>
         BeforeStateChange is not { } before
             ? this
@@ -79,7 +93,7 @@ public sealed record Unit(
                 DefrostedOn = before.DefrostedOn,
                 CurrentStorage = before.CurrentStorage,
                 EstimatePending = before.EstimatePending,
-                BeforeStateChange = null,
+                BeforeStateChange = before.Before,
             };
 
     /// <summary>A unit added in the app (#58): no scan, so no scan or device; the user who added it instead.</summary>

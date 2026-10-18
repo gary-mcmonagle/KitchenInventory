@@ -173,6 +173,7 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         Set(snapshot, "defrostedOn", Date(s.DefrostedOn));
         Set(snapshot, "currentStorage", s.CurrentStorage is { } storage ? ProductDocument.StorageName(storage) : null);
         Set(snapshot, "estimatePending", s.EstimatePending ? true : null);
+        Set(snapshot, "before", s.Before is { } before ? WriteSnapshot(before) : null);
         return snapshot;
     }
 
@@ -183,7 +184,8 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         ParseDate(s["frozenOn"]),
         ParseDate(s["defrostedOn"]),
         ProductDocument.ParseStorage(CosmosJson.Text(s["currentStorage"])),
-        s["estimatePending"] is JsonValue p && p.TryGetValue<bool>(out var pending) && pending);
+        s["estimatePending"] is JsonValue p && p.TryGetValue<bool>(out var pending) && pending,
+        s["before"] is JsonObject before ? ReadSnapshot(before) : null);
 
     internal static Unit ToUnit(JsonObject d) => new(
         Guid.Parse(CosmosJson.Text(d["id"])!),

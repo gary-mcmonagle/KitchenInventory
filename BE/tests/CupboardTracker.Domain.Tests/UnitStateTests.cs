@@ -154,3 +154,45 @@ public sealed class UnitStateTests
         Assert.Equal(90, fromJev.Frozen!.Days);
     }
 }
+
+public sealed class UnitStateUndoChainTests
+{
+    private static readonly ProductStateEstimates Estimates = new(
+        new StateShelfLife(7, Storage.Fridge, 0.8, false, "jev"), new StateShelfLife(90, Storage.Freezer, 0.7, false, "jev"),
+        new StateShelfLife(2, Storage.Fridge, 0.6, false, "jev"), DateTimeOffset.UnixEpoch);
+
+    private static Unit Apply(Unit unit, UnitState state, DateOnly on) =>
+        Assert.IsType<UnitStateChange.Applied>(UnitStates.Apply(unit, state, on, Estimates)).Unit;
+
+    [Fact]
+    public void Each_change_can_be_undone_in_turn_back_to_exactly_how_it_was()
+    {
+        var original = new Unit(Guid.NewGuid(), Guid.NewGuid(), null, UnitStatus.InStock, null, null, DateTimeOffset.UnixEpoch,
+            null, null, null, new DateOnly(2026, 10, 31), null, ExpirySource.ShelfLife);
+        var frozen = Apply(original, UnitState.Frozen, new DateOnly(2026, 10, 18));
+        var defrosted = Apply(frozen, UnitState.Defrosted, new DateOnly(2026, 10, 20));
+
+        var undoneOnce = defrosted.UndoStateChange();
+        Assert.Equal(frozen, undoneOnce);
+        Assert.Equal(original, undoneOnce.UndoStateChange());
+    }
+
+    [Fact]
+    public void Only_the_last_five_changes_are_kept()
+    {
+        var unit = new Unit(Guid.NewGuid(), Guid.NewGuid(), null, UnitStatus.InStock, null, null, DateTimeOffset.UnixEpoch,
+            null, null, null, new DateOnly(2026, 10, 31), null, ExpirySource.ShelfLife);
+        for (var day = 1; day <= 8; day++)
+        {
+            unit = Apply(unit, day % 2 == 1 ? UnitState.Frozen : UnitState.Defrosted, new DateOnly(2026, 10, 10 + day));
+        }
+
+        var depth = 0;
+        for (var s = unit.BeforeStateChange; s is not null; s = s.Before)
+        {
+            depth++;
+        }
+
+        Assert.Equal(UnitEstimateSnapshot.MaxDepth, depth);
+    }
+}
