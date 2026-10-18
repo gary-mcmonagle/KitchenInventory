@@ -242,3 +242,58 @@ Name an unknown item (#51): `{ "name": "Smoked paprika", "brand": "Schwartz", "s
 - **400** `{ "error": "Check the details.", "errors": { "name": "Enter a name." } }` (per field)
 - **404** `{ "error": "No such product." }`
 - **409** `{ "error": "This product already has a name.", "displayName": "…" }`: it's known (or was named or looked up meanwhile). Renaming known products isn't this endpoint.
+
+## Live scan feed (#54)
+
+Every open app gets scan feed events through **Azure SignalR** (Free, Serverless; hub `ScanFeed`; [spike #38](spikes/38-signalr-scan-feed.md)). The feed is a hint: the API is the source of truth, and the app catches up after every (re)connect. Events are broadcast to every connection (all signed-in household members). Sending is best-effort: a SignalR failure is a warning in the logs and never fails a scan, its processing, naming or dismissal.
+
+### Events
+
+The client method name is the event name (`connection.on("scanReceived", …)`). The contract: **add fields, never rename**. Times are UTC ISO strings. There's no personal data.
+
+Scan events all have `scanId`, `deviceId`, `role` (`in` / `out`) and `occurredAt`, and are keyed by `scanId`. The app never moves a toast backwards: a late `scanReceived` never replaces an outcome.
+
+| Event | Sent by | Extra fields | Toast |
+|---|---|---|---|
+| `scanReceived` | Ingest, once the scan is stored (not for a resend) | `barcode`, `scannedAt` | Grey: `Reading <barcode>` |
+| `scanIdentified` | Processor: a known product checked in or out | `outcome` (`checkedIn` / `checkedOut`), `productId`, `displayName`, `brand`, `size`, `unitId` | Green: `Added …` / `Checked out …`, 10 s |
+| `scanNeedsIdentification` | Processor: a check-in of a `noMatch` / `lookupFailed` product | `productId`, `barcode`, `displayName`, `productStatus`, `unitId` | Amber: `No match for <barcode>`, Identify and dismiss, until named or dismissed |
+| `checkOutUnmatched` | Processor: a check-out with nothing in stock | `barcode`, `productId` (or `null`), `displayName` (known products only, else `null`) | Amber: `Not in stock: …`, dismiss, 10 s |
+| `scanSkipped` | Processor: a store label | `barcode`, `reason` (`storeLabel`) | The grey toast goes |
+| `productNamed` | `PUT /api/products/{id}/name` | `productId`, `displayName`, `occurredAt` | That product's amber toasts go |
+| `feedDismissed` | `POST /api/scan-feed/{id}/dismiss` | `productId`, `occurredAt` | That product's amber toast goes on every app |
+
+Processor events are sent again on a change-feed replay (harmless: the app updates the toast in place).
+
+### `POST /api/negotiate`
+
+Called by `@microsoft/signalr` (hub URL `<api>/api`), with the user's bearer token. It returns where to connect and a SignalR access token for that user (`UserId` = their object ID), **200** `{ "url": "https://sigr-…service.signalr.net/client/?hub=scanfeed", "accessToken": "…" }`. No token: **401**.
+
+### `GET /api/scan-feed?since=<ISO time>`
+
+Catch-up, called on load, after every (re)connect and when the app comes back to the foreground. `since` is the last event time the app saw: default now − 10 minutes, at most 24 hours back. **400** if it isn't an ISO time with a timezone.
+
+```json
+{
+  "generatedAt": "2026-10-18T07:30:00.000Z",
+  "events": [
+    { "type": "scanIdentified", "scanId": "…", "deviceId": "scanner-in", "role": "in", "occurredAt": "…", "outcome": "checkedIn", "productId": "…", "displayName": "Beef Gravy", "brand": "Bisto", "size": "230g", "unitId": "…" },
+    { "type": "scanNeedsIdentification", "scanId": "…", "deviceId": "scanner-in", "role": "in", "occurredAt": "…", "productId": "…", "barcode": "501001234567", "displayName": "Unknown item (501001234567)", "productStatus": "noMatch", "unitId": "…" }
+  ]
+}
+```
+
+`events` (oldest first, the same shapes as the live events plus `type`) has two parts:
+
+- **Each scan received since `since`**, at most 200, with its outcome now: `scanReceived` if not processed yet, `scanIdentified` (a product named since shows as identified), `scanNeedsIdentification`, `checkOutUnmatched` or `scanSkipped`. `occurredAt` is when ingest received it.
+- **Every product still waiting for a name** (`noMatch` / `lookupFailed`) that has something in stock and whose newest check-in is after its `feedDismissedAt`, as one `scanNeedsIdentification` for that newest unit. This is how amber toasts survive a reload. A recent scan of a product dismissed since then isn't reported as amber.
+
+`Cache-Control: no-store`.
+
+### `POST /api/scan-feed/{productId}/dismiss`
+
+Hides a product's amber "No match" toast for the whole household. No body. It sets the product's `feedDismissedAt` (ETag-guarded) and sends `feedDismissed`. **It changes nothing else**: stock, status and "Waiting for a name" stay as they are. A check-in of the product after this shows a fresh toast. (Dismissing a "Not in stock" toast is client-side only.)
+
+- **200** `{ "productId": "…", "feedDismissedAt": "…" }`
+- **404** `{ "error": "No such product." }`
+

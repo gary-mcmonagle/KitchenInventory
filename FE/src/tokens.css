@@ -23,6 +23,15 @@
     --toast-action: #a8e0c2; /* Undo on the dark toast */
     --input-border: #b9c8bf; /* text inputs */
     --warn-border: #c77700; /* an input with a problem */
+    --feed-loading-bg: #e6eae7; /* scan feed: grey "Reading…" toast */
+    --feed-loading-border: #cbd3ce;
+    --feed-loading-fg: #2e3b34;
+    --feed-spinner: #9aa8a0;
+    --feed-ok-bg: #d6ebdd; /* scan feed: green "Added …" toast */
+    --feed-ok-border: #a9d1b8;
+    --feed-ok-fg: #14402b;
+    --feed-warn-border: #e3b565; /* scan feed: amber toast (background --warn-bg) */
+    --feed-warn-fg: #5e3500;
 
     --radius-input: 14px; /* inputs, toasts, feed rows */
     --radius-card: 16px; /* stock cards */

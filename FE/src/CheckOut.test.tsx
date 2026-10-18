@@ -9,6 +9,9 @@ import {
 } from "./api";
 import { StockScreen, TOAST_MS, withCount } from "./StockScreen";
 
+/** Status messages other than the scan feed region (#54). */
+const notFeed = { name: (name: string) => name !== "Scan feed" };
+
 const gravy: StockProduct = {
     productId: "p-gravy",
     barcode: "5000354922831",
@@ -84,7 +87,7 @@ test("check out drops the count at once and shows the toast", async () => {
     expect(api.checkOut).toHaveBeenCalledWith("p-gravy");
     expect(screen.getByText("Bisto · 230g")).toBeInTheDocument(); // ×2 → 1
     expect(screen.getByText("2 items · 0 to use first")).toBeInTheDocument(); // header total (3 → 2)
-    expect(screen.getByRole("status")).toHaveTextContent("Checked out Beef Gravy");
+    expect(screen.getByRole("status", notFeed)).toHaveTextContent("Checked out Beef Gravy");
 });
 
 test("the row disappears at 0", async () => {
@@ -94,7 +97,7 @@ test("the row disappears at 0", async () => {
     await act(async () => fireEvent.click(checkOutButton("PLAIN NAAN BREADS")));
 
     expect(screen.queryByText("PLAIN NAAN BREADS")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Checked out PLAIN NAAN BREADS");
+    expect(screen.getByRole("status", notFeed)).toHaveTextContent("Checked out PLAIN NAAN BREADS");
 });
 
 test("the count drops before the API answers (optimistic), and the button is disabled meanwhile", async () => {
@@ -124,7 +127,7 @@ test("Undo puts it back", async () => {
     expect(api.undoCheckOut).toHaveBeenCalledWith("unit-of-p-naan");
     expect(screen.getByText("PLAIN NAAN BREADS")).toBeInTheDocument();
     expect(screen.getByText("3 items · 0 to use first")).toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", notFeed)).not.toBeInTheDocument();
 });
 
 test("the toast goes after 6 seconds", async () => {
@@ -132,12 +135,12 @@ test("the toast goes after 6 seconds", async () => {
     await screen.findByText("PLAIN NAAN BREADS");
     vi.useFakeTimers();
     await act(async () => fireEvent.click(checkOutButton("PLAIN NAAN BREADS")));
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.getByRole("status", notFeed)).toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(TOAST_MS - 100));
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.getByRole("status", notFeed)).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(200));
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", notFeed)).not.toBeInTheDocument();
 });
 
 test("a new check-out replaces the toast, so Undo applies to the latest", async () => {
@@ -146,8 +149,8 @@ test("a new check-out replaces the toast, so Undo applies to the latest", async 
     await act(async () => fireEvent.click(checkOutButton("Beef Gravy")));
     await act(async () => fireEvent.click(checkOutButton("PLAIN NAAN BREADS")));
 
-    expect(screen.getAllByRole("status")).toHaveLength(1);
-    expect(screen.getByRole("status")).toHaveTextContent("Checked out PLAIN NAAN BREADS");
+    expect(screen.getAllByRole("status", notFeed)).toHaveLength(1);
+    expect(screen.getByRole("status", notFeed)).toHaveTextContent("Checked out PLAIN NAAN BREADS");
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Undo" })));
     expect(api.undoCheckOut).toHaveBeenCalledWith("unit-of-p-naan");
 });
@@ -159,7 +162,7 @@ test("a failed check-out reverts the count and says so", async () => {
     await act(async () => fireEvent.click(checkOutButton("Beef Gravy")));
 
     expect(screen.getByText("Bisto · 230g · ×2")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Couldn't check that out. Try again.");
+    expect(screen.getByRole("status", notFeed)).toHaveTextContent("Couldn't check that out. Try again.");
     expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
 });
 
@@ -169,7 +172,7 @@ test("nothing left (409): reverts, says so and reloads the list", async () => {
 
     await act(async () => fireEvent.click(checkOutButton("Beef Gravy")));
 
-    expect(screen.getByRole("status")).toHaveTextContent("There's no Beef Gravy left to check out.");
+    expect(screen.getByRole("status", notFeed)).toHaveTextContent("There's no Beef Gravy left to check out.");
     expect(api.stock).toHaveBeenCalledTimes(2);
 });
 
@@ -181,7 +184,7 @@ test("a failed undo reverts and says so", async () => {
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Undo" })));
 
     expect(screen.queryByText("PLAIN NAAN BREADS")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Couldn't undo that. Try again.");
+    expect(screen.getByRole("status", notFeed)).toHaveTextContent("Couldn't undo that. Try again.");
 });
 
 test("withCount keeps the API's order when a row comes back", () => {

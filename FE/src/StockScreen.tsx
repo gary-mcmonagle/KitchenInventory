@@ -20,6 +20,8 @@ import {
 } from "./format";
 import { itemPath, namePath, navigate } from "./router";
 import styles from "./Stock.module.css";
+import { ScanFeedView } from "./ScanFeedView";
+import { signalRConnection, useScanFeed, type FeedConnection } from "./useScanFeed";
 
 const PULL_TO_REFRESH = 70; // px
 export const TOAST_MS = 6000; // as in the mockup
@@ -80,7 +82,14 @@ type Phase = "loading" | "ready" | "error" | "noAccess";
 
 /** The stock list (#49, #52): what's in the house now, in Use first, Later and Waiting for a name. Reloads on open, on
  * returning to the app, and on pull-to-refresh. */
-export function StockScreen({ api }: { api: ApiClient }) {
+export function StockScreen({
+    api,
+    feedConnection = signalRConnection,
+}: {
+    api: ApiClient;
+    /** The live scan feed's connection (#54); tests pass a fake. */
+    feedConnection?: (api: ApiClient) => FeedConnection;
+}) {
     const [stock, setStock] = useState<Stock | null>(null);
     const [phase, setPhase] = useState<Phase>("loading");
     const [refreshing, setRefreshing] = useState(false);
@@ -190,6 +199,9 @@ export function StockScreen({ api }: { api: ApiClient }) {
         };
     }, [load]);
 
+    // The live scan feed (#54): toasts, and the stock list refetches itself when a scan changes stock.
+    const scanFeed = useScanFeed(api, () => void load({ quiet: true }), feedConnection);
+
     const onTouchStart = (e: TouchEvent) => {
         pullStart.current = window.scrollY <= 0 ? e.touches[0].clientY : null;
     };
@@ -230,6 +242,11 @@ export function StockScreen({ api }: { api: ApiClient }) {
                 <div className={styles.disclaimer}>
                     Dates are estimates: the day it was bought plus how long that kind of food usually keeps.
                 </div>
+                <ScanFeedView
+                    feed={scanFeed.feed}
+                    now={scanFeed.now}
+                    onDismiss={(t) => void scanFeed.dismiss(t)}
+                />
             </header>
 
             <div className={styles.content} aria-busy={refreshing}>
