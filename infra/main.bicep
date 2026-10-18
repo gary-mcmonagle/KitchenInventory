@@ -256,6 +256,18 @@ module keyVault 'modules/keyVault.bicep' = {
   }
 }
 
+// Photo recognition (spike #41): a vision model and Document Intelligence, Entra ID only.
+module aiServices 'modules/aiServices.bicep' = {
+  scope: rg
+  name: 'ai-services'
+  params: {
+    location: location
+    tags: tags
+    name: 'ais-${appName}-${suffix}'
+    userPrincipalId: verifierPrincipalId
+  }
+}
+
 module errorAlert 'modules/errorAlert.bicep' = {
   scope: rg
   name: 'error-alert'
@@ -294,6 +306,8 @@ output staticWebAppHostname string = staticWebApp.outputs.defaultHostname
 output communicationServiceName string = communication.outputs.communicationServiceName
 output emailSender string = communication.outputs.senderAddress
 output errorAlertRuleName string = errorAlert.outputs.ruleName
+output aiServicesName string = aiServices.outputs.name
+output aiServicesEndpoint string = aiServices.outputs.endpoint
 output signalRName string = signalR.outputs.name
 output keyVaultName string = keyVault.outputs.name
 output logAnalyticsWorkspaceName string = 'log-${appName}-tracker'
