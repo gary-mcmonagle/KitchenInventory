@@ -15,8 +15,9 @@ public sealed class ExpiryBadgeTests
     [InlineData(4, "Est. 4 days")]
     [InlineData(14, "Est. 14 days")]
     [InlineData(15, "Est. 2 Nov")]
-    [InlineData(365, "Est. 18 Oct")]
-    [InlineData(366, "Est. Oct 2027")]
+    [InlineData(182, "Est. 18 Apr")]
+    [InlineData(183, "Est. Apr 2027")]
+    [InlineData(364, "Est. Oct 2027")] // never "Est. 17 Oct", which reads like today
     [InlineData(730, "Est. Oct 2028")]
     public void Badge_text(int days, string expected) =>
         Assert.Equal(expected, ExpiryBadge.Text(Today.AddDays(days), Today));

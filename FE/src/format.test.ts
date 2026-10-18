@@ -54,8 +54,9 @@ test("expiry badges: text and colour at the boundaries (as the API's ExpiryBadge
     expect(on(4)).toEqual({ text: "Est. 4 days", tone: "later" });
     expect(on(14)).toEqual({ text: "Est. 14 days", tone: "later" });
     expect(on(15)).toEqual({ text: "Est. 2 Nov", tone: "later" });
-    expect(on(365)).toEqual({ text: "Est. 18 Oct", tone: "later" });
-    expect(on(366)).toEqual({ text: "Est. Oct 2027", tone: "later" });
+    expect(on(182)).toEqual({ text: "Est. 18 Apr", tone: "later" });
+    expect(on(183)).toEqual({ text: "Est. Apr 2027", tone: "later" });
+    expect(on(364)).toEqual({ text: "Est. Oct 2027", tone: "later" }); // never "Est. 17 Oct", which reads like today
 });
 
 test("shelf life in words, and the bought note", async () => {

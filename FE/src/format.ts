@@ -50,6 +50,9 @@ export type ExpiryTone = "expired" | "soon" | "later";
 /** The "Est. …" badge (#52), as in the mockup; the API's digest uses the same rules (ExpiryBadge.cs). Expired is red,
  * 3 days or fewer amber, the rest green. Beyond 14 days it's the date ("Est. 2 Nov"), or month and year when it's over
  * a year away ("Est. Oct 2028"). */
+/** Further out than this, the badge shows the month and year: a day and month alone would read like this year. */
+export const DAYS_SHOWN_AS_DAY_AND_MONTH = 182;
+
 export function expiryBadge(daysUntil: number, isoDate: string): { text: string; tone: ExpiryTone } {
     const tone: ExpiryTone = daysUntil < 0 ? "expired" : daysUntil <= 3 ? "soon" : "later";
     const date = new Date(`${isoDate}T00:00:00Z`);
@@ -62,7 +65,7 @@ export function expiryBadge(daysUntil: number, isoDate: string): { text: string;
                 ? "tomorrow"
                 : daysUntil <= 14
                   ? `${daysUntil} days`
-                  : daysUntil > 365
+                  : daysUntil > DAYS_SHOWN_AS_DAY_AND_MONTH
                     ? date.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" })
                     : date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
     return { text: `Est. ${when}`, tone };

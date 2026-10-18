@@ -6,12 +6,12 @@ namespace CupboardTracker.Application.Stock;
 /// <summary>
 /// The "Est. …" text for an estimated expiry date, as on the stock list (#52; the UI's <c>expiryBadge</c> follows the
 /// same rules): <c>Est. expired</c>, <c>Est. today</c>, <c>Est. tomorrow</c>, <c>Est. n days</c> up to 14 days, then
-/// <c>Est. 2 Nov</c>, or <c>Est. Oct 2028</c> when it's over a year away.
+/// <c>Est. 2 Nov</c> up to 6 months away, then <c>Est. Oct 2027</c> (a day and month further out reads like this year).
 /// </summary>
 public static class ExpiryBadge
 {
     public const int DaysShownAsCount = 14;
-    public const int DaysShownAsMonth = 365;
+    public const int DaysShownAsDayAndMonth = 182;
 
     private static readonly CultureInfo UkCulture = CultureInfo.GetCultureInfo("en-GB");
 
@@ -24,7 +24,7 @@ public static class ExpiryBadge
             0 => "today",
             1 => "tomorrow",
             <= DaysShownAsCount => $"{days} days",
-            > DaysShownAsMonth => expiry.ToString("MMM yyyy", UkCulture),
+            > DaysShownAsDayAndMonth => expiry.ToString("MMM yyyy", UkCulture),
             _ => expiry.ToString("d MMM", UkCulture),
         };
     }
