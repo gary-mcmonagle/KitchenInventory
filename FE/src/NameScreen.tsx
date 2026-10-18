@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ApiError, SignInRequiredError, type ApiClient, type FieldErrors, type Product } from "./api";
+import {
+    ApiError,
+    SignInRequiredError,
+    type ApiClient,
+    type FieldErrors,
+    type PhotoRecognition,
+    type Product,
+} from "./api";
+import { toJpeg } from "./photo";
 import { groupBarcode, relativeTime } from "./format";
 import { AISLES } from "./aisles";
 import { Icon, ICON_NAMES, ProductTile } from "./ProductTile";
@@ -28,10 +36,13 @@ export function NameScreen({
     api,
     productId,
     mode = "name",
+    prepare = toJpeg,
 }: {
     api: ApiClient;
     productId: string;
     mode?: "name" | "edit";
+    /** Resizes a photo before recognition; tests pass a stub. */
+    prepare?: (file: Blob) => Promise<Blob>;
 }) {
     const editing = mode === "edit";
     const [product, setProduct] = useState<Product | null>(null);
@@ -171,6 +182,19 @@ export function NameScreen({
                                 </span>
                             )}
                         </div>
+
+                        {!editing && (
+                            <PhotoGuess
+                                api={api}
+                                prepare={prepare}
+                                onGuess={(guess) => {
+                                    setName(guess.name);
+                                    setBrand(guess.brand ?? "");
+                                    setSize(guess.size ?? "");
+                                    setErrors({});
+                                }}
+                            />
+                        )}
 
                         <div className={styles.fields}>
                             <Field
@@ -377,6 +401,124 @@ function IconPicker({
                 <p className={styles.notice} role="alert">
                     {error}
                 </p>
+            )}
+        </div>
+    );
+}
+
+type Guess = PhotoRecognition["items"][number];
+
+/**
+ * Identify from a photo (Gary, 2026-10-18; a first slice of #56): photograph the pack, and the photo recogniser (#58)
+ * fills in name, brand and size to check before saving. Several things in the photo: pick one. The photo isn't saved.
+ */
+function PhotoGuess({
+    api,
+    prepare,
+    onGuess,
+}: {
+    api: ApiClient;
+    prepare: (file: Blob) => Promise<Blob>;
+    onGuess: (guess: Guess) => void;
+}) {
+    const input = useRef<HTMLInputElement>(null);
+    const [state, setState] = useState<
+        | { step: "idle" }
+        | { step: "reading" }
+        | { step: "done"; items: Guess[]; chosen: Guess | null }
+        | { step: "failed" }
+    >({ step: "idle" });
+
+    const choose = (items: Guess[], guess: Guess) => {
+        onGuess(guess);
+        setState({ step: "done", items, chosen: guess });
+    };
+
+    const read = async (file: File | undefined) => {
+        if (!file) return;
+        setState({ step: "reading" });
+        try {
+            const result = await api.recognisePhoto(await prepare(file));
+            if (!result.available || result.items.length === 0) {
+                setState({ step: "failed" });
+            } else if (result.items.length === 1) {
+                choose(result.items, result.items[0]);
+            } else {
+                setState({ step: "done", items: result.items, chosen: null });
+            }
+        } catch (e) {
+            if (e instanceof SignInRequiredError) return;
+            setState({ step: "failed" });
+        }
+    };
+
+    const details = (g: Guess) => [g.brand, g.size].filter(Boolean).join(" · ");
+    return (
+        <div className={styles.photo}>
+            <input
+                ref={input}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className={styles.fileInput}
+                aria-label="Photo of the item"
+                tabIndex={-1}
+                onChange={(e) => {
+                    void read(e.target.files?.[0]);
+                    e.target.value = "";
+                }}
+            />
+            {state.step === "reading" ? (
+                <p className={styles.photoNote} role="status">
+                    Looking at your photo… This takes a couple of seconds. The photo is not saved.
+                </p>
+            ) : (
+                <button type="button" className={styles.photoButton} onClick={() => input.current?.click()}>
+                    <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1.5-2h5L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />
+                        <circle cx="12" cy="13" r="3.2" />
+                    </svg>
+                    {state.step === "idle" ? "Identify from a photo" : "Retake photo"}
+                </button>
+            )}
+            {state.step === "failed" && (
+                <p className={styles.photoNote} role="alert">
+                    We couldn't work that one out. Type it in or retake the photo.
+                </p>
+            )}
+            {state.step === "done" && state.chosen && (
+                <p className={styles.photoNote} role="status">
+                    Filled in from your photo. Check it, then save.
+                </p>
+            )}
+            {state.step === "done" && state.items.length > 1 && (
+                <div className={styles.guesses} role="group" aria-label="Which one is it?">
+                    <span className={styles.photoNote}>
+                        More than one thing in the photo. Which one is it?
+                    </span>
+                    {state.items.map((g, i) => (
+                        <button
+                            key={`${g.name}-${i}`}
+                            type="button"
+                            className={styles.guess}
+                            aria-pressed={state.chosen === g}
+                            onClick={() => choose(state.items, g)}
+                        >
+                            <span className={styles.guessName}>{g.name}</span>
+                            {details(g) && <span className={styles.guessDetails}>{details(g)}</span>}
+                        </button>
+                    ))}
+                </div>
             )}
         </div>
     );

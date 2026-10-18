@@ -238,3 +238,96 @@ test("Edit details: the aisle is saved with the form, and an icon is picked from
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
     expect(api.setAisle).toHaveBeenCalledWith("p-1", "bakery");
 });
+
+describe("Identify from a photo (Gary, 2026-10-18)", () => {
+    const photoSetup = (recognisePhoto: ReturnType<typeof vi.fn>) => {
+        const api = {
+            product: vi.fn(async () => unknown),
+            nameProduct: vi.fn(async () => ({ productId: "p-1", displayName: "x" })),
+            recognisePhoto,
+        };
+        window.history.pushState(null, "", "/products/p-1/name");
+        render(
+            <NameScreen
+                api={api as unknown as ApiClient}
+                productId="p-1"
+                prepare={async (f) => new Blob([f], { type: "image/jpeg" })}
+            />,
+        );
+        return api;
+    };
+    const shoot = () =>
+        fireEvent.change(screen.getByLabelText("Photo of the item"), {
+            target: { files: [new File(["jpeg"], "photo.jpg", { type: "image/jpeg" })] },
+        });
+    const item = (name: string, brand: string | null = null, size: string | null = null) => ({
+        name,
+        brand,
+        size,
+        kind: "packaged" as const,
+        quantity: 1,
+        match: null,
+    });
+
+    test("one item fills in the form to check and save", async () => {
+        const api = photoSetup(
+            vi.fn(async () => ({
+                available: true,
+                readable: true,
+                items: [item("Smoked paprika", "Schwartz", "48 g")],
+            })),
+        );
+        await screen.findByLabelText("Name");
+
+        shoot();
+
+        expect(
+            await screen.findByText("Filled in from your photo. Check it, then save."),
+        ).toBeInTheDocument();
+        expect(screen.getByLabelText("Name")).toHaveValue("Smoked paprika");
+        expect(screen.getByLabelText("Brand")).toHaveValue("Schwartz");
+        expect(screen.getByLabelText("Size")).toHaveValue("48 g");
+        expect(screen.getByRole("button", { name: "Retake photo" })).toBeInTheDocument();
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save product" })));
+        expect(api.nameProduct).toHaveBeenCalledWith("p-1", {
+            name: "Smoked paprika",
+            brand: "Schwartz",
+            size: "48 g",
+        });
+    });
+
+    test("several items: pick which one it is", async () => {
+        photoSetup(
+            vi.fn(async () => ({
+                available: true,
+                readable: true,
+                items: [item("Leeks"), item("Pitted green olives", "Crespo", "340 g")],
+            })),
+        );
+        await screen.findByLabelText("Name");
+
+        shoot();
+        const choices = await screen.findByRole("group", { name: "Which one is it?" });
+        fireEvent.click(within(choices).getByRole("button", { name: /Pitted green olives/ }));
+
+        expect(screen.getByLabelText("Name")).toHaveValue("Pitted green olives");
+        expect(screen.getByLabelText("Brand")).toHaveValue("Crespo");
+    });
+
+    test("nothing recognised, or recognition unavailable, falls back to typing", async () => {
+        const recognise = vi
+            .fn()
+            .mockResolvedValueOnce({ available: true, readable: false, items: [] })
+            .mockResolvedValueOnce({ available: false, readable: false, items: [] });
+        photoSetup(recognise);
+        await screen.findByLabelText("Name");
+
+        shoot();
+        expect(
+            await screen.findByText("We couldn't work that one out. Type it in or retake the photo."),
+        ).toBeInTheDocument();
+        shoot();
+        await vi.waitFor(() => expect(recognise).toHaveBeenCalledTimes(2));
+        expect(screen.getByLabelText("Name")).toHaveValue("");
+    });
+});

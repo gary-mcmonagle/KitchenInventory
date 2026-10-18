@@ -219,3 +219,76 @@
     border: 2px solid var(--accent);
     background: var(--accent-tint);
 }
+
+/* Identify from a photo on the naming screen (Gary, 2026-10-18). */
+.photo {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.fileInput {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.photoButton {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 0;
+    border-radius: var(--radius-input);
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.photoNote {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.guesses {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.guess {
+    min-height: var(--touch);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-button);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.guess[aria-pressed="true"] {
+    border: 2px solid var(--accent);
+    background: var(--accent-tint);
+}
+
+.guessName {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.guessDetails {
+    font-size: 13px;
+    color: var(--muted);
+}
