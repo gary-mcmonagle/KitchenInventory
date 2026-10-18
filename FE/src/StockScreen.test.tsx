@@ -15,6 +15,10 @@ const product = (overrides: Partial<StockProduct>): StockProduct => ({
     soonestEstimatedExpiryDate: null,
     daysUntilSoonest: null,
     shelfLifeDays: null,
+    openedCount: 0,
+    frozenCount: 0,
+    soonestState: null,
+    soonestStateOn: null,
     ...overrides,
 });
 
@@ -267,3 +271,31 @@ test("offline: says so, and reloads when back online", async () => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+test("opened and frozen units show as pills, and an opened unit's note says when it was opened (#65)", async () => {
+    const { api } = fakeApi(
+        stockOf(
+            product({
+                displayName: "Pesto",
+                count: 3,
+                openedCount: 1,
+                frozenCount: 2,
+                soonestEstimatedExpiryDate: "2026-10-20",
+                daysUntilSoonest: 2,
+                shelfLifeDays: 180,
+                soonestState: "opened",
+                soonestStateOn: "2026-10-16",
+                section: "useFirst",
+            }),
+            product({ displayName: "Bread", openedCount: 2 }),
+        ),
+    );
+    render(<StockScreen api={api} />);
+
+    const pesto = (await screen.findByText("Pesto")).closest("li")!;
+    expect(within(pesto).getByText("Opened").className).toMatch(/_opened_/);
+    expect(within(pesto).getByText("2 frozen").className).toMatch(/_frozen_/);
+    expect(pesto).toHaveTextContent("Opened 16 Oct");
+    expect(pesto).not.toHaveTextContent("Bought");
+    expect((await screen.findByText("Bread")).closest("li")).toHaveTextContent("2 opened");
+});

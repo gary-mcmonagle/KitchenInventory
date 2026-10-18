@@ -6,6 +6,7 @@ import {
     type ApiClient,
     type Product,
     type ProductUnit,
+    type UnitState,
 } from "./api";
 import {
     boughtDate,
@@ -15,6 +16,9 @@ import {
     longDate,
     metaLine,
     shortDate,
+    stateNote,
+    storageHint,
+    ukToday,
     untilSentence,
     type ExpiryTone,
 } from "./format";
@@ -35,7 +39,16 @@ export const SHELF_LIFE_CHOICES: Array<{ days: number; label: string }> = [
     { days: 730, label: "2 years" },
 ];
 
-type Toast = { kind: "checkedOut"; unitId: string } | { kind: "info"; text: string };
+type Toast =
+    | { kind: "checkedOut"; unitId: string }
+    | { kind: "stateChanged"; unitId: string; text: string }
+    | { kind: "info"; text: string };
+
+const MARKED: Record<UnitState, string> = {
+    opened: "Marked as opened",
+    frozen: "Marked as frozen",
+    defrosted: "Marked as defrosted",
+};
 
 const tone = (days: number): ExpiryTone => (days < 0 ? "expired" : days <= 3 ? "soon" : "later");
 
@@ -112,15 +125,43 @@ export function ItemScreen({ api, productId }: { api: ApiClient; productId: stri
         }
     };
 
-    const undo = async (unitId: string) => {
+    const undo = async (current: Toast) => {
         clearTimeout(toastTimer.current);
         setToast(null);
         try {
-            await api.undoCheckOut(unitId);
+            if (current.kind === "checkedOut") await api.undoCheckOut(current.unitId);
+            if (current.kind === "stateChanged") await api.undoStateChange(current.unitId);
             await load();
         } catch (error) {
             if (error instanceof SignInRequiredError) return;
             showToast({ kind: "info", text: "Couldn't undo that. Try again." });
+        }
+    };
+
+    /** Opened, Froze it, Defrosted (#65): the estimate changes at once; Undo puts it back. */
+    const changeState = async (unit: ProductUnit, state: UnitState, date: string | undefined) => {
+        if (busy) return false;
+        setBusy(true);
+        try {
+            await api.markUnit(unit.unitId, state, date);
+            showToast({ kind: "stateChanged", unitId: unit.unitId, text: MARKED[state] });
+            await load();
+            return true;
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return false;
+            showToast({
+                kind: "info",
+                text:
+                    error instanceof ApiError && error.status === 400
+                        ? "That day doesn't look right."
+                        : error instanceof ApiError && error.status === 409
+                          ? "That one's changed. Have a look and try again."
+                          : "Couldn't save that. Try again.",
+            });
+            await load();
+            return false;
+        } finally {
+            if (live.current) setBusy(false);
         }
     };
 
@@ -158,6 +199,7 @@ export function ItemScreen({ api, productId }: { api: ApiClient; productId: stri
                         product={product}
                         busy={busy}
                         onCheckOut={(u) => void checkOut(u)}
+                        onChangeState={changeState}
                         onSaved={(text) => {
                             showToast({ kind: "info", text });
                             void load();
@@ -173,8 +215,8 @@ export function ItemScreen({ api, productId }: { api: ApiClient; productId: stri
                             ? `Checked out ${product?.displayName ?? ""}`
                             : toast.text}
                     </span>
-                    {toast.kind === "checkedOut" && (
-                        <button type="button" className={styles.undo} onClick={() => void undo(toast.unitId)}>
+                    {toast.kind !== "info" && (
+                        <button type="button" className={styles.undo} onClick={() => void undo(toast)}>
                             Undo
                         </button>
                     )}
@@ -189,14 +231,17 @@ function Detail({
     product,
     busy,
     onCheckOut,
+    onChangeState,
     onSaved,
 }: {
     api: ApiClient;
     product: Product;
     busy: boolean;
     onCheckOut: (unit: ProductUnit) => void;
+    onChangeState: (unit: ProductUnit, state: UnitState, date: string | undefined) => Promise<boolean>;
     onSaved: (message: string) => void;
 }) {
+    const [moreFor, setMoreFor] = useState<string | null>(null);
     const meta = metaLine(product.brand, product.size, 1);
     const soonest = product.units[0];
     return (
@@ -230,33 +275,78 @@ function Detail({
                     </h2>
                     <ul className={styles.units}>
                         {product.units.map((unit, i) => (
-                            <li key={unit.unitId} className={styles.unit}>
-                                <div className={styles.unitText}>
-                                    <span className={styles.unitName}>Unit {i + 1}</span>
-                                    <span className={styles.unitMeta}>{unitLine(unit)}</span>
+                            <li key={unit.unitId} className={styles.unitItem}>
+                                <div className={styles.unit}>
+                                    <div className={styles.unitText}>
+                                        <span className={styles.unitName}>
+                                            Unit {i + 1}
+                                            <StatePills unit={unit} />
+                                        </span>
+                                        <span className={styles.unitMeta}>{unitLine(unit)}</span>
+                                        {storageChanged(product, unit) && (
+                                            <span className={styles.hint}>
+                                                {storageHint(unit.currentStorage!)}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className={styles.unitButtons}>
+                                        <button
+                                            type="button"
+                                            className={styles.more}
+                                            aria-label={`More actions for Unit ${i + 1}`}
+                                            aria-expanded={moreFor === unit.unitId}
+                                            onClick={() =>
+                                                setMoreFor((open) =>
+                                                    open === unit.unitId ? null : unit.unitId,
+                                                )
+                                            }
+                                        >
+                                            <svg
+                                                width="20"
+                                                height="20"
+                                                viewBox="0 0 24 24"
+                                                fill="currentColor"
+                                                aria-hidden="true"
+                                            >
+                                                <circle cx="5" cy="12" r="2" />
+                                                <circle cx="12" cy="12" r="2" />
+                                                <circle cx="19" cy="12" r="2" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={styles.checkOut}
+                                            disabled={busy}
+                                            onClick={() => onCheckOut(unit)}
+                                            aria-label={`Check out unit ${i + 1}`}
+                                        >
+                                            <svg
+                                                width="18"
+                                                height="18"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2.2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                aria-hidden="true"
+                                            >
+                                                <path d="M5 12.5l4.5 4.5L19 7.5" />
+                                            </svg>
+                                            Check out
+                                        </button>
+                                    </div>
                                 </div>
-                                <button
-                                    type="button"
-                                    className={styles.checkOut}
-                                    disabled={busy}
-                                    onClick={() => onCheckOut(unit)}
-                                    aria-label={`Check out unit ${i + 1}`}
-                                >
-                                    <svg
-                                        width="18"
-                                        height="18"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2.2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        aria-hidden="true"
-                                    >
-                                        <path d="M5 12.5l4.5 4.5L19 7.5" />
-                                    </svg>
-                                    Check out
-                                </button>
+                                {moreFor === unit.unitId && (
+                                    <StateSheet
+                                        unit={unit}
+                                        index={i + 1}
+                                        busy={busy}
+                                        onPick={async (state, date) => {
+                                            if (await onChangeState(unit, state, date)) setMoreFor(null);
+                                        }}
+                                    />
+                                )}
                             </li>
                         ))}
                     </ul>
@@ -277,12 +367,110 @@ function Detail({
     );
 }
 
-/** "Bought 13 Oct · est. 18 Oct", marking dates set by hand. */
+/** "Bought 13 Oct · opened 17 Oct · est. 21 Oct", marking dates set by hand and estimates on their way (#65). */
 export function unitLine(unit: ProductUnit): string {
-    const bought = `Bought ${boughtDate(unit.checkedInAt)}`;
-    if (!unit.estimatedExpiryDate) return `${bought} · no estimate yet`;
-    const est = `est. ${shortDate(unit.estimatedExpiryDate)}`;
-    return `${bought} · ${est}${unit.expirySource === "manual" ? " (set by you)" : ""}`;
+    const parts = [`Bought ${boughtDate(unit.checkedInAt)}`];
+    if (unit.openedOn) parts.push(`opened ${shortDate(unit.openedOn)}`);
+    if (unit.frozenOn) parts.push(`frozen ${shortDate(unit.frozenOn)}`);
+    if (unit.defrostedOn) parts.push(`defrosted ${shortDate(unit.defrostedOn)}`);
+    if (unit.estimatePending) parts.push("new estimate on its way");
+    else if (!unit.estimatedExpiryDate) parts.push("no estimate yet");
+    if (unit.estimatedExpiryDate) {
+        parts.push(
+            `est. ${shortDate(unit.estimatedExpiryDate)}${unit.expirySource === "manual" ? " (set by you)" : ""}`,
+        );
+    }
+    return parts.join(" · ");
+}
+
+const isFrozen = (unit: ProductUnit) => unit.frozenOn !== null && unit.defrostedOn === null;
+
+/** Where to keep it has changed since it was bought (opened into the fridge, frozen, ...). */
+function storageChanged(product: Product, unit: ProductUnit): boolean {
+    return unit.currentStorage !== null && unit.currentStorage !== product.usualStorage;
+}
+
+function StatePills({ unit }: { unit: ProductUnit }) {
+    return (
+        <>
+            {unit.openedOn && <span className={`${styles.pill} ${styles.opened}`}>Opened</span>}
+            {isFrozen(unit) && <span className={`${styles.pill} ${styles.frozen}`}>Frozen</span>}
+        </>
+    );
+}
+
+/** The More sheet under a unit (#65): Opened, Froze it, and for frozen units Defrosted; today, or a different day. */
+function StateSheet({
+    unit,
+    index,
+    busy,
+    onPick,
+}: {
+    unit: ProductUnit;
+    index: number;
+    busy: boolean;
+    onPick: (state: UnitState, date: string | undefined) => void;
+}) {
+    const today = ukToday();
+    const [otherDay, setOtherDay] = useState(false);
+    const [date, setDate] = useState(today);
+    const pick = (state: UnitState) => onPick(state, otherDay && date !== today ? date : undefined);
+    const dateId = `state-date-${unit.unitId}`;
+    return (
+        <div className={styles.sheet} role="group" aria-label={`Unit ${index}: opened, frozen or defrosted`}>
+            <div className={styles.sheetButtons}>
+                {!unit.openedOn && (
+                    <button
+                        type="button"
+                        className={styles.secondary}
+                        disabled={busy}
+                        onClick={() => pick("opened")}
+                    >
+                        Opened
+                    </button>
+                )}
+                {!isFrozen(unit) && (
+                    <button
+                        type="button"
+                        className={styles.secondary}
+                        disabled={busy}
+                        onClick={() => pick("frozen")}
+                    >
+                        Froze it
+                    </button>
+                )}
+                {isFrozen(unit) && (
+                    <button
+                        type="button"
+                        className={styles.secondary}
+                        disabled={busy}
+                        onClick={() => pick("defrosted")}
+                    >
+                        Defrosted
+                    </button>
+                )}
+            </div>
+            {otherDay ? (
+                <div className={styles.field}>
+                    <label htmlFor={dateId} className={styles.label}>
+                        On
+                    </label>
+                    <input
+                        id={dateId}
+                        type="date"
+                        className={styles.input}
+                        value={date}
+                        max={today}
+                        onChange={(e) => setDate(e.target.value)}
+                    />
+                </div>
+            ) : (
+                <button type="button" className={styles.linkButton} onClick={() => setOtherDay(true)}>
+                    Different day?
+                </button>
+            )}
+        </div>
+    );
 }
 
 function UseByCard({ product, unit }: { product: Product; unit: ProductUnit | undefined }) {
@@ -294,10 +482,7 @@ function UseByCard({ product, unit }: { product: Product; unit: ProductUnit | un
             </div>
         );
     }
-    const keeps =
-        product.shelfLifeDays !== null
-            ? ` Bought ${boughtDate(unit.checkedInAt)}; ${product.displayName} usually keeps about ${keepsAbout(product.shelfLifeDays)}.`
-            : ` Bought ${boughtDate(unit.checkedInAt)}.`;
+    const keeps = estimateSentence(product, unit);
     return (
         <div className={`${styles.useBy} ${styles[tone(unit.daysUntilExpiry)]}`}>
             <div className={styles.useByLabel}>Estimated use by</div>
@@ -308,6 +493,31 @@ function UseByCard({ product, unit }: { product: Product; unit: ProductUnit | un
             </div>
         </div>
     );
+}
+
+/** Why the date is what it is: from the bought date, or from being opened, frozen or defrosted (#65). */
+export function estimateSentence(product: Product, unit: ProductUnit): string {
+    const state = unit.expirySource;
+    const since =
+        state === "opened"
+            ? unit.openedOn
+            : state === "frozen"
+              ? unit.frozenOn
+              : state === "defrosted"
+                ? unit.defrostedOn
+                : null;
+    if ((state === "opened" || state === "frozen" || state === "defrosted") && since) {
+        const estimate = product[state];
+        const where = state === "frozen" ? "in the freezer" : `once ${state}`;
+        const keeps = estimate
+            ? `; ${product.displayName} keeps about ${keepsAbout(estimate.days)} ${where}`
+            : "";
+        const hint = state !== "frozen" && unit.currentStorage ? ` ${storageHint(unit.currentStorage)}.` : "";
+        return ` ${stateNote(state, since)}${keeps}.${hint}`;
+    }
+    return product.shelfLifeDays !== null
+        ? ` Bought ${boughtDate(unit.checkedInAt)}; ${product.displayName} usually keeps about ${keepsAbout(product.shelfLifeDays)}.`
+        : ` Bought ${boughtDate(unit.checkedInAt)}.`;
 }
 
 function FixEstimate({
@@ -326,7 +536,7 @@ function FixEstimate({
     );
     const unit = product.units[unitIndex];
     const [date, setDate] = useState(unit.estimatedExpiryDate ?? "");
-    const [shelfOpen, setShelfOpen] = useState(false);
+    const [shelfOpen, setShelfOpen] = useState<"sealed" | "opened" | null>(null);
     const current = product.shelfLifeDays;
     const choices =
         current !== null && !SHELF_LIFE_CHOICES.some((c) => c.days === current)
@@ -335,6 +545,14 @@ function FixEstimate({
               )
             : SHELF_LIFE_CHOICES;
     const [days, setDays] = useState(current ?? 7);
+    const openedCurrent = product.opened?.days ?? null;
+    const openedChoices =
+        openedCurrent !== null && !SHELF_LIFE_CHOICES.some((c) => c.days === openedCurrent)
+            ? [...SHELF_LIFE_CHOICES, { days: openedCurrent, label: keepsAbout(openedCurrent) }].sort(
+                  (a, b) => a.days - b.days,
+              )
+            : SHELF_LIFE_CHOICES;
+    const [openedDays, setOpenedDays] = useState(openedCurrent ?? 5);
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
@@ -373,8 +591,14 @@ function FixEstimate({
     const saveShelfLife = () =>
         void run(async () => {
             await api.setShelfLife(product.productId, days);
-            setShelfOpen(false);
+            setShelfOpen(null);
         }, "Saved. It applies to ones you buy from now on.");
+
+    const saveOpenedShelfLife = () =>
+        void run(async () => {
+            await api.setOpenedShelfLife(product.productId, openedDays);
+            setShelfOpen(null);
+        }, "Saved. It applies to ones you open from now on.");
 
     return (
         <section className={styles.card} aria-labelledby="fix-title">
@@ -419,13 +643,50 @@ function FixEstimate({
                 <button
                     type="button"
                     className={styles.secondary}
-                    onClick={() => setShelfOpen((open) => !open)}
-                    aria-expanded={shelfOpen}
+                    onClick={() => setShelfOpen((open) => (open === "sealed" ? null : "sealed"))}
+                    aria-expanded={shelfOpen === "sealed"}
                 >
                     Change shelf life
                 </button>
             </div>
-            {shelfOpen && (
+            <button
+                type="button"
+                className={styles.secondary}
+                onClick={() => setShelfOpen((open) => (open === "opened" ? null : "opened"))}
+                aria-expanded={shelfOpen === "opened"}
+            >
+                Change &ldquo;once opened&rdquo; shelf life
+            </button>
+            {shelfOpen === "opened" && (
+                <div className={styles.shelf}>
+                    <div className={styles.field}>
+                        <label htmlFor="fix-opened" className={styles.label}>
+                            Once opened, {product.displayName} keeps
+                        </label>
+                        <select
+                            id="fix-opened"
+                            className={styles.input}
+                            value={openedDays}
+                            onChange={(e) => setOpenedDays(Number(e.target.value))}
+                        >
+                            {openedChoices.map((c) => (
+                                <option key={c.days} value={c.days}>
+                                    {c.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <button
+                        type="button"
+                        className={styles.primary}
+                        onClick={saveOpenedShelfLife}
+                        disabled={saving}
+                    >
+                        Save &ldquo;once opened&rdquo;
+                    </button>
+                </div>
+            )}
+            {shelfOpen === "sealed" && (
                 <div className={styles.shelf}>
                     <div className={styles.field}>
                         <label htmlFor="fix-shelf" className={styles.label}>

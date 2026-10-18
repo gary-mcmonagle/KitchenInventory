@@ -26,6 +26,12 @@ const unit = (id: string, overrides: Partial<ProductUnit> = {}): ProductUnit => 
     estimatedExpiryDate: "2026-10-20",
     expirySource: "shelfLife",
     daysUntilExpiry: 2,
+    openedOn: null,
+    frozenOn: null,
+    defrostedOn: null,
+    currentStorage: null,
+    estimatePending: false,
+    canUndoStateChange: false,
     ...overrides,
 });
 
@@ -41,6 +47,12 @@ const milk = (overrides: Partial<Product> = {}): Product => ({
     latestDeviceRole: "in",
     shelfLifeDays: 7,
     shelfLifeSource: "jev",
+    usualStorage: "fridge",
+    opened: { days: 4, storage: "fridge", source: "jev" },
+    frozen: { days: 90, storage: "freezer", source: "jev" },
+    defrosted: { days: 2, storage: "fridge", source: "jev" },
+    openedCount: 0,
+    frozenCount: 0,
     units: [
         unit("u1"),
         unit("u2", {
@@ -313,4 +325,142 @@ test("the name in the stock list opens item detail", async () => {
     fireEvent.click(await screen.findByRole("link", { name: "Semi-skimmed milk" }));
 
     expect(window.location.pathname).toBe("/products/p%20milk");
+});
+
+// ---- Opened, frozen, defrosted (#65)
+
+const pesto = (units: ProductUnit[]): Product =>
+    milk({
+        productId: "p-milk",
+        displayName: "Pesto",
+        brand: "Sacla",
+        size: "190 g",
+        usualStorage: "cupboard",
+        shelfLifeDays: 180,
+        opened: { days: 4, storage: "fridge", source: "jev" },
+        units,
+    });
+
+const openedJar = unit("u1", {
+    estimatedExpiryDate: "2026-10-22",
+    daysUntilExpiry: 4,
+    expirySource: "opened",
+    openedOn: "2026-10-18",
+    currentStorage: "fridge",
+    canUndoStateChange: true,
+});
+
+test("More opens a sheet per unit: Opened and Froze it, and Defrosted only for a frozen unit", async () => {
+    const frozen = unit("u2", { frozenOn: "2026-10-16", currentStorage: "freezer", expirySource: "frozen" });
+    setup([pesto([unit("u1"), frozen])]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "More actions for Unit 1" }));
+    const first = screen.getByRole("group", { name: "Unit 1: opened, frozen or defrosted" });
+    expect(
+        within(first)
+            .getAllByRole("button")
+            .map((b) => b.textContent),
+    ).toEqual(["Opened", "Froze it", "Different day?"]);
+    expect(screen.getByRole("button", { name: "More actions for Unit 1" })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "More actions for Unit 2" }));
+    const second = screen.getByRole("group", { name: "Unit 2: opened, frozen or defrosted" });
+    expect(
+        within(second)
+            .getAllByRole("button")
+            .map((b) => b.textContent),
+    ).toEqual(["Opened", "Defrosted", "Different day?"]);
+    expect(screen.queryByRole("group", { name: /Unit 1/ })).not.toBeInTheDocument(); // one sheet at a time
+});
+
+test("Opened today: the unit updates with its pill, the date, the storage hint, and Undo puts it back", async () => {
+    const markUnit = vi.fn(async () => ({ productId: "p-milk", unit: openedJar }));
+    const undoStateChange = vi.fn(async () => ({ productId: "p-milk", unit: unit("u1") }));
+    setup([pesto([unit("u1")]), pesto([openedJar]), pesto([unit("u1")])], { markUnit, undoStateChange });
+
+    fireEvent.click(await screen.findByRole("button", { name: "More actions for Unit 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Opened" }));
+
+    expect(await screen.findByText("Marked as opened")).toBeInTheDocument();
+    expect(markUnit).toHaveBeenCalledWith("u1", "opened", undefined);
+    const row = within(screen.getByRole("region", { name: "In the cupboard" })).getAllByRole("listitem")[0];
+    expect(row).toHaveTextContent("Unit 1Opened");
+    expect(row).toHaveTextContent("Bought 13 Oct · opened 18 Oct · est. 22 Oct");
+    expect(row).toHaveTextContent("Keep in the fridge");
+    expect(screen.getByText("Estimated use by").parentElement).toHaveTextContent(
+        "Opened 18 Oct; Pesto keeps about 4 days once opened. Keep in the fridge.",
+    );
+    expect(screen.queryByRole("group", { name: /Unit 1:/ })).not.toBeInTheDocument();
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Undo" })));
+
+    expect(undoStateChange).toHaveBeenCalledWith("u1");
+    expect(row).not.toHaveTextContent("Opened");
+});
+
+test("Different day? sends the date picked, and never a day in the future", async () => {
+    const markUnit = vi.fn(async () => ({ productId: "p-milk", unit: unit("u1") }));
+    setup([pesto([unit("u1")])], { markUnit });
+
+    fireEvent.click(await screen.findByRole("button", { name: "More actions for Unit 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Different day?" }));
+    const date = screen.getByLabelText("On");
+    expect(date).toHaveAttribute("max", "2026-10-18");
+    fireEvent.change(date, { target: { value: "2026-10-15" } });
+    fireEvent.click(screen.getByRole("button", { name: "Froze it" }));
+
+    await vi.waitFor(() => expect(markUnit).toHaveBeenCalledWith("u1", "frozen", "2026-10-15"));
+});
+
+test("frozen and defrosted units read as such, with pills, and a pending estimate says so", async () => {
+    const frozen = unit("u1", {
+        frozenOn: "2026-10-16",
+        currentStorage: "freezer",
+        expirySource: "frozen",
+        estimatedExpiryDate: "2027-01-14",
+        daysUntilExpiry: 88,
+    });
+    const pending = unit("u2", { openedOn: "2026-10-18", expirySource: "opened", estimatePending: true });
+    setup([pesto([pending, frozen])]);
+
+    const rows = within(await screen.findByRole("region", { name: "In the cupboard" })).getAllByRole(
+        "listitem",
+    );
+    expect(rows[0]).toHaveTextContent(
+        "Bought 13 Oct · opened 18 Oct · new estimate on its way · est. 20 Oct",
+    );
+    expect(rows[1]).toHaveTextContent("Unit 2Frozen");
+    expect(rows[1]).toHaveTextContent("Bought 13 Oct · frozen 16 Oct · est. 14 Jan 2027");
+    expect(rows[1]).toHaveTextContent("Keep in the freezer");
+});
+
+test("a refused change (e.g. already checked out) says so and reloads", async () => {
+    const markUnit = vi.fn().mockRejectedValue(new ApiError(409, "conflict"));
+    const api = setup([pesto([unit("u1")])], { markUnit });
+
+    fireEvent.click(await screen.findByRole("button", { name: "More actions for Unit 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Froze it" }));
+
+    expect(await screen.findByText("That one's changed. Have a look and try again.")).toBeInTheDocument();
+    expect(api.product).toHaveBeenCalledTimes(2);
+});
+
+test("Change 'once opened' shelf life saves the chosen days", async () => {
+    const setOpenedShelfLife = vi.fn(async (productId: string, days: number) => ({
+        productId,
+        shelfLifeDays: days,
+    }));
+    setup([pesto([unit("u1")])], { setOpenedShelfLife });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Change “once opened” shelf life" }));
+    const select = screen.getByLabelText("Once opened, Pesto keeps");
+    expect(select).toHaveValue("4");
+    fireEvent.change(select, { target: { value: "14" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save “once opened”" }));
+
+    expect(await screen.findByText("Saved. It applies to ones you open from now on.")).toBeInTheDocument();
+    expect(setOpenedShelfLife).toHaveBeenCalledWith("p-milk", 14);
 });

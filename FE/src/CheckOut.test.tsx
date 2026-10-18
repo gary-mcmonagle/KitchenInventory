@@ -25,6 +25,10 @@ const gravy: StockProduct = {
     soonestEstimatedExpiryDate: null,
     daysUntilSoonest: null,
     shelfLifeDays: null,
+    openedCount: 0,
+    frozenCount: 0,
+    soonestState: null,
+    soonestStateOn: null,
 };
 const naan: StockProduct = {
     ...gravy,

@@ -44,6 +44,25 @@ export interface StockProduct {
     /** Days from today (UK) to that date: negative once passed. */
     daysUntilSoonest: number | null;
     shelfLifeDays: number | null;
+    /** Units opened, and units in the freezer (#65). */
+    openedCount: number;
+    frozenCount: number;
+    /** When the soonest unit's date is from being opened, frozen or defrosted: which, and since when (YYYY-MM-DD). */
+    soonestState: UnitState | null;
+    soonestStateOn: string | null;
+}
+
+/** Opened, frozen, defrosted (#65). */
+export type UnitState = "opened" | "frozen" | "defrosted";
+
+export type StorageName = "cupboard" | "fridge" | "freezer";
+
+/** How long a product keeps once opened, in the freezer, or once defrosted, and where to keep it then (#65). */
+export interface StateShelfLife {
+    days: number;
+    storage: StorageName;
+    /** "jev" or "manual". */
+    source: string;
 }
 
 /** GET /api/stock: grouped, put in sections and sorted by the API (Use first and Later by soonest estimated expiry,
@@ -83,8 +102,15 @@ export interface Product {
     shelfLifeDays: number | null;
     /** "jev" or "manual". */
     shelfLifeSource: string | null;
-    /** In-stock units, soonest estimated expiry first (#53). */
+    /** In-stock units, opened first and frozen last, then soonest estimated expiry (#53, #65). */
     units: ProductUnit[];
+    /** Where it's kept sealed (#52); null until estimated. */
+    usualStorage: StorageName | null;
+    opened: StateShelfLife | null;
+    frozen: StateShelfLife | null;
+    defrosted: StateShelfLife | null;
+    openedCount: number;
+    frozenCount: number;
 }
 
 export interface ProductUnit {
@@ -92,8 +118,17 @@ export interface ProductUnit {
     checkedInAt: string;
     /** YYYY-MM-DD, or null until estimated. */
     estimatedExpiryDate: string | null;
-    expirySource: "shelfLife" | "manual" | null;
+    expirySource: "shelfLife" | "manual" | UnitState | null;
     daysUntilExpiry: number | null;
+    /** YYYY-MM-DD, or null (#65). */
+    openedOn: string | null;
+    frozenOn: string | null;
+    defrostedOn: string | null;
+    /** Where to keep it now, once opened, frozen or defrosted. */
+    currentStorage: StorageName | null;
+    /** Its new estimate is on its way (the product's estimate for that state isn't in yet). */
+    estimatePending: boolean;
+    canUndoStateChange: boolean;
 }
 
 export interface NameDetails {
@@ -250,6 +285,29 @@ export class ApiClient {
     /** Sets a product's shelf life by hand, for units bought from now on. */
     setShelfLife(productId: string, days: number): Promise<{ productId: string; shelfLifeDays: number }> {
         return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/shelf-life`, { days });
+    }
+
+    /** Marks a unit opened, frozen or defrosted (#65), today or on <c>date</c> (YYYY-MM-DD). 409: not in stock, or
+     * defrosting a unit that isn't frozen. */
+    markUnit(
+        unitId: string,
+        state: UnitState,
+        date?: string,
+    ): Promise<{ productId: string; unit: ProductUnit }> {
+        return this.send("POST", `/api/units/${encodeURIComponent(unitId)}/${state}`, date ? { date } : {});
+    }
+
+    /** Puts a unit's estimate back as it was before its last state change (#65). */
+    undoStateChange(unitId: string): Promise<{ productId: string; unit: ProductUnit }> {
+        return this.send("POST", `/api/units/${encodeURIComponent(unitId)}/undo-state-change`);
+    }
+
+    /** Sets how long a product keeps once opened, by hand (#65): for units opened from now on. */
+    setOpenedShelfLife(
+        productId: string,
+        days: number,
+    ): Promise<{ productId: string; shelfLifeDays: number }> {
+        return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/opened-shelf-life`, { days });
     }
 
     /** Corrects a known product's details (400 → ApiError with FieldErrors). */

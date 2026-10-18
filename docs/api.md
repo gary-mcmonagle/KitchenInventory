@@ -145,6 +145,8 @@ The stock list (#49, #52): every product with units in stock, grouped, put in se
 | `soonestEstimatedExpiryDate` | `YYYY-MM-DD`: the earliest `estimatedExpiryDate` of its in-stock units. `null` until it has an estimate. |
 | `daysUntilSoonest` | Days from today (UK calendar date) to that date; negative once it's passed, `0` on the day. `null` with it. |
 | `shelfLifeDays` | The product's shelf life, for the "keeps about …" note (the soonest unit was bought on `soonestEstimatedExpiryDate − shelfLifeDays`). `null` until estimated. |
+| `openedCount`, `frozenCount` | In-stock units opened, and in the freezer now (#65): the row's **Opened** / **n frozen** pills. |
+| `soonestState`, `soonestStateOn` | When the soonest unit's date comes from being `opened`, `frozen` or `defrosted` (#65): which, and since when (`YYYY-MM-DD`). The row then says "Opened 12 Oct" instead of the bought note. `null` otherwise. |
 
 The UI's badge: `Est. expired` (red), `Est. today` / `Est. tomorrow` / `Est. n days` up to 14 days (amber at 3 days or fewer, green above), then `Est. 2 Nov`, or `Est. Oct 2028` when it's over a year away. The digest's Use first section uses the same text (`ExpiryBadge`).
 
@@ -181,9 +183,17 @@ A product, for naming (#51) and item detail (#53).
   "latestDeviceRole": "in",
   "shelfLifeDays": 7,
   "shelfLifeSource": "jev",
+  "usualStorage": "fridge",
+  "opened": { "days": 4, "storage": "fridge", "source": "jev" },
+  "frozen": { "days": 90, "storage": "freezer", "source": "jev" },
+  "defrosted": { "days": 2, "storage": "fridge", "source": "jev" },
+  "openedCount": 1,
+  "frozenCount": 0,
   "units": [
-    { "unitId": "…", "checkedInAt": "2026-10-13T09:00:00.000Z", "estimatedExpiryDate": "2026-10-20", "expirySource": "shelfLife", "daysUntilExpiry": 2 },
-    { "unitId": "…", "checkedInAt": "2026-10-17T17:42:00.000Z", "estimatedExpiryDate": "2026-10-25", "expirySource": "manual", "daysUntilExpiry": 7 }
+    { "unitId": "…", "checkedInAt": "2026-10-13T09:00:00.000Z", "estimatedExpiryDate": "2026-10-19", "expirySource": "opened", "daysUntilExpiry": 1,
+      "openedOn": "2026-10-15", "frozenOn": null, "defrostedOn": null, "currentStorage": "fridge", "estimatePending": false, "canUndoStateChange": true },
+    { "unitId": "…", "checkedInAt": "2026-10-17T17:42:00.000Z", "estimatedExpiryDate": "2026-10-25", "expirySource": "manual", "daysUntilExpiry": 7,
+      "openedOn": null, "frozenOn": null, "defrostedOn": null, "currentStorage": null, "estimatePending": false, "canUndoStateChange": false }
   ]
 }
 ```
@@ -192,8 +202,15 @@ A product, for naming (#51) and item detail (#53).
 |---|---|
 | `latestCheckedInAt`, `latestDeviceRole` | `in` / `out`, from the device that checked in the newest in-stock unit; `null` when nothing's in stock. |
 | `shelfLifeDays`, `shelfLifeSource` | The product's shelf life and who set it (`jev` or `manual`); `null` until estimated. |
-| `units` | In-stock units in **check-out order**: soonest estimated expiry first (none last), then oldest check-in. Item detail labels them Unit 1…n. |
-| `units[].expirySource` | `shelfLife` (bought date + shelf life) or `manual` (set in item detail); `null` with no date yet. |
+| `usualStorage` | Where it's kept sealed (`cupboard`, `fridge`, `freezer`), from its shelf life; `null` until estimated. |
+| `opened`, `frozen`, `defrosted` | How long it keeps once opened, in the freezer, and once defrosted, and where to keep it then (#65): `{ days, storage, source }`, `source` `jev` or `manual` (only `opened` can be set by hand). `null` until the shelf-life timer has asked Jev. |
+| `openedCount`, `frozenCount` | In-stock units opened, and in the freezer now. |
+| `units` | In-stock units in **check-out order**: **opened first, in the freezer last** (#65), then soonest estimated expiry (none last), then oldest check-in. Item detail labels them Unit 1…n. |
+| `units[].expirySource` | `shelfLife` (bought date + shelf life), `manual` (set in item detail), or `opened` / `frozen` / `defrosted` (#65: what its estimate is from now); `null` with no date yet. |
+| `units[].openedOn`, `frozenOn`, `defrostedOn` | `YYYY-MM-DD` (UK) when marked, or `null`. Frozen now = `frozenOn` set and `defrostedOn` not. |
+| `units[].currentStorage` | Where to keep it now it's opened, frozen or defrosted; `null` otherwise. |
+| `units[].estimatePending` | Marked before the product had that estimate: the date shown is the old one, and the shelf-life timer fills in the new one. |
+| `units[].canUndoStateChange` | Its last state change can be undone. |
 | `units[].daysUntilExpiry` | Days from today (UK) to its date; negative once passed. `null` with no date. |
 
 **404** `{ "error": "No such product." }`.
@@ -220,6 +237,29 @@ Set a product's shelf life by hand (#53): `{ "days": 14 }` (whole number, 1–36
 
 - **200** `{ "productId": "…", "shelfLifeDays": 14, "shelfLifeSource": "manual" }`
 - **400** `{ "error": "…" }`; **404** `{ "error": "No such product." }`; **409** `{ "error": "…" }`: not known yet (name it first), or changed while saving.
+
+### `POST /api/units/{unitId}/opened`, `/frozen`, `/defrosted`
+
+Marks a unit opened, frozen or defrosted (#65), from item detail's **More** sheet. Body: optional `{ "date": "YYYY-MM-DD" }` (default today, UK; not in the future, not before it was bought). It re-estimates the unit at once from the product's estimates, **without calling Jev**:
+
+- **Opened:** the earlier of open date + `opened.days` and the date it had (opening never makes something last longer; no date yet: open date + `opened.days`). Keep it in `opened.storage`.
+- **Frozen:** freeze date + `frozen.days`. In the freezer.
+- **Defrosted** (frozen units only): defrost date + `defrosted.days`. Keep it in `defrosted.storage`.
+
+The latest action decides, and a manual date is replaced (Undo brings it back). With no product estimate yet, the state is saved with the old date and `estimatePending: true`, and the timer fills it in. **Idempotent:** marking it again changes nothing.
+
+- **200** `{ "productId": "…", "unit": { …as in GET /api/products/{productId} } }`
+- **400** `{ "error": "…" }`: a bad date, in the future, or before it was bought.
+- **404** `{ "error": "No such unit." }`
+- **409** `{ "error": "…" }`: not in stock, Defrosted on a unit that isn't frozen, or changed while saving.
+
+### `POST /api/units/{unitId}/undo-state-change`
+
+Puts the unit's estimate fields back exactly as before its last state change (one level). No body. **200** as above; **404**; **409** when there's nothing to undo or it isn't in stock.
+
+### `PUT /api/products/{productId}/opened-shelf-life`
+
+How long it keeps once opened, by hand (#65): `{ "days": 5 }` (1–3650). Sets `opened.source: "manual"`, which Jev never overwrites. It applies to units **opened from now on**. Only for `known` products. Responses as `PUT /api/products/{productId}/shelf-life`.
 
 ### `PUT /api/products/{productId}/details`
 

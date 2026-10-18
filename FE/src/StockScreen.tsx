@@ -16,6 +16,7 @@ import {
     itemsLabel,
     metaLine,
     scannedLabel,
+    stateNote,
     todayLine,
 } from "./format";
 import { takeFlash } from "./flash";
@@ -355,10 +356,13 @@ function KnownRow({
         product.daysUntilSoonest !== null && product.soonestEstimatedExpiryDate !== null
             ? expiryBadge(product.daysUntilSoonest, product.soonestEstimatedExpiryDate)
             : null;
+    // An estimate from opening, freezing or defrosting says so (#65): working back to a bought date would be wrong.
     const note =
-        product.soonestEstimatedExpiryDate !== null && product.shelfLifeDays !== null
-            ? boughtNote(product.soonestEstimatedExpiryDate, product.shelfLifeDays)
-            : null;
+        product.soonestState && product.soonestStateOn
+            ? stateNote(product.soonestState, product.soonestStateOn)
+            : product.soonestEstimatedExpiryDate !== null && product.shelfLifeDays !== null
+              ? boughtNote(product.soonestEstimatedExpiryDate, product.shelfLifeDays)
+              : null;
     return (
         <li className={styles.row}>
             <div className={styles.rowMain}>
@@ -377,6 +381,20 @@ function KnownRow({
                         {product.displayName}
                     </a>
                     {meta && <span className={styles.meta}>{meta}</span>}
+                    {(product.openedCount > 0 || product.frozenCount > 0) && (
+                        <span className={styles.pills}>
+                            {product.openedCount > 0 && (
+                                <span className={`${styles.pill} ${styles.opened}`}>
+                                    {product.openedCount === 1 ? "Opened" : `${product.openedCount} opened`}
+                                </span>
+                            )}
+                            {product.frozenCount > 0 && (
+                                <span
+                                    className={`${styles.pill} ${styles.frozen}`}
+                                >{`${product.frozenCount} frozen`}</span>
+                            )}
+                        </span>
+                    )}
                 </div>
                 {badge && <span className={`${styles.badge} ${styles[badge.tone]}`}>{badge.text}</span>}
             </div>

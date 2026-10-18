@@ -156,3 +156,23 @@ export function interval(seconds: number): string {
     }
     return `${seconds} seconds`;
 }
+
+/** Today in the UK as YYYY-MM-DD (the default day for Opened, Froze it and Defrosted, #65). */
+export function ukToday(now: Date = new Date()): string {
+    return now.toLocaleDateString("en-CA", { timeZone: UK });
+}
+
+/** "Keep in the fridge" (#65). */
+export function storageHint(storage: "cupboard" | "fridge" | "freezer"): string {
+    return storage === "cupboard" ? "Keep in the cupboard" : `Keep in the ${storage}`;
+}
+
+/** "Opened 12 Oct", "Frozen 3 Oct", "Defrosted 5 Oct": a unit's state, from a YYYY-MM-DD date (#65). */
+export function stateNote(
+    state: "opened" | "frozen" | "defrosted",
+    isoDate: string,
+    now: Date = new Date(),
+): string {
+    const word = state === "opened" ? "Opened" : state === "frozen" ? "Frozen" : "Defrosted";
+    return `${word} ${shortDate(isoDate, now)}`;
+}

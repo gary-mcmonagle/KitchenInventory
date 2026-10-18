@@ -170,4 +170,19 @@ public sealed class GetStockTests
 
         Assert.Equal((StockProductStatus.LookupFailed, "4056489003703"), (product.Status, product.Barcode));
     }
+
+    [Fact]
+    public async Task Opened_and_frozen_units_are_counted_and_the_soonest_says_what_its_date_is_from()
+    {
+        var pesto = Known("Pesto");
+        queries.Units.Add(new StockUnit(pesto, null, Now, Today.AddDays(2), ExpirySource.Opened, OpenedOn: Today.AddDays(-2)));
+        queries.Units.Add(new StockUnit(pesto, null, Now, Today.AddDays(90), ExpirySource.Frozen, FrozenOn: Today));
+        queries.Units.Add(new StockUnit(pesto, null, Now, Today.AddDays(150), ExpirySource.ShelfLife));
+        queries.Units.Add(new StockUnit(pesto, null, Now, Today.AddDays(1), ExpirySource.Defrosted, FrozenOn: Today.AddDays(-9), DefrostedOn: Today));
+
+        var row = Assert.Single((await UseCase().ExecuteAsync(CancellationToken.None)).Products);
+
+        Assert.Equal((1, 1, "defrosted", Today, StockSection.UseFirst),
+            (row.OpenedCount, row.FrozenCount, row.SoonestState, row.SoonestStateOn, row.Section));
+    }
 }

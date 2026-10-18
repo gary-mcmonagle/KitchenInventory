@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using CupboardTracker.Application.Stock;
+using CupboardTracker.Domain.Stock;
 using Microsoft.Azure.Cosmos;
 
 namespace CupboardTracker.Infrastructure.Cosmos;
@@ -11,7 +12,7 @@ public sealed class CosmosStockQueries(CosmosContainers containers) : IStockQuer
     {
         var rows = await CosmosJson.QueryAsync(
             containers.InventoryItems,
-            new QueryDefinition("SELECT c.productId, c.barcode, c.checkedInAt, c.estimatedExpiryDate, c.openedOn, c.frozenOn, c.defrostedOn FROM c WHERE c.status = 'inStock'"),
+            new QueryDefinition("SELECT c.productId, c.barcode, c.checkedInAt, c.estimatedExpiryDate, c.expirySource, c.openedOn, c.frozenOn, c.defrostedOn FROM c WHERE c.status = 'inStock'"),
             partitionKey: null, max: null, cancellationToken);
         return rows.Select(ToUnit).ToList();
     }
@@ -21,6 +22,15 @@ public sealed class CosmosStockQueries(CosmosContainers containers) : IStockQuer
         CosmosJson.Text(row["barcode"]),
         CosmosJson.ParseTimestamp(row["checkedInAt"]) ?? DateTimeOffset.MinValue,
         CosmosJson.ParseDate(row["estimatedExpiryDate"]),
-        row["openedOn"] is not null,
-        row["frozenOn"] is not null && row["defrostedOn"] is null);
+        CosmosJson.Text(row["expirySource"]) switch
+        {
+            "opened" => ExpirySource.Opened,
+            "frozen" => ExpirySource.Frozen,
+            "defrosted" => ExpirySource.Defrosted,
+            "manual" => ExpirySource.Manual,
+            _ => row["estimatedExpiryDate"] is null ? null : ExpirySource.ShelfLife,
+        },
+        CosmosJson.ParseDate(row["openedOn"]),
+        CosmosJson.ParseDate(row["frozenOn"]),
+        CosmosJson.ParseDate(row["defrostedOn"]));
 }

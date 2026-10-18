@@ -179,6 +179,16 @@ Written only by the **shelf-life timer**, with an ETag-guarded replace that appl
 
 **Edited details** (#53, `PUT /api/products/{id}/details`): a known product's name, brand and size corrected in item detail. It sets `source: manual` plus `editedAt` and `editedBy` (Entra object ID), ETag-guarded. Known products are never looked up again, so nothing overwrites the edit.
 
+**Opened, frozen and defrosted (#65):** how long the product keeps in each state, from Jev on the shelf-life timer (step 3 below), so marking a unit is instant.
+
+| Field | Notes |
+|---|---|
+| `openedShelfLifeDays`, `openedStorage` | How long it keeps **once opened**, and where (`cupboard` / `fridge` / `freezer`). |
+| `frozenShelfLifeDays` | How long it keeps **in the freezer**, frozen the day it was bought. |
+| `defrostedShelfLifeDays`, `defrostedStorage` | How long it keeps **once defrosted**, and where (`cupboard` / `fridge`). |
+| `…ShelfLifeSource`, `…ShelfLifeConfidence`, `…LowConfidence` | Per state, as for the shelf life. `openedShelfLifeSource: manual` when set in item detail (`PUT /api/products/{id}/opened-shelf-life`); Jev never overwrites it. |
+| `stateEstimatedAt` | When Jev answered. Absent until then (the timer's query). |
+
 **Reserved, not used yet:** `icon`.
 
 ### Store-label check-in (#58)
@@ -266,7 +276,9 @@ Each retry ends in `known` (found), `noMatch` (not found; final) or `lookupFaile
 **The shelf-life timer**, every **5 minutes** (API app, `estimateShelfLives`):
 
 1. Query `known` products with no `shelfLifeDays` (cross-partition), at most **20 per run**, and ask Jev for each: a `score` over the ten worded durations plus a `choice` of usual storage, in one request ([spike #40](spikes/40-jev.md)). Store the shelf-life fields above.
-2. Query in-stock units with no `estimatedExpiryDate` (cross-partition) and, for those whose product now has a shelf life, set it (ETag-guarded; a unit checked out meanwhile is skipped).
+2. Query in-stock units with no `estimatedExpiryDate` (cross-partition) and, for those whose product now has a shelf life, set it (ETag-guarded; a unit checked out meanwhile is skipped). Units opened, frozen or defrosted wait for step 4 instead.
+3. **State estimates (#65):** query `known` products with a shelf life but no `stateEstimatedAt`, at most **20 per run**, and ask Jev five questions in **one request** (`docs/spikes/65-jev-unit-state.py`): where to keep it once opened, and how long it keeps once opened, in the freezer, and once defrosted (and where). Same level rule as the shelf life. A manual "once opened" is kept. This also filled existing stock on the first runs after deploy (no separate backfill).
+4. Query units with `estimatePending: true` and, where their product now has the estimate for their state, set the date and storage.
 
 This covers every way a product becomes known: Open Food Facts at check-in, the lookup-retry timer, and naming in the app. It also did the **one-off fill** of existing stock on the first runs after deploy. Check-in and naming never wait for Jev. **If Jev is unreachable** (429/529, 5xx or timeouts after 3 tries) the run logs a warning and stops; products stay unestimated and the next run tries again. A refused request (400/401/413/415/422) logs an error. With no key yet (`JEV_API_KEY` unresolved), it logs a warning and does nothing. Everything it writes is derived data, and a re-run changes nothing already done.
 
@@ -309,7 +321,11 @@ This covers every way a product becomes known: Open Food Facts at check-in, the 
 | `checkOutSource` | `scanner` (check-out scans) or `ui` (check-out from the stock list, #50). |
 | `checkedOutBy` | For `ui` check-outs, the user's Entra object ID (`oid`); `null` for scanner check-outs. |
 | `estimatedExpiryDate` | `YYYY-MM-DD` (#52): the **bought date** (`checkedInAt` as a UK calendar date, Europe/London) plus the product's `shelfLifeDays`. Absent or `null` until the product has a shelf life. Set at check-in if the product already has one; otherwise filled in by the shelf-life timer. Changed afterwards only by a person, in item detail. |
-| `expirySource` | Where that date came from (#53): `shelfLife`, or `manual` when set in item detail (`PUT /api/units/{id}/estimated-expiry`). A manual date is never recalculated. Absent on dates written before #53, which all came from the shelf life. |
+| `expirySource` | Where that date came from (#53): `shelfLife`, or `manual` when set in item detail (`PUT /api/units/{id}/estimated-expiry`). A manual date is never recalculated. Since #65 also `opened`, `frozen` or `defrosted`: the unit's latest state (kept even before the date is filled in). Absent on dates written before #53, which all came from the shelf life. |
+| `openedOn`, `frozenOn`, `defrostedOn` | `YYYY-MM-DD` (UK) when the unit was marked opened, frozen or defrosted in item detail (#65). In the freezer now = `frozenOn` set and `defrostedOn` absent. Absent otherwise. |
+| `currentStorage` | Where to keep it in its current state (`cupboard` / `fridge` / `freezer`). Absent for sealed units (the product's `storage` applies). |
+| `estimatePending` | `true` while its state's estimate is missing from the product: the date is the old one until the shelf-life timer fills it in. Absent otherwise. |
+| `beforeStateChange` | The estimate fields (`estimatedExpiryDate`, `expirySource`, the three dates, `currentStorage`, `estimatePending`) as they were before the last state change, for **Undo** (`POST /api/units/{id}/undo-state-change`; one level). Absent when there's nothing to undo. Cleared fields are **removed** from the document, so Undo never leaves an old value behind. |
 
 The unit doesn't copy the product's status or name: the product is always one point read away. (The earlier `productStatus` field is gone, because every unit now has a product, including `lookupFailed` ones.)
 
@@ -516,9 +532,10 @@ The change feed is **at-least-once**, so every step must be safe to repeat. See 
 
 When a product has several units in stock, a check-out takes **one**, chosen by:
 
-1. Among the product's `inStock` units, **soonest `estimatedExpiryDate` first** (units with an estimate before units without).
-2. Ties and units with no estimate: **oldest `checkedInAt` first** (FIFO).
-3. Final tie-break: lowest `id`, so the choice is deterministic.
+1. Among the product's `inStock` units, **opened units first** and units **in the freezer last** (#65).
+2. Then **soonest `estimatedExpiryDate` first** (units with an estimate before units without).
+3. Ties and units with no estimate: **oldest `checkedInAt` first** (FIFO).
+4. Final tie-break: lowest `id`, so the choice is deterministic.
 
 This is "use the oldest stuff first". While no expiry dates exist, it is plain FIFO. The units are selected by **product**, so a check-out with any of a product's barcodes takes from all of that product's units.
 

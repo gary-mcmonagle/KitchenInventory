@@ -169,8 +169,89 @@
     padding: 4px 0;
 }
 
-.unit + .unit {
+.unitItem + .unitItem {
     border-top: 1px solid var(--border-soft);
+}
+
+.unitButtons {
+    flex: none;
+    display: flex;
+    gap: 6px;
+}
+
+/* "More actions" on a unit (#65): opened, frozen, defrosted. */
+.more {
+    width: var(--touch);
+    min-height: var(--touch);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-button);
+    border: 1px solid var(--input-border);
+    background: var(--surface);
+    color: var(--ink-strong);
+    cursor: pointer;
+}
+
+.more[aria-expanded="true"] {
+    border-color: var(--accent);
+    color: var(--accent-dark);
+}
+
+/* Opened / Frozen labels: the stock list badge's shape, smaller. */
+.pill {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    vertical-align: 1px;
+}
+
+.opened {
+    background: var(--accent-tint);
+    color: var(--accent);
+}
+
+.frozen {
+    background: var(--pending-bg);
+    color: var(--ink-strong);
+}
+
+.hint {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-dark);
+}
+
+.sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 12px;
+    border-radius: var(--radius-input);
+    background: var(--ground);
+}
+
+.sheetButtons {
+    display: flex;
+    gap: 8px;
+}
+
+.linkButton {
+    align-self: flex-start;
+    min-height: var(--touch);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
 }
 
 .unitText {

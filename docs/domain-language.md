@@ -143,15 +143,31 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Item detail** – the screen for one known product, opened from its name in the stock list: each unit in the house with its bought and estimated dates, check-out of a particular unit, correcting a unit's date or the product's shelf life, and editing its details.
 
+**Current storage** – where a unit should be kept now it's been opened, frozen or defrosted (e.g. a tin moves to the fridge once opened). Shown as a hint under the unit: "Keep in the fridge".
+- In code: `Unit.CurrentStorage`, `currentStorage`
+
+**Defrosted** – a frozen unit taken out of the freezer. Its estimate becomes the defrost date plus how long the product keeps once defrosted, kept where Jev says (fridge or cupboard).
+
 **Edit details** – correcting a known product's name, brand or size in item detail. Like naming, it makes the name manual, so nothing overwrites it.
+
+**Estimate source** – what a unit's estimated expiry date is from: the shelf life (bought date + shelf life), set by you, or the unit's state (opened, frozen, defrosted). The latest state decides.
+- In code: `ExpirySource` (`shelfLife`, `manual`, `opened`, `frozen`, `defrosted`), `expirySource`
+
+**Frozen** – a unit put in the freezer. Its estimate becomes the freeze date plus how long the product keeps in the freezer, and it's checked out last. Shown with a **Frozen** label.
 
 **Later** – the stock list section for named products that aren't in Use first, including those with no estimate yet.
 
 **Shelf life** – how long a product usually keeps after it's bought, unopened and in its usual storage. Estimated once per product by Jev; a cautious estimate is used when Jev isn't confident. It can be set by hand in item detail ("set by you"), which applies to units bought from then on and is never overwritten by Jev.
 
+**Opened** – a unit that's been opened. Its estimate becomes the **earlier** of the open date plus how long the product keeps once opened, and the estimate it had: opening never makes something last longer. Opened units are checked out first and shown with an **Opened** label. How long a product keeps once opened can be set by hand in item detail.
+- In code: `UnitState.Opened`, `openedOn`, `POST /api/units/{id}/opened`
+
 **Set by you** – a date or shelf life a person set in item detail (`manual`), as opposed to an estimate. Never recalculated.
 
 **Usual storage** – where a product is normally kept before it's opened: cupboard, fridge or freezer. Jev chooses it with the shelf life, and the estimate is for that storage.
+
+**Unit state** – opened, frozen or defrosted: what happened to a unit after it was bought (#65), marked from the **More** button on a unit in item detail, today or on a different day, with Undo. The product's estimates for each state come from Jev once per product, so marking is instant; until they arrive, the new estimate is "on its way".
+- In code: `UnitState`, `UnitStates`, `ProductStateEstimates`
 
 **Use first** – the stock list section (and the digest's first section) for products whose soonest unit is estimated to be expired or due within 3 days (`USE_FIRST_DAYS`).
 

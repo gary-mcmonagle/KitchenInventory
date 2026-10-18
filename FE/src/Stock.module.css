@@ -352,3 +352,27 @@
     outline-offset: 2px;
     border-radius: 4px;
 }
+
+/* Opened / frozen labels on a product row (#65). */
+.pills {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.pill {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.opened {
+    background: var(--accent-tint);
+    color: var(--accent);
+}
+
+.frozen {
+    background: var(--pending-bg);
+    color: var(--ink-strong);
+}

@@ -54,6 +54,8 @@ public sealed class StockFunction(GetStock getStock)
             shelfLifeDays = p.ShelfLifeDays,
             openedCount = p.OpenedCount,
             frozenCount = p.FrozenCount,
+            soonestState = p.SoonestState,
+            soonestStateOn = p.SoonestStateOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         }),
     };
 

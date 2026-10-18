@@ -16,6 +16,12 @@ const unknown: Product = {
     shelfLifeDays: null,
     shelfLifeSource: null,
     units: [],
+    usualStorage: null,
+    opened: null,
+    frozen: null,
+    defrosted: null,
+    openedCount: 0,
+    frozenCount: 0,
 };
 
 function deferred<T>() {
