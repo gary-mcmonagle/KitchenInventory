@@ -206,6 +206,7 @@ public sealed class AddingFunctions(
     {
         RecogniseProductPhotoResult.Recognised r => (HttpStatusCode.OK, new
         {
+            available = true,
             readable = r.Readable,
             items = r.Items.Select(i => new
             {
@@ -223,8 +224,15 @@ public sealed class AddingFunctions(
             }),
         }),
         RecogniseProductPhotoResult.Invalid i => (HttpStatusCode.BadRequest, new { error = i.Error }),
-        RecogniseProductPhotoResult.Unavailable => (HttpStatusCode.ServiceUnavailable,
-            new { error = "Photo recognition isn't available right now. Pick or type the item instead." }),
+        // Expected now and then (throttling, an outage): a 200 with available false, not a 5xx, so it doesn't fire the
+        // error alert (#48). A misconfiguration is logged at Error by the recogniser instead.
+        RecogniseProductPhotoResult.Unavailable => (HttpStatusCode.OK, new
+        {
+            available = false,
+            readable = false,
+            items = Array.Empty<object>(),
+            error = "Photo recognition isn't available right now. Pick or type the item instead.",
+        }),
         _ => throw new ArgumentOutOfRangeException(nameof(result)),
     };
 

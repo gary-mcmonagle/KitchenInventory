@@ -88,7 +88,7 @@ test("ping is public: no token", async () => {
 });
 
 test("a photo is sent as the JPEG itself, not JSON", async () => {
-    const fetcher = vi.fn(async () => json(200, { readable: true, items: [] }));
+    const fetcher = vi.fn(async () => json(200, { available: true, readable: true, items: [] }));
     const api = new ApiClient(fakeMsal(), config, fetcher);
     const jpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" });
 

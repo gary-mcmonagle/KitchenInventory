@@ -83,11 +83,13 @@ public sealed class AddingFunctionsTests
 
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal("""
-            {"readable":true,"items":[
+            {"available":true,"readable":true,"items":[
             {"name":"Leeks","brand":null,"size":null,"kind":"loose","quantity":2,"match":{"productId":"11111111-1111-1111-1111-111111111111","displayName":"Leeks"}},
             {"name":"Pitted green olives","brand":"Crespo","size":"340 g","kind":"packaged","quantity":1,"match":null}]}
             """.ReplaceLineEndings(""), Serialize(body));
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, AddingFunctions.ToResponse(new RecogniseProductPhotoResult.Unavailable()).Status);
+        var (unavailableStatus, unavailable) = AddingFunctions.ToResponse(new RecogniseProductPhotoResult.Unavailable());
+        Assert.Equal(HttpStatusCode.OK, unavailableStatus); // not a 5xx: that would fire the error alert
+        Assert.StartsWith("""{"available":false,"readable":false,"items":[],"error":""", Serialize(unavailable), StringComparison.Ordinal);
         Assert.Equal(HttpStatusCode.BadRequest, AddingFunctions.ToResponse(new RecogniseProductPhotoResult.Invalid("x")).Status);
     }
 

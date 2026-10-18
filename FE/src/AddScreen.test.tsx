@@ -15,6 +15,7 @@ const loose: LooseProduct[] = [
 ];
 
 const photo: PhotoRecognition = {
+    available: true,
     readable: true,
     items: [
         { name: "leeks", brand: null, size: null, kind: "loose", quantity: 2, match: null },
@@ -164,12 +165,13 @@ test("the quantity stepper stays between 1 and 20", async () => {
     expect(within(row).getByText("19")).toBeInTheDocument();
 });
 
-test("nothing found, an unreadable photo and a failed reading say so, and the other ways still work", async () => {
+test("nothing found, an unreadable photo, recognition unavailable and a failed call say so, and the other ways still work", async () => {
     const recognisePhoto = vi
         .fn()
-        .mockResolvedValueOnce({ readable: true, items: [] })
-        .mockResolvedValueOnce({ readable: false, items: [] })
-        .mockRejectedValueOnce(new ApiError(503, "unavailable"));
+        .mockResolvedValueOnce({ available: true, readable: true, items: [] })
+        .mockResolvedValueOnce({ available: true, readable: false, items: [] })
+        .mockResolvedValueOnce({ available: false, readable: false, items: [] })
+        .mockRejectedValueOnce(new ApiError(500, "boom"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     setup({ recognisePhoto });
 
@@ -185,6 +187,11 @@ test("nothing found, an unreadable photo and a failed reading say so, and the ot
     expect(
         await screen.findByText("We couldn't read that photo. Pick it from the list or type it below."),
     ).toBeInTheDocument();
+    shoot();
+    await vi.waitFor(() => expect(recognisePhoto).toHaveBeenCalledTimes(4));
+    expect(
+        await screen.findByText("We couldn't read that photo. Pick it from the list or type it below."),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Bananas" }));
     expect(rows()).toHaveLength(1);
@@ -196,7 +203,7 @@ test("retake replaces the photo's rows but keeps picked and typed ones", async (
     const recognisePhoto = vi
         .fn()
         .mockResolvedValueOnce(photo)
-        .mockResolvedValueOnce({ readable: true, items: [photo.items[2]] });
+        .mockResolvedValueOnce({ available: true, readable: true, items: [photo.items[2]] });
     setup({ recognisePhoto });
     fireEvent.click(await screen.findByRole("button", { name: "Sourdough loaf" }));
 
@@ -319,6 +326,7 @@ test("assign mode: a photo gives one row, and an already-assigned label says so"
 
 test("helpers: rows from a photo, what's sent, and the toast text", () => {
     const [leeks, bananas] = rowsFromPhoto({
+        available: true,
         readable: true,
         items: [{ ...photo.items[0], quantity: 40 }, photo.items[1]],
     });

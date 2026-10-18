@@ -352,6 +352,7 @@ What a photo shows ([spike #41](spikes/41-photo-recognition.md): gpt-4o on Azure
 
 ```json
 {
+  "available": true,
   "readable": true,
   "items": [
     { "name": "Leeks", "brand": null, "size": null, "kind": "loose", "quantity": 2, "match": null },
@@ -362,6 +363,7 @@ What a photo shows ([spike #41](spikes/41-photo-recognition.md): gpt-4o on Azure
 
 | Field | Notes |
 |---|---|
+| `available` | `false` when the model couldn't be reached after retries (429 and 5xx are retried, or it isn't configured): `readable` is false, `items` empty, and `error` says to pick or type instead. A **200**, not a 5xx, so an outage doesn't fire the error alert (#48); a misconfiguration (the model refusing the app) is logged at Error. |
 | `readable` | `false` when the photo was too blurry or dark to tell anything. |
 | `items[].name` | What the item is, specific enough to buy again (≤ 100 characters). |
 | `items[].brand`, `size` | Only when legible on that item's own pack (≤ 60 characters), else `null`. |
@@ -371,7 +373,6 @@ What a photo shows ([spike #41](spikes/41-photo-recognition.md): gpt-4o on Azure
 
 - **400** `{ "error": "…" }`: not a JPEG, or empty.
 - **413**: over 1 MB.
-- **503** `{ "error": "Photo recognition isn't available right now. …" }`: the model failed after retries (429 and 5xx are retried). The app falls back to picking and typing.
 
 ### `GET /api/products/loose`
 

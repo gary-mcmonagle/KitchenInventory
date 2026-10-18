@@ -157,6 +157,8 @@ export interface Scanners {
 
 /** POST /api/photos/recognise (#58): what the photo shows. */
 export interface PhotoRecognition {
+    /** false when the model couldn't be reached: the app falls back to picking and typing. */
+    available: boolean;
     readable: boolean;
     items: Array<{
         name: string;
@@ -294,7 +296,7 @@ export class ApiClient {
         return this.send<UndoneCheckOut>("POST", `/api/units/${encodeURIComponent(unitId)}/undo-check-out`);
     }
 
-    /** What a photo shows (#58). The JPEG is sent as is and never stored. 503 → ApiError: try typing instead. */
+    /** What a photo shows (#58). The JPEG is sent as is and never stored. `available: false`: try typing instead. */
     recognisePhoto(jpeg: Blob): Promise<PhotoRecognition> {
         return this.send<PhotoRecognition>("POST", "/api/photos/recognise", jpeg);
     }

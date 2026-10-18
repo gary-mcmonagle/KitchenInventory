@@ -38,6 +38,8 @@ type PhotoState =
     | { step: "done"; found: number }
     | { step: "failed"; message: string };
 
+const COULDNT_READ = "We couldn't read that photo. Pick it from the list or type it below.";
+
 let nextKey = 0;
 const key = () => `row-${++nextKey}`;
 
@@ -157,6 +159,10 @@ export function AddScreen({
             const jpeg = await prepare(file);
             const result = await api.recognisePhoto(jpeg);
             if (run !== photoRun.current) return;
+            if (result.available === false) {
+                setPhoto({ step: "failed", message: COULDNT_READ });
+                return;
+            }
             const found = rowsFromPhoto(result);
             // Retake replaces the last photo's rows; picked and typed rows stay.
             setRows((current) => current.filter((r) => r.source !== "photo"));
@@ -177,7 +183,7 @@ export function AddScreen({
                 message:
                     e instanceof ApiError && e.status === 400
                         ? "That photo couldn't be used. Try another one."
-                        : "We couldn't read that photo. Pick it from the list or type it below.",
+                        : COULDNT_READ,
             });
         }
     };
