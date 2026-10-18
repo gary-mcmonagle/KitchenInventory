@@ -211,4 +211,32 @@ public sealed class UnitStateUseCaseTests
         Assert.Equal([new DigestUseFirstLine("Pesto", 2, "Est. today", "opened 12 Oct")], data.UseFirstLines);
         Assert.Contains("Pesto (opened 12 Oct) ×2 · Est. today", BuildDailyDigest.Build(data).PlainText, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task The_stock_lists_Opened_opens_the_next_unit_to_use_skipping_frozen_and_not_when_one_is_open()
+    {
+        var product = Pesto(Estimates);
+        var frozenSoonest = Jar(product, new DateOnly(2026, 10, 20));
+        units.Units[frozenSoonest.UnitId] = (frozenSoonest with { FrozenOn = new DateOnly(2026, 10, 18) }, 1);
+        Jar(product, new DateOnly(2027, 4, 8));
+        var next = Jar(product, new DateOnly(2027, 1, 1));
+        var open = new OpenNextUnit(units, Change());
+
+        var opened = Assert.IsType<ChangeUnitStateResult.Changed>(await open.ExecuteAsync(product.ProductId, Gary, CancellationToken.None));
+
+        Assert.Equal((next.UnitId, new DateOnly(2026, 10, 18)), (opened.Unit.UnitId, opened.Unit.OpenedOn));
+        Assert.IsType<ChangeUnitStateResult.Conflict>(await open.ExecuteAsync(product.ProductId, Gary, CancellationToken.None));
+        Assert.IsType<ChangeUnitStateResult.NotFound>(await open.ExecuteAsync(Guid.NewGuid(), Gary, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Nothing_to_open_when_every_unit_is_in_the_freezer()
+    {
+        var product = Pesto(Estimates);
+        var jar = Jar(product);
+        units.Units[jar.UnitId] = (jar with { FrozenOn = new DateOnly(2026, 10, 18) }, 1);
+
+        Assert.IsType<ChangeUnitStateResult.Conflict>(
+            await new OpenNextUnit(units, Change()).ExecuteAsync(product.ProductId, Gary, CancellationToken.None));
+    }
 }

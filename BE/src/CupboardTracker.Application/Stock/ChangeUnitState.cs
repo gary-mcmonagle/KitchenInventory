@@ -118,3 +118,30 @@ public sealed partial class UndoUnitStateChange(
     [LoggerMessage(Level = LogLevel.Information, Message = "Unit {UnitId}'s last state change undone by user {UserId}.")]
     private partial void LogUndone(Guid unitId, Guid userId);
 }
+
+/// <summary>
+/// "Opened" on a stock list row (#65, Gary 2026-10-18): opens the unit that would be used next (check-out order,
+/// skipping units in the freezer), today. Refused when one is already open (the button is greyed out then) or every
+/// unit is in the freezer.
+/// </summary>
+public sealed class OpenNextUnit(IUnitRepository units, ChangeUnitState change)
+{
+    public async Task<ChangeUnitStateResult> ExecuteAsync(Guid productId, CurrentUser user, CancellationToken cancellationToken)
+    {
+        var inStock = (await units.GetInStockAsync(productId, cancellationToken)).Select(v => v.Value).ToList();
+        if (inStock.Count == 0)
+        {
+            return new ChangeUnitStateResult.NotFound(productId);
+        }
+
+        if (inStock.Any(u => u.IsOpened))
+        {
+            return new ChangeUnitStateResult.Conflict(productId, "One's already open.");
+        }
+
+        var next = UnitSelection.InCheckOutOrder(inStock).FirstOrDefault(u => !u.IsFrozen);
+        return next is null
+            ? new ChangeUnitStateResult.Conflict(productId, "They're all in the freezer.")
+            : await change.ExecuteAsync(next.UnitId, UnitState.Opened, null, user, cancellationToken);
+    }
+}

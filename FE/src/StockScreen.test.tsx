@@ -51,8 +51,8 @@ test("named products without an estimate are in Later, in the API's order, with 
     expect(within(section).getByText("2 items")).toBeInTheDocument();
     const rows = within(section).getAllByRole("listitem");
     expect(rows.map((r) => r.textContent)).toEqual([
-        "BBeef GravyBisto · 230g · ×2Check out",
-        "Wwalnut halves200gCheck out",
+        "BBeef GravyBisto · 230g · ×2OpenedCheck out",
+        "Wwalnut halves200gOpenedCheck out",
     ]);
     expect(screen.getByText("3 items · 0 to use first")).toBeInTheDocument(); // header summary: units
     expect(screen.queryByRole("region", { name: /Waiting for a name/ })).not.toBeInTheDocument();
@@ -117,7 +117,7 @@ test("Use first and Later with the mockup's badges, notes, summary and disclaime
     expect(within(yoghurt).getByText("Bought 6 Oct · keeps about 2 weeks")).toBeInTheDocument();
     expect(within(beans).getByText("Est. Oct 2028").className).toMatch(/_later_/);
     expect(within(beans).getByText("Bought 4 Oct · keeps about 2 years")).toBeInTheDocument();
-    expect(walnuts.textContent).toBe("WWalnutsBisto · 230gCheck out"); // no estimate yet: no badge or note
+    expect(walnuts.textContent).toBe("WWalnutsBisto · 230gOpenedCheck out"); // no estimate yet: no badge or note
 
     const sections = screen.getAllByRole("region").map((r) => r.getAttribute("aria-labelledby"));
     expect(sections).toEqual(["section-use-first", "section-later", "section-waiting-for-a-name"]);
@@ -161,6 +161,7 @@ test("Check out and the name link on named rows, Name it on unnamed rows, nothin
 
     await screen.findByRole("region", { name: /Later/ });
     expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
+        "Mark one Beef Gravy as opened",
         "Check out one Beef Gravy",
         "Name it",
     ]);
@@ -293,9 +294,38 @@ test("opened and frozen units show as pills, and an opened unit's note says when
     render(<StockScreen api={api} />);
 
     const pesto = (await screen.findByText("Pesto")).closest("li")!;
-    expect(within(pesto).getByText("Opened").className).toMatch(/_opened_/);
+    expect(within(pesto).getByText("Opened", { selector: "span" }).className).toMatch(/_opened_/);
     expect(within(pesto).getByText("2 frozen").className).toMatch(/_frozen_/);
     expect(pesto).toHaveTextContent("Opened 16 Oct");
     expect(pesto).not.toHaveTextContent("Bought");
     expect((await screen.findByText("Bread")).closest("li")).toHaveTextContent("2 opened");
+});
+
+test("Opened sits above Check out, opens the next one with an Undo toast, and is greyed out once one's open (#65)", async () => {
+    const pesto = product({ displayName: "Pesto", count: 2 });
+    const { api } = fakeApi(stockOf(pesto), stockOf({ ...pesto, openedCount: 1 }), stockOf(pesto));
+    const openNext = vi.fn(async () => ({ productId: pesto.productId, unit: { unitId: "u-next" } }));
+    const undoStateChange = vi.fn(async () => ({ productId: pesto.productId, unit: { unitId: "u-next" } }));
+    Object.assign(api, { openNext, undoStateChange });
+    render(<StockScreen api={api} />);
+
+    const open = await screen.findByRole("button", { name: "Mark one Pesto as opened" });
+    const buttons = within(open.parentElement!).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual(["Opened", "Check out"]); // Opened first, above
+    fireEvent.click(open);
+
+    expect(await screen.findByText("Marked Pesto as opened")).toBeInTheDocument();
+    expect(openNext).toHaveBeenCalledWith(pesto.productId);
+    const greyed = await screen.findByRole("button", { name: "One Pesto is already open" });
+    expect(greyed).toBeDisabled();
+
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Undo" })));
+    expect(undoStateChange).toHaveBeenCalledWith("u-next");
+});
+
+test("Opened is greyed out when every unit is in the freezer", async () => {
+    const { api } = fakeApi(stockOf(product({ displayName: "Peas", count: 2, frozenCount: 2 })));
+    render(<StockScreen api={api} />);
+
+    expect(await screen.findByRole("button", { name: "Mark one Peas as opened" })).toBeDisabled();
 });

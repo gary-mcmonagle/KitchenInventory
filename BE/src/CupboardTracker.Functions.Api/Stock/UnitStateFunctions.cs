@@ -13,8 +13,19 @@ namespace CupboardTracker.Functions.Api.Stock;
 /// Opened, Froze it and Defrosted on a unit, Undo, and "once opened" by hand (#65). All need a signed-in user. See
 /// docs/api.md.
 /// </summary>
-public sealed class UnitStateFunctions(ChangeUnitState change, UndoUnitStateChange undo, SetOpenedShelfLife setOpened)
+public sealed class UnitStateFunctions(
+    ChangeUnitState change, UndoUnitStateChange undo, SetOpenedShelfLife setOpened, OpenNextUnit openNext)
 {
+    /// <summary><c>POST /api/products/{productId}/opened</c>: the stock list's Opened button; opens the unit used next.</summary>
+    [Function("openNextUnit")]
+    public async Task<HttpResponseData> OpenNext(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "products/{productId:guid}/opened")] HttpRequestData request,
+        Guid productId, FunctionContext context, CancellationToken cancellationToken)
+    {
+        var (status, body) = ToResponse(await openNext.ExecuteAsync(productId, context.GetCurrentUser(), cancellationToken));
+        return await JsonAsync(request, status, body);
+    }
+
     /// <summary><c>POST /api/units/{unitId}/opened</c> with an optional <c>{ date }</c> (default today, UK).</summary>
     [Function("markUnitOpened")]
     public Task<HttpResponseData> Opened(
@@ -118,7 +129,7 @@ public sealed class UnitStateFunctions(ChangeUnitState change, UndoUnitStateChan
     {
         ChangeUnitStateResult.Changed c => (HttpStatusCode.OK, new { productId = c.ProductId, unit = ProductFunctions.UnitJson(c.Unit) }),
         ChangeUnitStateResult.Invalid i => (HttpStatusCode.BadRequest, new { error = i.Error }),
-        ChangeUnitStateResult.NotFound => (HttpStatusCode.NotFound, new { error = "No such unit." }),
+        ChangeUnitStateResult.NotFound => (HttpStatusCode.NotFound, new { error = "Nothing like that in stock." }),
         ChangeUnitStateResult.Conflict c => (HttpStatusCode.Conflict, new { error = c.Reason }),
         _ => throw new ArgumentOutOfRangeException(nameof(result)),
     };

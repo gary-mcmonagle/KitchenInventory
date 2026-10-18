@@ -14,6 +14,7 @@ public sealed class UnitStateFunctionsTests
     [InlineData("Defrosted")]
     [InlineData("Undo")]
     [InlineData("OpenedShelfLife")]
+    [InlineData("OpenNext")]
     public void All_need_a_signed_in_user(string method) =>
         Assert.True(FunctionAuthPolicy.RequiresUser($"CupboardTracker.Functions.Api.Stock.UnitStateFunctions.{method}"));
 

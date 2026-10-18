@@ -297,6 +297,12 @@ export class ApiClient {
         return this.send("POST", `/api/units/${encodeURIComponent(unitId)}/${state}`, date ? { date } : {});
     }
 
+    /** The stock list's Opened button (#65): opens the unit used next (not one in the freezer). 409: one's already
+     * open, or they're all frozen. */
+    openNext(productId: string): Promise<{ productId: string; unit: ProductUnit }> {
+        return this.send("POST", `/api/products/${encodeURIComponent(productId)}/opened`);
+    }
+
     /** Puts a unit's estimate back as it was before its last state change (#65). */
     undoStateChange(unitId: string): Promise<{ productId: string; unit: ProductUnit }> {
         return this.send("POST", `/api/units/${encodeURIComponent(unitId)}/undo-state-change`);

@@ -159,7 +159,7 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Shelf life** – how long a product usually keeps after it's bought, unopened and in its usual storage. Estimated once per product by Jev; a cautious estimate is used when Jev isn't confident. It can be set by hand in item detail ("set by you"), which applies to units bought from then on and is never overwritten by Jev.
 
-**Opened** – a unit that's been opened. Its estimate becomes the **earlier** of the open date plus how long the product keeps once opened, and the estimate it had: opening never makes something last longer. Opened units are checked out first and shown with an **Opened** label. How long a product keeps once opened can be set by hand in item detail.
+**Opened** – a unit that's been opened. Its estimate becomes the **earlier** of the open date plus how long the product keeps once opened, and the estimate it had: opening never makes something last longer. Opened units are checked out first and shown with an **Opened** label. Marked from a unit's **More** button in item detail, or from the **Opened** button on a stock list row (opens the next one; greyed out while one's open). How long a product keeps once opened can be set by hand in item detail.
 - In code: `UnitState.Opened`, `openedOn`, `POST /api/units/{id}/opened`
 
 **Set by you** – a date or shelf life a person set in item detail (`manual`), as opposed to an estimate. Never recalculated.

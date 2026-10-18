@@ -98,6 +98,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<SetUnitExpiry>();
         services.AddTransient<ChangeUnitState>(); // #65
         services.AddTransient<UndoUnitStateChange>();
+        services.AddTransient<OpenNextUnit>();
         services.AddTransient<SetOpenedShelfLife>();
         services.AddSingleton(sp => StockSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
 

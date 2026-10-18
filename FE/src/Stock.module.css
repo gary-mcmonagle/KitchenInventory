@@ -376,3 +376,24 @@
     background: var(--pending-bg);
     color: var(--ink-strong);
 }
+
+/* Opened above Check out, the same size (#65, Gary 2026-10-18). */
+.rowButtons {
+    flex: none;
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.rowButtons .checkOut {
+    margin-left: 0;
+    justify-content: center;
+}
+
+.rowButtons .checkOut:disabled {
+    border-color: var(--border);
+    color: var(--muted);
+    opacity: 1;
+}

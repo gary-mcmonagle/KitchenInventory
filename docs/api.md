@@ -253,6 +253,10 @@ The latest action decides, and a manual date is replaced (Undo brings it back; e
 - **404** `{ "error": "No such unit." }`
 - **409** `{ "error": "…" }`: not in stock, Defrosted on a unit that isn't frozen, or changed while saving.
 
+### `POST /api/products/{productId}/opened`
+
+The stock list's **Opened** button (Gary, 2026-10-18): opens the unit that would be used next (check-out order, skipping units in the freezer), today, exactly as `POST /api/units/{unitId}/opened`. No body. **200** with the opened unit (Undo with its `unitId`); **404** with nothing in stock; **409** when one's already open (the button is greyed out then) or every unit is in the freezer.
+
 ### `POST /api/units/{unitId}/undo-state-change`
 
 Puts the unit's estimate fields back exactly as before its last state change. Call it again to undo the change before that (up to 5 back). No body. **200** as above; **404**; **409** when there's nothing to undo or it isn't in stock.

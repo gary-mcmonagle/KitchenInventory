@@ -30,6 +30,7 @@ export const TOAST_MS = 6000; // as in the mockup
 
 type Toast =
     | { kind: "checkedOut"; unitId: string; product: StockProduct; name: string }
+    | { kind: "opened"; unitId: string; name: string }
     | { kind: "error"; text: string }
     | { kind: "info"; text: string };
 
@@ -147,6 +148,50 @@ export function StockScreen({
             if (error instanceof ApiError && error.status === 409) void load();
         } finally {
             setBusy(product.productId, false);
+        }
+    };
+
+    /** Opened on a row (#65): the unit used next is opened today; its date and pill update from the API. */
+    const openOne = async (product: StockProduct) => {
+        if (inFlight.has(product.productId)) return;
+        setBusy(product.productId, true);
+        const withOpened = (n: number) => (s: Stock | null) =>
+            s && {
+                ...s,
+                products: s.products.map((p) =>
+                    p.productId === product.productId ? { ...p, openedCount: n } : p,
+                ),
+            };
+        setStock(withOpened(1)); // optimistic: greys the button out at once
+        try {
+            const result = await api.openNext(product.productId);
+            showToast({ kind: "opened", unitId: result.unit.unitId, name: product.displayName });
+            void load({ quiet: true }); // its date moves in, and maybe into Use first
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return;
+            setStock(withOpened(product.openedCount)); // revert
+            showToast({
+                kind: "error",
+                text:
+                    error instanceof ApiError && error.status === 409
+                        ? `${product.displayName}: one's already open, or they're all in the freezer.`
+                        : "Couldn't save that. Try again.",
+            });
+            void load({ quiet: true });
+        } finally {
+            setBusy(product.productId, false);
+        }
+    };
+
+    const undoOpened = async (done: Extract<Toast, { kind: "opened" }>) => {
+        clearTimeout(toastTimer.current);
+        setToast(null);
+        try {
+            await api.undoStateChange(done.unitId);
+            void load({ quiet: true });
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return;
+            showToast({ kind: "error", text: "Couldn't undo that. Try again." });
         }
     };
 
@@ -308,6 +353,7 @@ export function StockScreen({
                                     product={p}
                                     busy={inFlight.has(p.productId)}
                                     onCheckOut={() => void checkOut(p)}
+                                    onOpen={() => void openOne(p)}
                                 />
                             ),
                         )}
@@ -317,9 +363,20 @@ export function StockScreen({
 
             {toast && (
                 <div className={styles.toast} role="status">
-                    <span>{toast.kind === "checkedOut" ? `Checked out ${toast.name}` : toast.text}</span>
+                    <span>
+                        {toast.kind === "checkedOut"
+                            ? `Checked out ${toast.name}`
+                            : toast.kind === "opened"
+                              ? `Marked ${toast.name} as opened`
+                              : toast.text}
+                    </span>
                     {toast.kind === "checkedOut" && (
                         <button type="button" className={styles.undo} onClick={() => void undo(toast)}>
+                            Undo
+                        </button>
+                    )}
+                    {toast.kind === "opened" && (
+                        <button type="button" className={styles.undo} onClick={() => void undoOpened(toast)}>
                             Undo
                         </button>
                     )}
@@ -346,11 +403,16 @@ function KnownRow({
     product,
     busy,
     onCheckOut,
+    onOpen,
 }: {
     product: StockProduct;
     busy: boolean;
     onCheckOut: () => void;
+    onOpen: () => void;
 }) {
+    // Greyed out once one's open (finish it first), or when they're all in the freezer (#65).
+    const alreadyOpen = product.openedCount > 0;
+    const canOpen = !alreadyOpen && product.frozenCount < product.count;
     const meta = metaLine(product.brand, product.size, product.count);
     const badge =
         product.daysUntilSoonest !== null && product.soonestEstimatedExpiryDate !== null
@@ -400,28 +462,57 @@ function KnownRow({
             </div>
             <div className={styles.actions}>
                 {note && <span className={styles.note}>{note}</span>}
-                <button
-                    type="button"
-                    className={styles.checkOut}
-                    onClick={onCheckOut}
-                    disabled={busy}
-                    aria-label={`Check out one ${product.displayName}`}
-                >
-                    <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
+                <div className={styles.rowButtons}>
+                    <button
+                        type="button"
+                        className={styles.checkOut}
+                        onClick={onOpen}
+                        disabled={busy || !canOpen}
+                        aria-label={
+                            alreadyOpen
+                                ? `One ${product.displayName} is already open`
+                                : `Mark one ${product.displayName} as opened`
+                        }
                     >
-                        <path d="M5 12.5l4.5 4.5L19 7.5" />
-                    </svg>
-                    Check out
-                </button>
+                        <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M7 9h10v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z" />
+                            <path d="M5.5 6.5L17 3.5" />
+                        </svg>
+                        Opened
+                    </button>
+                    <button
+                        type="button"
+                        className={styles.checkOut}
+                        onClick={onCheckOut}
+                        disabled={busy}
+                        aria-label={`Check out one ${product.displayName}`}
+                    >
+                        <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M5 12.5l4.5 4.5L19 7.5" />
+                        </svg>
+                        Check out
+                    </button>
+                </div>
             </div>
         </li>
     );
