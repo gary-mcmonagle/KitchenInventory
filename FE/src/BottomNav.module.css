@@ -1,0 +1,31 @@
+/* The bottom nav (#55), matching the mockups. Sticks to the bottom of the page column. */
+.nav {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+    padding: 8px 12px 22px;
+    background: var(--surface);
+    border-top: 1px solid var(--border-soft);
+}
+
+.item {
+    flex: 1;
+    min-height: 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    text-decoration: none;
+    color: var(--ink-strong);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.item[aria-current="page"] {
+    color: var(--accent-dark);
+    font-weight: 700;
+}

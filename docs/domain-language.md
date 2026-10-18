@@ -170,6 +170,10 @@ If you need a term that isn't here, add it as part of the card that introduces i
 - Not to be confused with: **Scan event**, the stored record of the scan itself.
 - In code: `ScanFeedEvent` (`ScanReceived`, `ScanIdentified`, `ScanNeedsIdentification`, `CheckOutUnmatched`, `ScanSkipped`), sent through `IScanFeedPublisher`
 
-**Scanners screen** – the UI screen showing devices, no-match check-ins and unmatched check-outs.
+**Scanners screen** – the UI screen answering "is everything working?" and "what needs sorting?": each scanner's receiver presence and the Pi's health, check-ins with no match (to identify), check-outs with no match (to dismiss), and recently checked out (to undo).
+
+**Receiver presence** – whether a scanner's receiver (dongle) is plugged into the Pi, as the Pi reports in its heartbeats: **Connected**, **Not connected** ("Unplugged since …"), or **Unknown** until reported. It says nothing about the scanner itself: the Pi can't tell whether a wireless scanner is switched on or in range.
+
+**Recently checked out** – units checked out in the last 48 hours, from a scanner or the app, listed on the scanners screen so a mistake (e.g. scanning out the wrong thing) can be undone.
 
 **Toast states** – loading (grey), needs identification (yellow, tap to open photo identification), identified (green, shows the product name).

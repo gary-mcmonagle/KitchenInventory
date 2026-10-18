@@ -359,6 +359,7 @@ The hub (the Pi) is stored in the same container with `kind: "hub"` (#44); scann
 | `lastSeenAt` | **Server** receive time of the latest heartbeat, never the Pi's clock, so a wrong clock can't hide an outage. |
 | `offlineAlertSentAt` | Set when the offline alert for the current outage is sent; `null` while online. The next heartbeat clears it (no email), so each outage sends one alert. |
 | `lastHeartbeat` | The latest heartbeat's details, as sent. `scanners` appears only when the hub sends it (#67, #68). |
+| `scannerStates` | Each receiver's presence and since when (#55): `[{ "deviceId": "scanner-out", "present": false, "since": "2026-10-18T07:15:00.000Z" }]`. A heartbeat's `scanners` list updates it: an unchanged device keeps its `since`, a change sets `since` to the receive time. A heartbeat without the list changes nothing, and devices it doesn't mention keep their state. Empty until a heartbeat reports presence. The scanners screen shows "Connected" / "Unplugged since …" from it. |
 
 A hub that has never sent a heartbeat has no document, so it never alerts.
 
@@ -390,7 +391,7 @@ A hub that has never sent a heartbeat has no document, so it never alerts.
 | `productId` | The product, if the barcode has a barcode lookup document; `null` if we've never seen the barcode. |
 | `deviceId`, `scannedAt` | From the scan event. |
 | `recordedAt` | When the processor recorded it. |
-| `dismissed`, `dismissedAt` | Set when Gary dismisses it on the scanners screen. Written by that feature. |
+| `dismissed`, `dismissedAt`, `dismissedBy` | Set by **Dismiss** on the scanners screen (#55, `POST /api/unmatched-check-outs/{id}/dismiss`): `true`, the time and the user's Entra object ID. A patch that only applies while not dismissed, so the first dismissal is kept. Stock is never changed. |
 
 **Partition key: `/id`.**
 - There's no product to partition by (`productId` is often `null`), which is why these left `inventoryItems`.
@@ -539,7 +540,6 @@ None of these are used yet. They are listed so the first features leave room for
 | Field | Container | For |
 |---|---|---|
 | `expiryIsApproximate` | `inventoryItems` | Stock-take |
-| `dismissed`, `dismissedAt` | `unmatchedCheckOuts` | Scanners screen, dismiss (written as `false` / `null` by check-out) |
 | `icon` | `products` | Stock list icon |
 | `namedAt`, `namedBy`; `source` values `manual`, `photo` | `products` | Name a product, photo identification, loose items |
 

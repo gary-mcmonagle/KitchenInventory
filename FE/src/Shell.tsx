@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { SignInRequiredError, type ApiClient } from "./api";
 import styles from "./App.module.css";
+import { BottomNav } from "./BottomNav";
 import { ItemScreen } from "./ItemScreen";
 import { NameScreen } from "./NameScreen";
-import { matchEditPath, matchItemPath, matchNamePath, usePath } from "./router";
+import { matchEditPath, matchItemPath, matchNamePath, SCANNERS_PATH, usePath } from "./router";
+import { ScannersScreen } from "./ScannersScreen";
 import { StockScreen } from "./StockScreen";
 
 /** The signed-in app: the stock list (with a muted footer for verification), item detail, or naming or editing a
@@ -39,10 +41,16 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                 <NameScreen key={`edit-${editing}`} api={api} productId={editing} mode="edit" />
             ) : item ? (
                 <ItemScreen key={item} api={api} productId={item} />
+            ) : path === SCANNERS_PATH ? (
+                <>
+                    <ScannersScreen api={api} />
+                    <BottomNav current="scanners" />
+                </>
             ) : (
                 <>
                     <StockScreen api={api} />
                     <footer className={styles.footer}>{footer}</footer>
+                    <BottomNav current="stock" />
                 </>
             )}
         </main>

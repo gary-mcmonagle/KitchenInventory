@@ -294,12 +294,12 @@
     cursor: default;
 }
 
-/* The dark toast at the bottom, as in the mockup (no bottom nav yet, so it sits lower). */
+/* The dark toast above the bottom nav, as in the mockup. */
 .toast {
     position: fixed;
     left: 16px;
     right: 16px;
-    bottom: 24px;
+    bottom: 98px;
     max-width: calc(var(--design-width) - 32px);
     margin: 0 auto;
     display: flex;

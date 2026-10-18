@@ -107,6 +107,49 @@ export interface FieldErrors {
     errors?: Record<string, string>;
 }
 
+/** GET /api/scanners (#55). */
+export interface Scanners {
+    generatedAt: string;
+    hub: {
+        hubId: string;
+        lastSeenAt: string;
+        heartbeatIntervalSeconds: number;
+        offlineThresholdMinutes: number;
+        online: boolean;
+    } | null;
+    devices: Array<{
+        deviceId: string;
+        role: "in" | "out";
+        /** null until a heartbeat reports the receiver. */
+        present: boolean | null;
+        presentSince: string | null;
+        absentSince: string | null;
+        lastScanAt: string | null;
+    }>;
+    noMatchCheckIns: Array<{
+        productId: string;
+        barcode: string;
+        status: "noMatch" | "lookupFailed";
+        scannedAt: string;
+        unitId: string;
+        inStockCount: number;
+    }>;
+    unmatchedCheckOuts: Array<{
+        scanId: string;
+        barcode: string;
+        productId: string | null;
+        displayName: string | null;
+        scannedAt: string;
+    }>;
+    recentlyCheckedOut: Array<{
+        unitId: string;
+        productId: string;
+        displayName: string;
+        checkedOutAt: string;
+        source: string | null;
+    }>;
+}
+
 export interface Ping {
     status: string;
     commit: string;
@@ -191,6 +234,16 @@ export class ApiClient {
     /** A token for the API (the scan feed's negotiate). Sends the user through sign-in again if it can't renew. */
     accessToken(): Promise<string> {
         return this.token();
+    }
+
+    /** The scanners screen (#55). */
+    scanners(): Promise<Scanners> {
+        return this.get<Scanners>("/api/scanners");
+    }
+
+    /** Dismisses an unmatched check-out (idempotent). */
+    dismissUnmatched(scanId: string): Promise<{ scanId: string; dismissed: boolean }> {
+        return this.send("POST", `/api/unmatched-check-outs/${encodeURIComponent(scanId)}/dismiss`);
     }
 
     /** Puts a checked-out unit back in stock (idempotent). */

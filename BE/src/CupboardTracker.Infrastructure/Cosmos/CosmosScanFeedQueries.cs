@@ -43,13 +43,7 @@ public sealed class CosmosScanFeedQueries(CosmosContainers containers) : IScanFe
         var query = new QueryDefinition("SELECT * FROM c WHERE ARRAY_CONTAINS(@ids, c.id)")
             .WithParameter("@ids", scanIds.Select(id => id.ToString("D")).ToArray());
         var rows = await CosmosJson.QueryAsync(containers.UnmatchedCheckOuts, query, partitionKey: null, max: null, cancellationToken);
-        return rows.Select(d => new UnmatchedCheckOut(
-            Guid.Parse(CosmosJson.Text(d["id"])!),
-            CosmosJson.Text(d["barcode"]) ?? "",
-            Guid.TryParse(CosmosJson.Text(d["productId"]), out var productId) ? productId : null,
-            CosmosJson.Text(d["deviceId"]) ?? "",
-            CosmosJson.ParseTimestamp(d["scannedAt"]) ?? DateTimeOffset.MinValue,
-            CosmosJson.ParseTimestamp(d["recordedAt"]) ?? DateTimeOffset.MinValue)).ToList();
+        return rows.Select(CosmosUnmatchedCheckOutRepository.ToUnmatched).ToList();
     }
 
     public async Task<IReadOnlyList<Product>> GetUnnamedProductsAsync(CancellationToken cancellationToken)

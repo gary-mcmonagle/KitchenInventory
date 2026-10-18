@@ -60,3 +60,19 @@ public sealed class DocumentTests
             (read.Source!.Value, read.DisplayName, read.EditedAt!.Value, read.EditedBy!.Value, read.ShelfLife!.Days, read.ShelfLife.IsManual));
     }
 }
+
+public sealed class HubDocumentTests
+{
+    [Fact]
+    public void Receiver_states_round_trip()
+    {
+        var at = new DateTimeOffset(2026, 10, 18, 8, 0, 0, TimeSpan.Zero);
+        var hub = new CupboardTracker.Domain.Hub("cupboard-pi", at, null,
+            new CupboardTracker.Domain.HeartbeatDetails(at, "abc", 1, [], [new("scanner-in", true)]),
+            [new("scanner-in", true, at.AddHours(-1)), new("scanner-out", false, at)]);
+
+        var read = CosmosHubRepository.Read(System.Text.Json.Nodes.JsonNode.Parse(CosmosHubRepository.Write(hub).ToJsonString())!.AsObject());
+
+        Assert.Equal(hub.Scanners, read.Scanners);
+    }
+}

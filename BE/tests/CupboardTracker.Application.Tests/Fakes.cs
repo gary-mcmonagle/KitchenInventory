@@ -217,6 +217,19 @@ internal sealed class FakeUnmatched : IUnmatchedCheckOutRepository
 
     public Task<bool> CreateIfNotExistsAsync(UnmatchedCheckOut unmatched, CancellationToken cancellationToken) =>
         Task.FromResult(Records.TryAdd(unmatched.ScanId, unmatched));
+
+    public Task<UnmatchedCheckOut?> GetAsync(Guid scanId, CancellationToken cancellationToken) =>
+        Task.FromResult(Records.GetValueOrDefault(scanId));
+
+    public Task DismissAsync(Guid scanId, Guid userId, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        if (Records.TryGetValue(scanId, out var record) && !record.IsDismissed)
+        {
+            Records[scanId] = record with { DismissedAt = at, DismissedBy = userId };
+        }
+
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>Records what the scan feed would send; can be told to fail (#54).</summary>

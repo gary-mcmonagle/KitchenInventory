@@ -12,8 +12,33 @@ public sealed record Hub(
     string HubId,
     DateTimeOffset LastSeenAt,
     DateTimeOffset? OfflineAlertSentAt,
-    HeartbeatDetails LastHeartbeat)
+    HeartbeatDetails LastHeartbeat,
+    IReadOnlyList<ScannerState>? ScannerStates = null)
 {
+    /// <summary>Each receiver's presence and since when (#55); empty until a heartbeat reports presence.</summary>
+    public IReadOnlyList<ScannerState> Scanners => ScannerStates ?? [];
+
+    /// <summary>
+    /// The receivers' states after a heartbeat (#55). A device whose presence is unchanged keeps its <c>Since</c>; a
+    /// change starts a new one at <paramref name="now"/> (server time). A heartbeat without a scanners list changes
+    /// nothing, and devices it doesn't mention keep their last state.
+    /// </summary>
+    public static IReadOnlyList<ScannerState> NextScannerStates(
+        IReadOnlyList<ScannerState> previous, IReadOnlyList<ScannerPresence>? reported, DateTimeOffset now)
+    {
+        if (reported is null)
+        {
+            return previous;
+        }
+
+        var reportedStates = reported.Select(r =>
+            previous.FirstOrDefault(p => p.DeviceId == r.DeviceId) is { } p && p.Present == r.Present
+                ? p
+                : new ScannerState(r.DeviceId, r.Present, now));
+        var unmentioned = previous.Where(p => reported.All(r => r.DeviceId != p.DeviceId));
+        return [.. reportedStates, .. unmentioned];
+    }
+
     /// <summary>Not seen for longer than the threshold (exactly the threshold isn't offline yet).</summary>
     public bool IsOffline(DateTimeOffset now, TimeSpan threshold) => now - LastSeenAt > threshold;
 
@@ -32,3 +57,7 @@ public sealed record HeartbeatDetails(
 
 /// <summary>Whether a scanner's dongle is plugged into the hub, as the hub reports it.</summary>
 public sealed record ScannerPresence(string DeviceId, bool Present);
+
+/// <summary>A receiver's presence and since when (server time): "Connected", or "Unplugged since …" (#55). Only says
+/// the receiver is plugged into the hub; the hub can't tell whether a wireless scanner is on or in range.</summary>
+public sealed record ScannerState(string DeviceId, bool Present, DateTimeOffset Since);
