@@ -123,6 +123,28 @@ module staticWebApp 'modules/staticWebApp.bicep' = {
   }
 }
 
+// Live scan feed (#54): both apps send with their identities over REST (transient), so no server connections count
+// against the Free tier's 20.
+module signalR 'modules/signalR.bicep' = {
+  scope: rg
+  name: 'signalr'
+  params: {
+    location: location
+    tags: tags
+    name: 'sigr-${appName}-${suffix}'
+    allowedOrigins: [
+      'https://${staticWebApp.outputs.defaultHostname}'
+      'http://localhost:5173'
+    ]
+  }
+}
+
+var signalRSettings = {
+  AzureSignalRConnectionString__serviceUri: signalR.outputs.serviceUri
+  AzureSignalRConnectionString__credential: 'managedidentity'
+  AzureSignalRServiceTransportType: 'Transient'
+}
+
 module ingest 'modules/functionApp.bicep' = {
   scope: rg
   name: 'func-ingest'
@@ -135,11 +157,11 @@ module ingest 'modules/functionApp.bicep' = {
     appInsightsName: monitoring.outputs.appInsightsName
     maximumInstanceCount: functionMaximumInstanceCount
     instanceMemoryMB: functionInstanceMemoryMB
-    appSettings: {
+    appSettings: union({
       COMMIT_SHA: ingestCommitSha
       COSMOS_ENDPOINT: cosmos.outputs.endpoint
       COSMOS_DATABASE: cosmos.outputs.databaseName
-    }
+    }, signalRSettings)
   }
 }
 
@@ -160,7 +182,7 @@ module api 'modules/functionApp.bicep' = {
       'https://${staticWebApp.outputs.defaultHostname}'
       'http://localhost:5173'
     ]
-    appSettings: {
+    appSettings: union({
       COMMIT_SHA: apiCommitSha
       COSMOS_ENDPOINT: cosmos.outputs.endpoint
       COSMOS_DATABASE: cosmos.outputs.databaseName
@@ -183,7 +205,7 @@ module api 'modules/functionApp.bicep' = {
       JEV_BASE_URL: 'https://api.typesafe.ai'
       JEV_MODEL: jevModel
       JEV_API_KEY: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=jev-api-key)'
-    }
+    }, signalRSettings)
   }
 }
 
@@ -193,6 +215,18 @@ module cosmosDataAccess 'modules/cosmosDataAccess.bicep' = {
   params: {
     accountName: cosmos.outputs.accountName
     databaseName: cosmos.outputs.databaseName
+    apps: [
+      { name: ingest.outputs.name, principalId: ingest.outputs.principalId }
+      { name: api.outputs.name, principalId: api.outputs.principalId }
+    ]
+  }
+}
+
+module signalRAccess 'modules/signalRAccess.bicep' = {
+  scope: rg
+  name: 'signalr-access'
+  params: {
+    signalRName: signalR.outputs.name
     apps: [
       { name: ingest.outputs.name, principalId: ingest.outputs.principalId }
       { name: api.outputs.name, principalId: api.outputs.principalId }
@@ -260,5 +294,6 @@ output staticWebAppHostname string = staticWebApp.outputs.defaultHostname
 output communicationServiceName string = communication.outputs.communicationServiceName
 output emailSender string = communication.outputs.senderAddress
 output errorAlertRuleName string = errorAlert.outputs.ruleName
+output signalRName string = signalR.outputs.name
 output keyVaultName string = keyVault.outputs.name
 output logAnalyticsWorkspaceName string = 'log-${appName}-tracker'
