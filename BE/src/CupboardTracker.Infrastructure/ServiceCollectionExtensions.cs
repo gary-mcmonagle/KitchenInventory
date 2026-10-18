@@ -6,6 +6,7 @@ using CupboardTracker.Application.Hubs;
 using CupboardTracker.Application.Notifications;
 using CupboardTracker.Application.Ping;
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Recipes;
 using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Application.Scanners;
 using CupboardTracker.Application.Scans;
@@ -15,6 +16,7 @@ using CupboardTracker.Infrastructure.Cosmos;
 using CupboardTracker.Infrastructure.Email;
 using CupboardTracker.Infrastructure.Jev;
 using CupboardTracker.Infrastructure.Photos;
+using CupboardTracker.Infrastructure.Recipes;
 using CupboardTracker.Infrastructure.SignalR;
 using CupboardTracker.Infrastructure.OpenFoodFacts;
 using Microsoft.Azure.Cosmos;
@@ -68,6 +70,13 @@ public static class ServiceCollectionExtensions
         services.AddTransient<StoreLabelCheckInScan>();
         services.AddTransient<AssignStoreLabel>();
         services.AddTransient<DismissStoreLabelFromFeed>();
+
+        // Recipe ideas (#73): gpt-4o on the same Foundry account, with a per-user hourly cost guard.
+        services.AddSingleton(sp => RecipeGenerationOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddHttpClient<IRecipeGenerator, FoundryRecipeGenerator>();
+        services.AddSingleton(sp => RecipeSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<RecipeRateLimit>();
+        services.AddTransient<SuggestRecipe>();
 
         services.AddSingleton<IScanEventRepository, CosmosScanEventRepository>();
         services.AddSingleton<IDeviceRepository, CosmosDeviceRepository>();
@@ -141,6 +150,23 @@ public static class ServiceCollectionExtensions
                 System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds >= 10
             ? TimeSpan.FromSeconds(seconds)
             : ScannersSettings.DefaultHeartbeatInterval);
+
+    /// <summary>RECIPE_REQUESTS_PER_HOUR (default 30): the per-user cost guard on recipe suggestions (#73).</summary>
+    internal static RecipeSettings RecipeSettingsFromConfiguration(IConfiguration config)
+    {
+        if (config["RECIPE_REQUESTS_PER_HOUR"] is not { Length: > 0 } text)
+        {
+            return new RecipeSettings();
+        }
+
+        if (!int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var perHour)
+            || perHour < 1)
+        {
+            throw new InvalidOperationException("RECIPE_REQUESTS_PER_HOUR must be a whole number, 1 or more.");
+        }
+
+        return new RecipeSettings(perHour);
+    }
 
     /// <summary>USE_FIRST_DAYS (default 3) and the household's time zone (#52).</summary>
     internal static StockSettings StockSettingsFromConfiguration(IConfiguration config)

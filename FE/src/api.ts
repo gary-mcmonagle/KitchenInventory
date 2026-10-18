@@ -241,6 +241,46 @@ export interface Added {
     items: Array<{ productId: string; displayName: string; quantity: number; createdProduct: boolean }>;
 }
 
+export type RecipeMeal = "breakfast" | "lunch" | "dinner";
+
+/** POST /api/recipes/suggest (#73): the household's choices. The stock itself is read on the server. */
+export interface RecipeRequest {
+    meal: RecipeMeal;
+    preferUseFirst: boolean;
+    includeProductIds: string[];
+    /** At most 300 characters; null for none. */
+    comments: string | null;
+    /** Titles already shown this visit, for Another one. */
+    avoidTitles: string[];
+}
+
+export interface Recipe {
+    title: string;
+    summary: string;
+    meal: RecipeMeal;
+    servings: number;
+    totalMinutes: number;
+    /** productId (with the product's current name) for in-stock ingredients; null for staples. */
+    ingredients: Array<{ name: string; amount: string; productId: string | null; useFirst: boolean }>;
+    steps: string[];
+    usesUp: Array<{
+        productId: string;
+        displayName: string;
+        daysUntilSoonest: number | null;
+        soonestEstimatedExpiryDate: string | null;
+    }>;
+    alsoNeeded: string[];
+    /** Names of picked ingredients the recipe couldn't use. */
+    couldNotFitIn: string[];
+}
+
+/** `available: false`: the model couldn't help just now; show `message` with Try again. */
+export interface RecipeSuggestion {
+    available: boolean;
+    recipe?: Recipe;
+    message?: string;
+}
+
 export interface Ping {
     status: string;
     commit: string;
@@ -407,6 +447,11 @@ export class ApiClient {
     /** Hides a store-label toast for the household; it stays on the scanners screen (#58). */
     dismissStoreLabel(scanId: string): Promise<{ scanId: string; dismissed: boolean }> {
         return this.send("POST", `/api/scan-feed/store-labels/${encodeURIComponent(scanId)}/dismiss`);
+    }
+
+    /** A recipe from what's in stock (#73). 400: bad choices; 422: nothing in stock; 429: over the hourly limit. */
+    suggestRecipe(request: RecipeRequest): Promise<RecipeSuggestion> {
+        return this.send<RecipeSuggestion>("POST", "/api/recipes/suggest", request);
     }
 
     /** Public: no token needed. */

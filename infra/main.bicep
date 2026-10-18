@@ -216,6 +216,8 @@ module api 'modules/functionApp.bicep' = {
       // Photo recognition (#58, spike #41): gpt-4o on Foundry, called with the app's identity.
       AI_SERVICES_ENDPOINT: 'https://${aiServicesName}.cognitiveservices.azure.com/'
       PHOTO_MODEL_DEPLOYMENT: 'gpt-4o'
+      // Recipe ideas (#73): the same deployment by default; RECIPE_REQUESTS_PER_HOUR defaults to 30 in code.
+      RECIPE_MODEL_DEPLOYMENT: 'gpt-4o'
     }, signalRSettings)
   }
 }

@@ -1,0 +1,599 @@
+/* Recipes (#73): project/Recipes.dc.html (the form) and project/Recipe.dc.html (the recipe). */
+.screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    padding: 28px var(--page-x) 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.kicker {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.title {
+    margin: 0;
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.subtitle {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.content {
+    flex: 1;
+    padding: 12px var(--page-x) 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.label {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.labelRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.optional {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+/* Meal: radio chips. */
+.meals {
+    display: flex;
+    gap: 8px;
+}
+
+.meal {
+    flex: 1;
+    min-height: var(--touch);
+    padding: 0 12px;
+    border-radius: var(--radius-chip);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.meal[aria-checked="true"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #ffffff;
+}
+
+/* Prefer ingredients that need using. */
+.preferCard {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.preferLabel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: var(--touch);
+    cursor: pointer;
+}
+
+.checkbox {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    accent-color: var(--accent);
+}
+
+.preferText {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.checkbox:disabled + .preferText {
+    color: var(--muted);
+}
+
+.helper {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.4;
+    padding-left: 34px;
+}
+
+.pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.preferCard .pills {
+    padding-left: 34px;
+}
+
+.pill {
+    padding: 4px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.pillLarge {
+    font-size: 13px;
+}
+
+.soon {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.expired {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}
+
+/* Include ingredients: chips, then the searchable list. */
+.chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.chip {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-left: 12px;
+    border-radius: var(--radius-chip);
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.chipRemove {
+    width: var(--touch);
+    height: 40px;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.picker {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    overflow: hidden;
+}
+
+.search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 48px;
+    padding: 0 14px;
+    color: var(--muted);
+}
+
+.searchInput {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.searchInput::-webkit-search-cancel-button {
+    display: none;
+}
+
+.searchInput::placeholder,
+.comments::placeholder {
+    color: var(--muted);
+}
+
+.list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    border-top: 1px solid var(--border-soft);
+    max-height: 232px;
+    overflow-y: auto;
+}
+
+.option {
+    display: flex;
+}
+
+.optionButton {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font-size: 15px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.box {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 2px solid var(--input-border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+}
+
+.option[aria-selected="true"] .box {
+    border-color: var(--accent);
+    background: var(--accent);
+}
+
+.optionName {
+    flex: 1;
+}
+
+.useFirstTag {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.noMatch {
+    padding: 12px 14px;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+/* Additional comments. */
+.comments {
+    min-height: 88px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    background: var(--surface);
+    font: inherit;
+    font-size: 16px;
+    line-height: 1.4;
+    color: var(--ink);
+    resize: vertical;
+}
+
+.count {
+    align-self: flex-end;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.note {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.primary,
+.secondary {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    border-radius: var(--radius-input);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.primary {
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.primary:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.secondary {
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+}
+
+/* Loading and errors (not drawn: calm, in the same style). */
+.loading {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 48px var(--page-x);
+    font-size: 16px;
+    color: var(--muted);
+    text-align: center;
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid var(--accent-tint);
+    border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        animation-duration: 3s;
+    }
+}
+
+.errorCard {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    border-radius: var(--radius-card);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.tryAgain {
+    align-self: flex-start;
+    min-height: var(--touch);
+    padding: 0 16px;
+    border: 1px solid var(--warn-fg);
+    border-radius: var(--radius-button);
+    background: transparent;
+    color: var(--warn-fg);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* The recipe. */
+.recipe {
+    flex: 1;
+    padding: 28px var(--page-x) 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.recipeHead {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.recipeTitle {
+    margin: 0;
+    font-size: 28px;
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.summary {
+    font-size: 15px;
+    color: var(--ink-strong);
+    line-height: 1.45;
+}
+
+.usesUp {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.ingredients {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.ingredient {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: var(--touch);
+    border-bottom: 1px solid #eef2ef;
+}
+
+.ingredient:last-child {
+    border-bottom: 0;
+}
+
+.dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+}
+
+.dotOn {
+    background: var(--warn-border);
+}
+
+.amount {
+    flex: none;
+    width: 64px;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.ingredientLink {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--accent-dark);
+}
+
+.ingredientName {
+    flex: 1;
+    font-size: 15px;
+}
+
+.notFitted {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--warn-fg);
+}
+
+.alsoNeeded {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 6px;
+}
+
+.alsoTitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink-strong);
+}
+
+.alsoItems {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.45;
+}
+
+.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.step {
+    display: flex;
+    gap: 12px;
+    font-size: 15px;
+    line-height: 1.45;
+}
+
+.stepNumber {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 13px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.actions {
+    flex: none;
+    display: flex;
+    gap: 10px;
+    padding: 12px var(--page-x);
+    background: var(--surface);
+    border-top: 1px solid var(--border-soft);
+}
+
+.srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}

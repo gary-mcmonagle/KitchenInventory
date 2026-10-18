@@ -1,8 +1,8 @@
-import { ADD_PATH, navigate, SCANNERS_PATH } from "./router";
+import { ADD_PATH, navigate, RECIPES_PATH, SCANNERS_PATH } from "./router";
 import styles from "./BottomNav.module.css";
 
-/** The bottom nav (#55), as in the mockups: Stock, the Add pill (#58) and Scanners. */
-export function BottomNav({ current }: { current: "stock" | "scanners" }) {
+/** The bottom nav (#55), as in the mockups: Stock, Recipes (#73), the Add pill (#58) and Scanners. */
+export function BottomNav({ current }: { current: "stock" | "recipes" | "scanners" }) {
     const go = (path: string) => (e: React.MouseEvent) => {
         e.preventDefault();
         navigate(path);
@@ -30,6 +30,28 @@ export function BottomNav({ current }: { current: "stock" | "scanners" }) {
                     <path d="M4 12h16M10 7.5h4M10 16.5h4" />
                 </svg>
                 Stock
+            </a>
+            <a
+                href={RECIPES_PATH}
+                className={styles.item}
+                aria-current={current === "recipes" ? "page" : undefined}
+                onClick={go(RECIPES_PATH)}
+            >
+                <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                >
+                    <path d="M4 11h16a8 8 0 0 1-16 0z" />
+                    <path d="M9 4c0 1.5 1 1.5 1 3M13 4c0 1.5 1 1.5 1 3" />
+                </svg>
+                Recipes
             </a>
             <a href={ADD_PATH} className={styles.item} aria-label="Add an item" onClick={go(ADD_PATH)}>
                 <span className={styles.pill}>

@@ -473,3 +473,64 @@ Adds units to stock from the app.
 - **400** as for `stock/add` (field names without the `items[n].` prefix).
 - **404** `{ "error": "No such store-label check-in." }`
 - **409** `{ "error": "That check-in has already been sorted out.", "productId": "…" }`: already assigned to a different product.
+
+## Recipe ideas (#73)
+
+### `POST /api/recipes/suggest`
+
+A **recipe suggestion** built from what's in stock: gpt-4o on Azure AI Foundry (the deployment in `RECIPE_MODEL_DEPLOYMENT`, default `gpt-4o`), called with the API app's managed identity and a strict JSON schema. Needs a signed-in user (**401** without a token). **Stateless: nothing is stored.** Only metadata is logged (latency, token counts, deployment, outcome, and whether comments were given): never the prompt, comments, stock or recipe.
+
+```json
+{
+  "meal": "dinner",
+  "preferUseFirst": true,
+  "includeProductIds": ["…"],
+  "comments": "something spicy, no oven",
+  "avoidTitles": ["Creamy cheddar penne"]
+}
+```
+
+| Field | Notes |
+|---|---|
+| `meal` | Required: `breakfast`, `lunch` or `dinner`. |
+| `preferUseFirst` | Build around the use-first items (default `false`). |
+| `includeProductIds` | Products that must be in it (default none, at most 20). Each must be a **known** product in stock. |
+| `comments` | One-off preferences, or `null`. Trimmed; empty means none; **at most 300 characters**. Sent to the model in their own delimited section as wishes, never instructions: they can't change the stock-only rule, the 3-item limit, food safety or the output format. |
+| `avoidTitles` | Titles already shown this visit (Another one): the model suggests something different, a little more freely. The last 10 are used, each cut to 80 characters. |
+
+The **stock is read on the server from Cosmos**, never taken from the app: every in-stock known product (items waiting for a name are left out) with its name, quantity, days to its soonest estimated expiry, the use-first flag, its aisle and how many are opened.
+
+```json
+{
+  "available": true,
+  "recipe": {
+    "title": "Creamy cheddar penne",
+    "summary": "A quick one-pan pasta that uses up the milk.",
+    "meal": "dinner",
+    "servings": 2,
+    "totalMinutes": 25,
+    "ingredients": [
+      { "name": "Semi-skimmed milk", "amount": "300 ml", "productId": "…", "useFirst": true },
+      { "name": "Oil, salt and pepper", "amount": "1 tbsp", "productId": null, "useFirst": false }
+    ],
+    "steps": ["Cook the penne…", "…"],
+    "usesUp": [{ "productId": "…", "displayName": "Semi-skimmed milk", "daysUntilSoonest": 2, "soonestEstimatedExpiryDate": "2026-10-20" }],
+    "alsoNeeded": ["1 onion"],
+    "couldNotFitIn": []
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `ingredients[].productId` | An in-stock product (its `name` is the product's **current** display name), or `null` for a basic staple. Product IDs the model made up are dropped (the ingredient becomes plain text). |
+| `ingredients[].useFirst` | The product is in Use first: the app shows the amber dot. |
+| `usesUp` | Use-first products the recipe uses, with what the badge needs. |
+| `alsoNeeded` | Things not in stock beyond basic staples (salt, pepper, oil, water), **at most 3**. |
+| `couldNotFitIn` | Names of included products the recipe still leaves out after one retry. |
+| Limits | `title` ≤ 80 characters, `summary` ≤ 300, `steps` ≤ 15 of ≤ 300 each, `servings` 1–12, `totalMinutes` 1–600; `meal` is always the one asked for. |
+
+- **200** `{ "available": false, "message": "Couldn't come up with a recipe just now. Try again." }`: the model timed out, couldn't be reached (429 and 5xx are retried), gave an unreadable answer, or refused (its content filter, which the comments can trigger). A 200, so it doesn't fire the error alert; a misconfiguration (the model refusing the app) is logged at Error.
+- **400** `{ "error": "…" }`: bad shape or meal, comments over 300 characters, more than 20 included, or an included product that isn't a known product in stock.
+- **422** `{ "error": "There's nothing in stock to cook with." }`: no known products in stock.
+- **429** `{ "error": "That's a lot of recipes for one hour. Try again a bit later." }`: over `RECIPE_REQUESTS_PER_HOUR` (default 30) for this user in the last hour. Counted per API app instance, in memory: a cost guard, not an exact quota.

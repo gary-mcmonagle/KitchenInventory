@@ -5,12 +5,14 @@ import { AddScreen } from "./AddScreen";
 import { BottomNav } from "./BottomNav";
 import { ItemScreen } from "./ItemScreen";
 import { NameScreen } from "./NameScreen";
+import { RecipesScreen } from "./RecipesScreen";
 import {
     ADD_PATH,
     matchAssignPath,
     matchEditPath,
     matchItemPath,
     matchNamePath,
+    RECIPES_PATH,
     SCANNERS_PATH,
     usePath,
 } from "./router";
@@ -18,7 +20,7 @@ import { ScannersScreen } from "./ScannersScreen";
 import { StockScreen } from "./StockScreen";
 
 /** The signed-in app: the stock list (with a muted footer for verification), item detail, naming or editing a
- * product, adding items, or saying what a store label was. */
+ * product, adding items, saying what a store label was, or recipe ideas (#73). */
 export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     const path = usePath();
     const [footer, setFooter] = useState(`UI ${buildSha}`);
@@ -55,6 +57,11 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                 <AddScreen api={api} />
             ) : assigning ? (
                 <AddScreen key={assigning} api={api} assignScanId={assigning} />
+            ) : path === RECIPES_PATH ? (
+                <>
+                    <RecipesScreen api={api} />
+                    <BottomNav current="recipes" />
+                </>
             ) : path === SCANNERS_PATH ? (
                 <>
                     <ScannersScreen api={api} />
