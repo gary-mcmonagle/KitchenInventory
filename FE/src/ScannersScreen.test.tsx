@@ -44,6 +44,7 @@ const base = (overrides: Partial<Scanners> = {}): Scanners => ({
             scannedAt: "2026-10-17T17:42:00.000Z",
             unitId: "u1",
             inStockCount: 1,
+            scanId: null,
         },
     ],
     unmatchedCheckOuts: [
@@ -53,6 +54,7 @@ const base = (overrides: Partial<Scanners> = {}): Scanners => ({
             productId: "p2",
             displayName: "Heinz tomato ketchup",
             scannedAt: "2026-10-14T18:03:00.000Z",
+            storeLabel: false,
         },
         {
             scanId: "s2",
@@ -60,6 +62,7 @@ const base = (overrides: Partial<Scanners> = {}): Scanners => ({
             productId: null,
             displayName: null,
             scannedAt: "2026-10-12T07:40:00.000Z",
+            storeLabel: false,
         },
     ],
     recentlyCheckedOut: [
@@ -251,4 +254,42 @@ test("the feed's +n more waiting line links to Scanners", () => {
     expect(screen.getByText(/\+1 more waiting\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "Open Scanners to see them all." }));
     expect(window.location.pathname).toBe("/scanners");
+});
+
+test("store labels (#58): Pick opens 'What is this?', and a store-label check-out says to check it out from the app", async () => {
+    const data = base();
+    setup([
+        {
+            ...data,
+            noMatchCheckIns: [
+                {
+                    productId: null,
+                    barcode: "2012345678903",
+                    status: "storeLabel",
+                    scannedAt: "2026-10-17T17:42:00.000Z",
+                    unitId: null,
+                    inStockCount: 1,
+                    scanId: "scan 9",
+                },
+            ],
+            unmatchedCheckOuts: [
+                {
+                    ...data.unmatchedCheckOuts[0],
+                    barcode: "2012345678903",
+                    displayName: null,
+                    productId: null,
+                    storeLabel: true,
+                },
+            ],
+        },
+    ]);
+    const checkIns = await screen.findByRole("region", { name: /Check-ins with no match/ });
+    expect(checkIns).toHaveTextContent("Store labelCheck-in, yesterday 18:42");
+    expect(region(/Check-outs with no match/)).toHaveTextContent(
+        "Store labelCheck it out from the app · scanned out 14 Oct 19:03",
+    );
+
+    fireEvent.click(within(checkIns).getByRole("button", { name: "Pick" }));
+
+    expect(window.location.pathname).toBe("/store-labels/scan%209");
 });

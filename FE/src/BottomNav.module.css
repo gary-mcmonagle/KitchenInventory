@@ -29,3 +29,15 @@
     color: var(--accent-dark);
     font-weight: 700;
 }
+
+/* The centre Add pill (#58). */
+.pill {
+    width: 44px;
+    height: 32px;
+    border-radius: 16px;
+    background: var(--accent);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

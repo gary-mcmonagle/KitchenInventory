@@ -86,3 +86,17 @@ test("ping is public: no token", async () => {
     expect(fetcher).toHaveBeenCalledWith("https://api.example.net/api/ping");
     expect(msal.acquireTokenSilent).not.toHaveBeenCalled();
 });
+
+test("a photo is sent as the JPEG itself, not JSON", async () => {
+    const fetcher = vi.fn(async () => json(200, { readable: true, items: [] }));
+    const api = new ApiClient(fakeMsal(), config, fetcher);
+    const jpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" });
+
+    await api.recognisePhoto(jpeg);
+
+    expect(fetcher).toHaveBeenCalledWith("https://api.example.net/api/photos/recognise", {
+        method: "POST",
+        headers: { Authorization: "Bearer token-123", "Content-Type": "image/jpeg" },
+        body: jpeg,
+    });
+});

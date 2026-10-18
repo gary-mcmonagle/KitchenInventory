@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NoAccessError, SignInRequiredError, type ApiClient, type Scanners } from "./api";
 import { dayTime, groupBarcode, interval, relativeTime, timeDay } from "./format";
-import { namePath, navigate } from "./router";
+import { assignPath, namePath, navigate } from "./router";
 import { feedTime } from "./scanFeed";
 import { TOAST_MS } from "./StockScreen";
 import { signalRConnection, useScanFeed, type FeedConnection } from "./useScanFeed";
@@ -191,9 +191,13 @@ export function ScannersScreen({
                             empty="Nothing to identify."
                         >
                             {data.noMatchCheckIns.map((n) => (
-                                <li key={n.productId} className={styles.row}>
+                                <li key={n.scanId ?? n.productId} className={styles.row}>
                                     <div className={styles.rowText}>
-                                        <span className={styles.rowTitle}>{groupBarcode(n.barcode)}</span>
+                                        <span className={styles.rowTitle}>
+                                            {n.status === "storeLabel"
+                                                ? "Store label"
+                                                : groupBarcode(n.barcode)}
+                                        </span>
                                         <span className={styles.muted}>
                                             Check-in, {dayTime(n.scannedAt, nowDate)}
                                         </span>
@@ -201,7 +205,13 @@ export function ScannersScreen({
                                     <button
                                         type="button"
                                         className={styles.primary}
-                                        onClick={() => navigate(namePath(n.productId))}
+                                        onClick={() =>
+                                            navigate(
+                                                n.status === "storeLabel" && n.scanId
+                                                    ? assignPath(n.scanId)
+                                                    : namePath(n.productId!),
+                                            )
+                                        }
                                     >
                                         <svg
                                             width="18"
@@ -217,7 +227,7 @@ export function ScannersScreen({
                                             <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1.5-2h5L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />
                                             <circle cx="12" cy="13" r="3.2" />
                                         </svg>
-                                        Identify
+                                        {n.status === "storeLabel" ? "Pick" : "Identify"}
                                     </button>
                                 </li>
                             ))}
@@ -234,10 +244,15 @@ export function ScannersScreen({
                                 <li key={u.scanId} className={styles.row}>
                                     <div className={styles.rowText}>
                                         <span className={styles.rowTitle}>
-                                            {u.displayName ?? `Unknown item ${groupBarcode(u.barcode)}`}
+                                            {u.storeLabel
+                                                ? "Store label"
+                                                : (u.displayName ??
+                                                  `Unknown item ${groupBarcode(u.barcode)}`)}
                                         </span>
                                         <span className={styles.muted}>
-                                            Scanned out {dayTime(u.scannedAt, nowDate)}
+                                            {u.storeLabel
+                                                ? `Check it out from the app · scanned out ${dayTime(u.scannedAt, nowDate)}`
+                                                : `Scanned out ${dayTime(u.scannedAt, nowDate)}`}
                                         </span>
                                     </div>
                                     <button

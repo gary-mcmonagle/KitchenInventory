@@ -17,6 +17,16 @@ export function navigate(path: string): void {
 }
 
 export const SCANNERS_PATH = "/scanners";
+export const ADD_PATH = "/add";
+
+/** "What is this?" for a store-label check-in (#58). */
+export const assignPath = (scanId: string) => `/store-labels/${encodeURIComponent(scanId)}`;
+
+/** The scan ID if the path is assigning a store label (#58). */
+export function matchAssignPath(path: string): string | null {
+    const match = /^\/store-labels\/([^/]+)\/?$/.exec(path);
+    return match ? decodeURIComponent(match[1]) : null;
+}
 
 export const namePath = (productId: string) => `/products/${encodeURIComponent(productId)}/name`;
 export const itemPath = (productId: string) => `/products/${encodeURIComponent(productId)}`;

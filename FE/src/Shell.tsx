@@ -1,15 +1,24 @@
 import { useEffect, useState } from "react";
 import { SignInRequiredError, type ApiClient } from "./api";
 import styles from "./App.module.css";
+import { AddScreen } from "./AddScreen";
 import { BottomNav } from "./BottomNav";
 import { ItemScreen } from "./ItemScreen";
 import { NameScreen } from "./NameScreen";
-import { matchEditPath, matchItemPath, matchNamePath, SCANNERS_PATH, usePath } from "./router";
+import {
+    ADD_PATH,
+    matchAssignPath,
+    matchEditPath,
+    matchItemPath,
+    matchNamePath,
+    SCANNERS_PATH,
+    usePath,
+} from "./router";
 import { ScannersScreen } from "./ScannersScreen";
 import { StockScreen } from "./StockScreen";
 
-/** The signed-in app: the stock list (with a muted footer for verification), item detail, or naming or editing a
- * product. */
+/** The signed-in app: the stock list (with a muted footer for verification), item detail, naming or editing a
+ * product, adding items, or saying what a store label was. */
 export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     const path = usePath();
     const [footer, setFooter] = useState(`UI ${buildSha}`);
@@ -33,6 +42,7 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     const naming = matchNamePath(path);
     const editing = matchEditPath(path);
     const item = matchItemPath(path);
+    const assigning = matchAssignPath(path);
     return (
         <main className={styles.page}>
             {naming ? (
@@ -41,6 +51,10 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                 <NameScreen key={`edit-${editing}`} api={api} productId={editing} mode="edit" />
             ) : item ? (
                 <ItemScreen key={item} api={api} productId={item} />
+            ) : path === ADD_PATH ? (
+                <AddScreen api={api} />
+            ) : assigning ? (
+                <AddScreen key={assigning} api={api} assignScanId={assigning} />
             ) : path === SCANNERS_PATH ? (
                 <>
                     <ScannersScreen api={api} />

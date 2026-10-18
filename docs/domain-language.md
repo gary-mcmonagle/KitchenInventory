@@ -16,8 +16,17 @@ If you need a term that isn't here, add it as part of the card that introduces i
 - Not to be confused with: the brand and size, which are shown separately.
 - In code: `displayName`
 
-**Loose item** – a product with no barcode, such as fruit, bakery bread or deli food. Added from the app, not scanned.
+**Add to stock** – putting units in stock from the app rather than a scanner (#58): photograph what you're putting away (**photo add**), pick a loose item, or type a name, then tick and fix the list. Each row is matched to an existing product by name (ignoring case and extra spaces) or becomes a new loose item.
+- In the app: the **Add** pill in the bottom nav, the "Add to stock" screen.
+- In code: `AddToStock`, `POST /api/stock/add`, `AddScreen`
+
+**Loose item** – a product with no barcode, such as fruit, veg or bakery bread. Added from the app, not scanned.
 - Not to be confused with: **Store label**. A store-labelled item has a barcode, but one printed in the shop.
+- In code: `Product.IsLoose` (no barcodes), `GET /api/products/loose`
+
+**Photo add** – adding items by photographing them: gpt-4o lists what it sees (several items per photo), and you confirm with checkboxes. The photo is never stored. Brand and size are optional extras; what the item is matters most.
+- Not to be confused with: **Photo identification**, which names an unknown barcode.
+- In code: `IProductPhotoRecogniser`, `POST /api/photos/recognise`
 
 **Product** – a kind of item, identified by its own product ID (e.g. "Heinz Baked Beans 415g"). It can have no barcode (a loose item), one barcode, or several.
 - Not to be confused with: **Unit**. A product is the kind of thing; a unit is one physical tin.
@@ -119,7 +128,10 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Product lookup** – resolving a barcode to product details: product cache first (through its barcode lookup), then Open Food Facts.
 
-**Store label** – a barcode printed in the shop for deli or weighed items: an **EAN-13 starting 20–29**. Not looked up on Open Food Facts. 8-digit barcodes starting with 2 (e.g. Lidl's own-brand) are normal product barcodes, not store labels.
+**Store label** – a barcode printed in the shop for deli or weighed items: an **EAN-13 starting 20–29**. Those are GS1 **Restricted Circulation Numbers** for use "within a geographic region" (GS1 General Specifications change notice GSCN 23-006), so they can't identify a product. Not looked up on Open Food Facts. 8-digit barcodes starting with 2 (e.g. Lidl's own-brand) and 12-digit UPC-As are normal product barcodes, not store labels.
+- On check-in: a **store-label check-in** is recorded and the app asks "Store label: what is it?". **Assigning** it (Pick, in "What is this?") puts one unit in stock at the scan time.
+- On check-out: an unmatched check-out, "Store label: check it out from the app".
+- In code: `StoreLabels.IsStoreLabel`, `StoreLabelCheckIn`, `AssignStoreLabel`
 
 ---
 

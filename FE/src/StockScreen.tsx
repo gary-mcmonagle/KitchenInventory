@@ -18,6 +18,7 @@ import {
     scannedLabel,
     todayLine,
 } from "./format";
+import { takeFlash } from "./flash";
 import { itemPath, namePath, navigate } from "./router";
 import styles from "./Stock.module.css";
 import { ScanFeedView } from "./ScanFeedView";
@@ -28,7 +29,8 @@ export const TOAST_MS = 6000; // as in the mockup
 
 type Toast =
     | { kind: "checkedOut"; unitId: string; product: StockProduct; name: string }
-    | { kind: "error"; text: string };
+    | { kind: "error"; text: string }
+    | { kind: "info"; text: string };
 
 /** The stock with one product's count set (the row is removed at 0, put back if missing), and the totals recomputed. */
 export function withCount(stock: Stock, product: StockProduct, count: number): Stock {
@@ -107,6 +109,12 @@ export function StockScreen({
         toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
     }, []);
     useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+    // "Added 3 items" after adding from the app (#58).
+    useEffect(() => {
+        const message = takeFlash();
+        if (message) showToast({ kind: "info", text: message });
+    }, [showToast]);
 
     const setBusy = (productId: string, busy: boolean) =>
         setInFlight((current) => {

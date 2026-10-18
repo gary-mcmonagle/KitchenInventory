@@ -127,12 +127,15 @@ export interface Scanners {
         lastScanAt: string | null;
     }>;
     noMatchCheckIns: Array<{
-        productId: string;
+        /** null for a store label (#58): it has no product until someone says what it is. */
+        productId: string | null;
         barcode: string;
-        status: "noMatch" | "lookupFailed";
+        status: "noMatch" | "lookupFailed" | "storeLabel";
         scannedAt: string;
-        unitId: string;
+        unitId: string | null;
         inStockCount: number;
+        /** The store-label check-in to assign (#58); null otherwise. */
+        scanId: string | null;
     }>;
     unmatchedCheckOuts: Array<{
         scanId: string;
@@ -140,6 +143,8 @@ export interface Scanners {
         productId: string | null;
         displayName: string | null;
         scannedAt: string;
+        /** An in-store label: it can never match a unit, so check it out from the app (#58). */
+        storeLabel: boolean;
     }>;
     recentlyCheckedOut: Array<{
         unitId: string;
@@ -148,6 +153,44 @@ export interface Scanners {
         checkedOutAt: string;
         source: string | null;
     }>;
+}
+
+/** POST /api/photos/recognise (#58): what the photo shows. */
+export interface PhotoRecognition {
+    readable: boolean;
+    items: Array<{
+        name: string;
+        brand: string | null;
+        size: string | null;
+        kind: "packaged" | "loose" | "storeLabelled";
+        quantity: number;
+        /** An existing product with that name. */
+        match: { productId: string; displayName: string } | null;
+    }>;
+}
+
+export interface LooseProduct {
+    productId: string;
+    displayName: string;
+    shelfLifeDays: number | null;
+    lastAddedAt: string | null;
+}
+
+export type AddSource = "photo" | "pick" | "typed";
+
+/** One row to add: an existing product, or a name (matched to one, or a new loose product). */
+export interface AddItem {
+    productId?: string;
+    name?: string;
+    brand?: string;
+    size?: string;
+    quantity: number;
+    source: AddSource;
+}
+
+export interface Added {
+    units: number;
+    items: Array<{ productId: string; displayName: string; quantity: number; createdProduct: boolean }>;
 }
 
 export interface Ping {
@@ -251,6 +294,34 @@ export class ApiClient {
         return this.send<UndoneCheckOut>("POST", `/api/units/${encodeURIComponent(unitId)}/undo-check-out`);
     }
 
+    /** What a photo shows (#58). The JPEG is sent as is and never stored. 503 → ApiError: try typing instead. */
+    recognisePhoto(jpeg: Blob): Promise<PhotoRecognition> {
+        return this.send<PhotoRecognition>("POST", "/api/photos/recognise", jpeg);
+    }
+
+    /** Loose products for the quick pick, most recently added first (#58). */
+    looseProducts(): Promise<{ products: LooseProduct[] }> {
+        return this.get("/api/products/loose");
+    }
+
+    /** Adds items to stock (#58). Send the same request ID again to retry safely. */
+    addToStock(requestId: string, items: AddItem[]): Promise<Added> {
+        return this.send<Added>("POST", "/api/stock/add", { requestId, items });
+    }
+
+    /** Says what a store-labelled check-in was (#58): adds its unit at the scan time. 409 → already assigned. */
+    assignStoreLabel(
+        scanId: string,
+        item: Omit<AddItem, "quantity">,
+    ): Promise<{ scanId: string; unitId: string; productId: string; displayName: string }> {
+        return this.send("POST", `/api/store-label-check-ins/${encodeURIComponent(scanId)}/assign`, item);
+    }
+
+    /** Hides a store-label toast for the household; it stays on the scanners screen (#58). */
+    dismissStoreLabel(scanId: string): Promise<{ scanId: string; dismissed: boolean }> {
+        return this.send("POST", `/api/scan-feed/store-labels/${encodeURIComponent(scanId)}/dismiss`);
+    }
+
     /** Public: no token needed. */
     async ping(): Promise<Ping> {
         const response = await this.fetcher(`${this.config.apiBaseUrl}/api/ping`);
@@ -267,7 +338,10 @@ export class ApiClient {
         const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
         const init: RequestInit = { headers };
         if (method !== "GET") init.method = method;
-        if (body !== undefined) {
+        if (body instanceof Blob) {
+            headers["Content-Type"] = body.type || "application/octet-stream";
+            init.body = body;
+        } else if (body !== undefined) {
             headers["Content-Type"] = "application/json";
             init.body = JSON.stringify(body);
         }

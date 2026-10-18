@@ -53,6 +53,7 @@ function setup(catchUp: FeedEvent[][] = [[]]) {
             events: queue.length > 1 ? queue.shift()! : queue[0],
         })),
         dismissFeed: vi.fn(async (productId: string) => ({ productId, feedDismissedAt: at() })),
+        dismissStoreLabel: vi.fn(async (scanId: string) => ({ scanId, dismissed: true })),
     };
     const connection = new FakeConnection();
     const onStock = vi.fn();
@@ -232,4 +233,77 @@ test("at most 3 shown, then +n more waiting", async () => {
     const feed = screen.getByRole("status", { name: "Scan feed" });
     expect(within(feed).getAllByRole("button", { name: "Identify" })).toHaveLength(3);
     expect(feed).toHaveTextContent("+2 more waiting.");
+});
+
+const storeLabel = (scanId = "l1"): FeedEvent => ({
+    type: "storeLabelCheckIn",
+    scanId,
+    deviceId: "scanner-in",
+    role: "in",
+    occurredAt: at(),
+    barcode: "2012345678903",
+});
+
+test("a store label asks what it is: Pick opens 'What is this?', and dismissing it calls the API (#58)", async () => {
+    const { api, connection } = setup();
+    await flush();
+    act(() => connection.emit(storeLabel("l1")));
+    act(() => connection.emit(storeLabel("l2")));
+
+    const feed = screen.getByRole("status", { name: "Scan feed" });
+    expect(feed).toHaveTextContent("Store label: what is it?Check-in scanner · just now");
+    await act(async () =>
+        fireEvent.click(screen.getAllByRole("button", { name: "Dismiss Store label: what is it?" })[0]),
+    );
+    expect(api.dismissStoreLabel).toHaveBeenCalledTimes(1);
+    expect(within(feed).getAllByRole("button", { name: "Pick" })).toHaveLength(1); // the other one stays
+
+    fireEvent.click(screen.getByRole("button", { name: "Pick" }));
+    expect(window.location.pathname).toMatch(/^\/store-labels\/l[12]$/);
+});
+
+test("a store label assigned or dismissed elsewhere: its toast turns green or goes; the stock refetches", async () => {
+    const { connection, onStock } = setup();
+    await flush();
+    act(() => connection.emit(storeLabel("l1")));
+    act(() => connection.emit(storeLabel("l2")));
+
+    act(() =>
+        connection.emit({
+            type: "storeLabelResolved",
+            scanId: "l1",
+            productId: "ham",
+            displayName: "Ham hock terrine",
+            occurredAt: at(1000),
+        }),
+    );
+    act(() => connection.emit({ type: "feedDismissed", productId: null, scanId: "l2", occurredAt: at() }));
+
+    const feed = screen.getByRole("status", { name: "Scan feed" });
+    expect(feed).toHaveTextContent("Added Ham hock terrine");
+    expect(feed).not.toHaveTextContent("Store label");
+    act(() => vi.advanceTimersByTime(STOCK_REFETCH_DEBOUNCE_MS));
+    expect(onStock).toHaveBeenCalled();
+});
+
+test("a store-label check-out says to check it out from the app", async () => {
+    const { connection } = setup();
+    await flush();
+    act(() =>
+        connection.emit({
+            type: "checkOutUnmatched",
+            scanId: "o1",
+            deviceId: "scanner-out",
+            role: "out",
+            occurredAt: at(),
+            barcode: "2012345678903",
+            productId: null,
+            displayName: null,
+            storeLabel: true,
+        }),
+    );
+
+    expect(screen.getByRole("status", { name: "Scan feed" })).toHaveTextContent(
+        "Store label: check it out from the app",
+    );
 });

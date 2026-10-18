@@ -133,7 +133,7 @@ export function useScanFeed(
         if (loadingTimedOut) refetchStock();
     }, [feed, now, refetchStock]);
 
-    /** Amber "No match": hidden for the whole household. "Not in stock": just here. */
+    /** Amber "No match" and store labels: hidden for the whole household. "Not in stock": just here. */
     const dismiss = useCallback(
         async (toast: FeedToast) => {
             setFeed((state) => {
@@ -147,12 +147,11 @@ export function useScanFeed(
                 }
                 return next;
             });
-            if (toast.kind === "warn" && toast.productId) {
-                try {
-                    await api.dismissFeed(toast.productId);
-                } catch (error) {
-                    if (!(error instanceof SignInRequiredError)) console.warn("Couldn't dismiss", error);
-                }
+            try {
+                if (toast.kind === "warn" && toast.productId) await api.dismissFeed(toast.productId);
+                if (toast.kind === "label") await api.dismissStoreLabel(toast.scanId);
+            } catch (error) {
+                if (!(error instanceof SignInRequiredError)) console.warn("Couldn't dismiss", error);
             }
         },
         [api],

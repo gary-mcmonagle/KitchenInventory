@@ -1,0 +1,363 @@
+/* "Add to stock" and "What is this?" (#58): the header, fields and bar of project/NameIt.dc.html, the reading state
+ * of project/Capture.dc.html, and the chips and search of project/Main.dc.html. */
+.screen {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 20px 8px 4px;
+}
+
+.back {
+    width: var(--touch);
+    height: var(--touch);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    cursor: pointer;
+}
+
+.title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.content {
+    flex: 1;
+    padding: 8px var(--page-x) 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.context {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.fileInput {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.photoButton {
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 0;
+    border-radius: var(--radius-input);
+    background: var(--accent);
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.reading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 12px;
+    text-align: center;
+}
+
+.bigSpinner {
+    width: 64px;
+    height: 64px;
+    border-radius: 32px;
+    border: 5px solid var(--accent);
+    border-top-color: var(--toast-action);
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bigSpinner {
+        animation: none;
+    }
+}
+
+.readingTitle {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.readingText {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--muted);
+}
+
+.notice {
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: var(--radius-input);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 10px 10px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.rowOff {
+    opacity: 0.6;
+}
+
+.rowMain {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+}
+
+.check {
+    flex: none;
+    width: var(--touch);
+    height: var(--touch);
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.rowText {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.rowName {
+    height: var(--touch);
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-button);
+    background: var(--surface);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.match {
+    font-size: 13px;
+    color: var(--accent-dark);
+}
+
+.muted {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.stepper {
+    align-self: flex-end;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.step {
+    width: var(--touch);
+    height: var(--touch);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-button);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.step:disabled {
+    border-color: var(--border);
+    color: var(--muted);
+    cursor: default;
+}
+
+.count {
+    min-width: 32px;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sectionTitle {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 48px;
+    padding: 0 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    color: var(--muted);
+}
+
+.searchInput {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.chip {
+    min-height: var(--touch);
+    padding: 0 16px;
+    border-radius: var(--radius-chip);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.typeRow {
+    display: flex;
+    gap: 8px;
+}
+
+.input {
+    flex: 1;
+    min-width: 0;
+    height: 48px;
+    padding: 0 14px;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-button);
+    background: var(--surface);
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.secondary {
+    flex: none;
+    min-height: 48px;
+    padding: 0 18px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-button);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.secondary:disabled {
+    border-color: var(--border);
+    color: var(--muted);
+    cursor: default;
+}
+
+.visuallyHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+}
+
+.bar {
+    flex: none;
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px var(--page-x) 28px;
+    background: var(--surface);
+    border-top: 1px solid var(--border-soft);
+}
+
+.save {
+    min-height: 52px;
+    border: 0;
+    border-radius: var(--radius-input);
+    background: var(--accent);
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.save:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.cancel {
+    min-height: var(--touch);
+    border: 0;
+    background: transparent;
+    color: var(--ink-strong);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}

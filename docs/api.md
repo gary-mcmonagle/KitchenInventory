@@ -252,8 +252,11 @@ The scanners screen (#55): is everything working, and what needs sorting.
   "generatedAt": "2026-10-18T08:00:00.000Z",
   "hub": { "hubId": "cupboard-pi", "lastSeenAt": "…", "heartbeatIntervalSeconds": 120, "offlineThresholdMinutes": 20, "online": true },
   "devices": [{ "deviceId": "scanner-in", "role": "in", "present": true, "presentSince": "…", "absentSince": null, "lastScanAt": "…" }],
-  "noMatchCheckIns": [{ "productId": "…", "barcode": "501001234567", "status": "noMatch", "scannedAt": "…", "unitId": "…", "inStockCount": 1 }],
-  "unmatchedCheckOuts": [{ "scanId": "…", "barcode": "20055363", "productId": null, "displayName": null, "scannedAt": "…" }],
+  "noMatchCheckIns": [
+    { "productId": "…", "barcode": "501001234567", "status": "noMatch", "scannedAt": "…", "unitId": "…", "inStockCount": 1, "scanId": null },
+    { "productId": null, "barcode": "2012345678903", "status": "storeLabel", "scannedAt": "…", "unitId": null, "inStockCount": 1, "scanId": "…" }
+  ],
+  "unmatchedCheckOuts": [{ "scanId": "…", "barcode": "20055363", "productId": null, "displayName": null, "scannedAt": "…", "storeLabel": false }],
   "recentlyCheckedOut": [{ "unitId": "…", "productId": "…", "displayName": "Beef Gravy", "checkedOutAt": "…", "source": "scanner" }]
 }
 ```
@@ -262,8 +265,8 @@ The scanners screen (#55): is everything working, and what needs sorting.
 |---|---|
 | `hub` | The most recently heard hub; `null` before the first heartbeat. `online` is false once it's been silent for longer than `OFFLINE_THRESHOLD_MINUTES` (the offline alert's rule). `heartbeatIntervalSeconds` is the API's copy of the Pi's `HEARTBEAT_INTERVAL_SECONDS` (default 120), for display. |
 | `devices` | Each scanner, check-in first. `present` is whether its **receiver** is plugged into the hub, per the latest heartbeats: `null` until reported. `presentSince` / `absentSince` say since when. |
-| `noMatchCheckIns` | Every product still `noMatch` / `lookupFailed` with something in stock, newest check-in first (its newest unit). Includes ones dismissed from the scan feed. |
-| `unmatchedCheckOuts` | Every **undismissed** unmatched check-out, newest first. `displayName` only for a named product; otherwise the app shows `Unknown item <barcode>`. |
+| `noMatchCheckIns` | Every product still `noMatch` / `lookupFailed` with something in stock, newest check-in first (its newest unit), then every unassigned **store-label check-in** (#58: `status: "storeLabel"`, `productId` and `unitId` `null`, and the `scanId` to assign with `POST /api/store-label-check-ins/{scanId}/assign`). Includes ones dismissed from the scan feed. |
+| `unmatchedCheckOuts` | Every **undismissed** unmatched check-out, newest first. `displayName` only for a named product; otherwise the app shows `Unknown item <barcode>`. `storeLabel` is true for an in-store label (#58), which can never match a unit: the app shows "Store label: check it out from the app". |
 | `recentlyCheckedOut` | Units checked out in the last **48 hours**, newest first; `source` is `scanner` or `ui`. Undo with `POST /api/units/{unitId}/undo-check-out`, which works the same for scanner check-outs. |
 
 `Cache-Control: no-store`.
@@ -290,10 +293,12 @@ Scan events all have `scanId`, `deviceId`, `role` (`in` / `out`) and `occurredAt
 | `scanReceived` | Ingest, once the scan is stored (not for a resend) | `barcode`, `scannedAt` | Grey: `Reading <barcode>` |
 | `scanIdentified` | Processor: a known product checked in or out | `outcome` (`checkedIn` / `checkedOut`), `productId`, `displayName`, `brand`, `size`, `unitId` | Green: `Added …` / `Checked out …`, 10 s |
 | `scanNeedsIdentification` | Processor: a check-in of a `noMatch` / `lookupFailed` product | `productId`, `barcode`, `displayName`, `productStatus`, `unitId` | Amber: `No match for <barcode>`, Identify and dismiss, until named or dismissed |
-| `checkOutUnmatched` | Processor: a check-out with nothing in stock | `barcode`, `productId` (or `null`), `displayName` (known products only, else `null`) | Amber: `Not in stock: …`, dismiss, 10 s |
-| `scanSkipped` | Processor: a store label | `barcode`, `reason` (`storeLabel`) | The grey toast goes |
+| `checkOutUnmatched` | Processor: a check-out with nothing in stock | `barcode`, `productId` (or `null`), `displayName` (known products only, else `null`), `storeLabel` (#58) | Amber: `Not in stock: …` (a store label: `Store label: check it out from the app`), dismiss, 10 s |
+| `storeLabelCheckIn` | Processor: a check-in of a store label (#58) | `barcode` | Amber: `Store label: what is it?`, Pick and dismiss, until assigned or dismissed |
+| `storeLabelResolved` | `POST /api/store-label-check-ins/{scanId}/assign` | `scanId`, `productId`, `displayName`, `occurredAt` (not a scan event: no `deviceId` / `role`) | That label's toast turns green: `Added …` |
+| `scanSkipped` | No longer sent (store labels were skipped before #58); kept in the contract | `barcode`, `reason` | The grey toast goes |
 | `productNamed` | `PUT /api/products/{id}/name` | `productId`, `displayName`, `occurredAt` | That product's amber toasts go |
-| `feedDismissed` | `POST /api/scan-feed/{id}/dismiss` | `productId`, `occurredAt` | That product's amber toast goes on every app |
+| `feedDismissed` | `POST /api/scan-feed/{id}/dismiss`, or `…/store-labels/{scanId}/dismiss` | `productId` (`null` for a store label), `scanId` (store labels only), `occurredAt` | That product's (or store label's) amber toast goes on every app |
 
 Processor events are sent again on a change-feed replay (harmless: the app updates the toast in place).
 
@@ -317,8 +322,9 @@ Catch-up, called on load, after every (re)connect and when the app comes back to
 
 `events` (oldest first, the same shapes as the live events plus `type`) has two parts:
 
-- **Each scan received since `since`**, at most 200, with its outcome now: `scanReceived` if not processed yet, `scanIdentified` (a product named since shows as identified), `scanNeedsIdentification`, `checkOutUnmatched` or `scanSkipped`. `occurredAt` is when ingest received it.
+- **Each scan received since `since`**, at most 200, with its outcome now: `scanReceived` if not processed yet, `scanIdentified` (a product named since shows as identified), `scanNeedsIdentification` or `checkOutUnmatched`. `occurredAt` is when ingest received it. A store-label check-in appears in the next part instead (or not at all once assigned).
 - **Every product still waiting for a name** (`noMatch` / `lookupFailed`) that has something in stock and whose newest check-in is after its `feedDismissedAt`, as one `scanNeedsIdentification` for that newest unit. This is how amber toasts survive a reload. A recent scan of a product dismissed since then isn't reported as amber.
+- **Every unassigned store-label check-in** not dismissed from the feed, as `storeLabelCheckIn` (#58).
 
 `Cache-Control: no-store`.
 
@@ -329,3 +335,79 @@ Hides a product's amber "No match" toast for the whole household. No body. It se
 - **200** `{ "productId": "…", "feedDismissedAt": "…" }`
 - **404** `{ "error": "No such product." }`
 
+### `POST /api/scan-feed/store-labels/{scanId}/dismiss`
+
+Hides a store label's amber toast for the household (#58). No body. Sets the store-label check-in's `feedDismissedAt` and sends `feedDismissed` with the `scanId`. It stays on the scanners screen to pick later.
+
+- **200** `{ "scanId": "…", "dismissed": true }`
+- **404** `{ "error": "No such store-label check-in." }`
+
+## Adding items from the app (#58)
+
+Loose items (no barcode) and store-labelled items are added here; see [domain language](domain-language.md#products--stock). All need a signed-in user (**401** without a token). The photo is **never stored or logged**.
+
+### `POST /api/photos/recognise`
+
+What a photo shows ([spike #41](spikes/41-photo-recognition.md): gpt-4o on Azure AI Foundry, called with the API app's managed identity). The body is the photo itself, `Content-Type: image/jpeg`, **at most 1 MB** (the app resizes to 1024 px on the long edge first). Nothing is stored.
+
+```json
+{
+  "readable": true,
+  "items": [
+    { "name": "Leeks", "brand": null, "size": null, "kind": "loose", "quantity": 2, "match": null },
+    { "name": "Bananas", "brand": null, "size": null, "kind": "loose", "quantity": 6, "match": { "productId": "…", "displayName": "Bananas" } }
+  ]
+}
+```
+
+| Field | Notes |
+|---|---|
+| `readable` | `false` when the photo was too blurry or dark to tell anything. |
+| `items[].name` | What the item is, specific enough to buy again (≤ 100 characters). |
+| `items[].brand`, `size` | Only when legible on that item's own pack (≤ 60 characters), else `null`. |
+| `items[].kind` | `packaged`, `loose` or `storeLabelled`. Non-food is left out. |
+| `items[].quantity` | How many identical items, 1–20. |
+| `items[].match` | An existing product with the same display name (ignoring case and extra spaces), loose ones first; else `null`. |
+
+- **400** `{ "error": "…" }`: not a JPEG, or empty.
+- **413**: over 1 MB.
+- **503** `{ "error": "Photo recognition isn't available right now. …" }`: the model failed after retries (429 and 5xx are retried). The app falls back to picking and typing.
+
+### `GET /api/products/loose`
+
+Loose products (known, no barcode) for the quick pick, **most recently added first**, then A–Z. `Cache-Control: no-store`.
+
+```json
+{ "products": [{ "productId": "…", "displayName": "Bananas", "shelfLifeDays": 7, "lastAddedAt": "…" }] }
+```
+
+### `POST /api/stock/add`
+
+Adds units to stock from the app.
+
+```json
+{
+  "requestId": "6c1f…",
+  "items": [
+    { "productId": "…", "quantity": 2, "source": "pick" },
+    { "name": "Leeks", "brand": null, "size": null, "quantity": 3, "source": "photo" }
+  ]
+}
+```
+
+- `requestId`: a new UUID per add (required). **Idempotent**: new products' and units' ids are derived from it, so sending the same request again creates nothing twice.
+- `items`: 1–20 rows. Each is an existing **known** product (`productId`) or a `name` (≤ 100; `brand` and `size` ≤ 60 optional). A name is matched to an existing product (ignoring case and extra spaces, loose ones first) or becomes a new **loose product** (`source: photo` for `photo` rows, else `manual`).
+- `quantity`: 1–20 (default 1). `source`: `photo`, `pick` or `typed` (default `pick` with a `productId`, else `typed`).
+- Each unit: `checkedInAt` now, `checkInSource: "ui"`, `checkedInBy` the user, no barcode, and an estimated expiry straight away if the product has a shelf life (otherwise the shelf-life timer fills it in).
+
+- **200** `{ "units": 5, "items": [{ "productId": "…", "displayName": "Leeks", "quantity": 3, "createdProduct": true }] }`
+- **400** `{ "error": "…", "errors": { "items[0].name": "Enter a name." } }`: bad shape, no `requestId`, a bad row, or a `productId` that isn't a known product (`items[n].productId`).
+
+### `POST /api/store-label-check-ins/{scanId}/assign`
+
+"What is this?" for a store-label check-in: `{ "productId": "…" }` or `{ "name": "Ham hock terrine", "brand": null, "size": null, "source": "typed" }` (matched or created as in `stock/add`; quantity is always 1). Adds **one unit at the original scan time** (its id is the scan ID, with the label as its barcode), resolves the check-in and sends `storeLabelResolved`. **Idempotent**: assigning again to the same product changes nothing.
+
+- **200** `{ "scanId": "…", "unitId": "…", "productId": "…", "displayName": "Ham hock terrine" }`
+- **400** as for `stock/add` (field names without the `items[n].` prefix).
+- **404** `{ "error": "No such store-label check-in." }`
+- **409** `{ "error": "That check-in has already been sorted out.", "productId": "…" }`: already assigned to a different product.

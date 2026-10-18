@@ -1,9 +1,10 @@
-import { namePath, navigate, SCANNERS_PATH } from "./router";
+import { assignPath, namePath, navigate, SCANNERS_PATH } from "./router";
 import { toastSubtitle, visibleToasts, type FeedState, type FeedToast } from "./scanFeed";
 import styles from "./Feed.module.css";
 
 /** The live scan feed's toasts on the stock list (#54), as in project/Main.dc.html: newest on top, at most 3, then
- * "+n more waiting." Amber "No match" toasts have Identify and dismiss; "Not in stock" has dismiss only. */
+ * "+n more waiting." Amber "No match" toasts have Identify and dismiss, store labels Pick and dismiss (#58); "Not in
+ * stock" has dismiss only. */
 export function ScanFeedView({
     feed,
     now,
@@ -108,6 +109,15 @@ function Toast({
                     onClick={() => navigate(namePath(toast.productId!))}
                 >
                     Identify
+                </button>
+            )}
+            {toast.kind === "label" && (
+                <button
+                    type="button"
+                    className={styles.identify}
+                    onClick={() => navigate(assignPath(toast.scanId))}
+                >
+                    Pick
                 </button>
             )}
             <button

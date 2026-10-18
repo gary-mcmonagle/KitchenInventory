@@ -32,10 +32,21 @@ export type FeedEvent =
           barcode: string;
           productId: string | null;
           displayName: string | null;
+          /** An in-store label (#58). */
+          storeLabel?: boolean;
       })
     | (ScanBase & { type: "scanSkipped"; barcode: string; reason: string })
+    | (ScanBase & { type: "storeLabelCheckIn"; barcode: string })
+    | {
+          type: "storeLabelResolved";
+          scanId: string;
+          productId: string;
+          displayName: string;
+          occurredAt: string;
+      }
     | { type: "productNamed"; productId: string; displayName: string; occurredAt: string }
-    | { type: "feedDismissed"; productId: string; occurredAt: string };
+    /** A product's amber toast, or (with scanId) a store label's (#58). */
+    | { type: "feedDismissed"; productId: string | null; scanId?: string; occurredAt: string };
 
 export type FeedEventType = FeedEvent["type"];
 
@@ -45,12 +56,15 @@ export const FEED_EVENT_TYPES: FeedEventType[] = [
     "scanNeedsIdentification",
     "checkOutUnmatched",
     "scanSkipped",
+    "storeLabelCheckIn",
+    "storeLabelResolved",
     "productNamed",
     "feedDismissed",
 ];
 
-/** Toast styles, as in the mockup: grey (reading), green (done), amber (needs naming, or not in stock). */
-export type ToastKind = "loading" | "ok" | "warn" | "unmatched";
+/** Toast styles, as in the mockup: grey (reading), green (done), amber (needs naming, a store label to pick, or not
+ * in stock). */
+export type ToastKind = "loading" | "ok" | "warn" | "label" | "unmatched";
 
 export interface FeedToast {
     scanId: string;
@@ -124,7 +138,9 @@ export function applyEvent(state: FeedState, event: FeedEvent, now: number): Fee
             next.set(event.scanId, {
                 ...base(state, event),
                 kind: "unmatched",
-                title: `Not in stock: ${event.displayName ?? groupBarcode(event.barcode)}`,
+                title: event.storeLabel
+                    ? "Store label: check it out from the app"
+                    : `Not in stock: ${event.displayName ?? groupBarcode(event.barcode)}`,
                 productId: event.productId,
                 expiresAt: now + OK_MS,
             });
@@ -134,18 +150,46 @@ export function applyEvent(state: FeedState, event: FeedEvent, now: number): Fee
             if (!state.has(event.scanId)) return state;
             next.delete(event.scanId);
             return next;
-        case "productNamed":
-        case "feedDismissed": {
-            let changed = false;
-            for (const [id, toast] of state) {
-                if (toast.kind === "warn" && toast.productId === event.productId) {
-                    next.delete(id);
-                    changed = true;
-                }
-            }
-            return changed ? next : state;
+        case "storeLabelCheckIn":
+            next.set(event.scanId, {
+                ...base(state, event),
+                kind: "label",
+                title: "Store label: what is it?",
+                productId: null,
+                expiresAt: null, // until assigned or dismissed
+            });
+            return next;
+        case "storeLabelResolved": {
+            const toast = state.get(event.scanId);
+            if (!toast) return state;
+            next.set(event.scanId, {
+                ...toast,
+                kind: "ok",
+                title: `Added ${event.displayName}`,
+                productId: event.productId,
+                expiresAt: now + OK_MS,
+            });
+            return next;
         }
+        case "feedDismissed":
+            if (event.scanId) {
+                if (!state.has(event.scanId)) return state;
+                next.delete(event.scanId);
+                return next;
+            }
+            return withoutAmber(state, event.productId);
+        case "productNamed":
+            return withoutAmber(state, event.productId);
     }
+}
+
+/** Without that product's amber "No match" toasts (named or dismissed). */
+function withoutAmber(state: FeedState, productId: string | null): FeedState {
+    const next = new Map(state);
+    for (const [id, toast] of state) {
+        if (toast.kind === "warn" && toast.productId === productId) next.delete(id);
+    }
+    return next.size === state.size ? state : next;
 }
 
 /** Keeps the time of the scan from its first event, so the order and "2 minutes ago" don't jump. */
@@ -165,13 +209,22 @@ export function applyCatchUp(state: FeedState, events: FeedEvent[], now: number)
     for (const event of events) {
         const age = now - Date.parse(event.occurredAt);
         const quiet =
-            ((event.type === "scanIdentified" || event.type === "checkOutUnmatched") && age > OK_MS) ||
+            ((event.type === "scanIdentified" ||
+                event.type === "checkOutUnmatched" ||
+                event.type === "storeLabelResolved") &&
+                age > OK_MS) ||
             (event.type === "scanReceived" && age > LOADING_MS);
         if (quiet) {
-            // Old news: settle a grey toast we're still showing, but don't add a new one.
-            if ("scanId" in event && next.get(event.scanId)?.kind === "loading") {
+            // Old news: settle a grey toast we're still showing (or a store label someone else assigned), but don't
+            // add a new one.
+            const scanId = "scanId" in event ? event.scanId : undefined;
+            const shown = scanId ? next.get(scanId)?.kind : undefined;
+            if (
+                scanId &&
+                (shown === "loading" || (event.type === "storeLabelResolved" && shown === "label"))
+            ) {
                 const settled = new Map(next);
-                settled.delete(event.scanId);
+                settled.delete(scanId);
                 next = settled;
             }
             continue;
@@ -206,7 +259,8 @@ export const changesStock = (event: FeedEvent) =>
     event.type === "scanIdentified" ||
     event.type === "productNamed" ||
     event.type === "checkOutUnmatched" ||
-    event.type === "scanNeedsIdentification";
+    event.type === "scanNeedsIdentification" ||
+    event.type === "storeLabelResolved";
 
 /** The toast subtitle: "Check-in scanner · just now", "· 5 minutes ago", "· 18:42", "· 18:42 yesterday", "· 15 Oct". */
 export function toastSubtitle(toast: Pick<FeedToast, "role" | "at">, now: Date = new Date()): string {

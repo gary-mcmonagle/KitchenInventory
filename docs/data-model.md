@@ -136,7 +136,8 @@ A **loose item** (no barcode), added from the app:
   "brand": null,
   "size": null,
   "namedAt": "2026-10-17T09:12:44.310Z",
-  "namedBy": "<Entra object ID>"
+  "namedBy": "<Entra object ID>",
+  "lastAddedAt": "2026-10-18T09:12:44.310Z"
 }
 ```
 
@@ -147,7 +148,7 @@ A barcode that Open Food Facts couldn't be reached for (`lookupFailed`) looks li
 | `id` | **`productId`**: a GUID minted when the product is created. Partition key. Units refer to it. |
 | `type` | `product`. |
 | `status` | `known` (we have a name), `noMatch` (Open Food Facts doesn't know this barcode; final), `lookupFailed` (Open Food Facts couldn't be reached; retried, see [Lookup failures](#lookup-failures)). |
-| `source` | Where the current name came from: `openFoodFacts`, `manual` (named or edited by hand, or a loose item), `photo` (photo identification). `null` while `noMatch` / `lookupFailed`. |
+| `source` | Where the current name came from: `openFoodFacts`, `manual` (named or edited by hand, or a loose item typed or picked), `photo` (a loose item first added from a photo, #58). `null` while `noMatch` / `lookupFailed`. |
 | `barcodes` | Zero or more barcodes, **exactly as scanned**. Each has a barcode lookup document. Empty for a loose item. |
 | `displayName` | What the stock list shows. `Unknown item (<barcode>)` for `noMatch` / `lookupFailed`. From Open Food Facts: see below. |
 | `brand` | Optional. From Open Food Facts: the first entry of `brands`, trimmed. |
@@ -158,7 +159,8 @@ A barcode that Open Food Facts couldn't be reached for (`lookupFailed`) looks li
 | `lookupAttempts`, `lastLookupAttemptAt` | How many times product lookup has been tried for this product, and when last. Used by the lookup-retry timer. |
 | `lookupFailedSince` | When the product first became `lookupFailed` (cleared once resolved). The timer logs an **error** if it's still failing 24 hours later. |
 | `feedDismissedAt` | When someone last dismissed its amber "No match" toast in the scan feed (#54, `POST /api/scan-feed/{id}/dismiss`). Shared by the household. Only hides the toast: a check-in after this time shows it again. Absent until dismissed. |
-| `namedAt`, `namedBy` | When and by whom (Entra object ID) the product was named by hand. Written by naming an unknown item (#51, `PUT /api/products/{id}/name`): only while the product is still `noMatch` / `lookupFailed`, with an ETag-guarded replace, so it and the lookup-retry timer can't overwrite each other. Once named it's `known`, so check-ins never look it up again. |
+| `lastAddedAt` | When units were last added to it in the app (#58): orders the Add screen's quick pick. Best-effort, ETag-guarded. Absent until then. |
+| `namedAt`, `namedBy` | When and by whom (for a loose item: who first added it) (Entra object ID) the product was named by hand. Written by naming an unknown item (#51, `PUT /api/products/{id}/name`): only while the product is still `noMatch` / `lookupFailed`, with an ETag-guarded replace, so it and the lookup-retry timer can't overwrite each other. Once named it's `known`, so check-ins never look it up again. |
 
 **Display name from Open Food Facts** (decided in [spike #28](spikes/28-open-food-facts.md)): `product_name_en`, else `product_name`, trimmed, otherwise **exactly as returned**. No title-casing, no language checks. A product with neither is a no-match.
 
@@ -178,6 +180,31 @@ Written only by the **shelf-life timer**, with an ETag-guarded replace that appl
 **Edited details** (#53, `PUT /api/products/{id}/details`): a known product's name, brand and size corrected in item detail. It sets `source: manual` plus `editedAt` and `editedBy` (Entra object ID), ETag-guarded. Known products are never looked up again, so nothing overwrites the edit.
 
 **Reserved, not used yet:** `icon`.
+
+### Store-label check-in (#58)
+
+A check-in scan of an in-store printed label (see [domain language](domain-language.md#identification)). It's never looked up and makes no product: it waits here until someone says what it is.
+
+```json
+{
+  "id": "storeLabel:0b1c3f1e-6d0e-4c0a-9e0a-3a4d7c1f9a21",
+  "type": "storeLabelCheckIn",
+  "scanId": "0b1c3f1e-6d0e-4c0a-9e0a-3a4d7c1f9a21",
+  "barcode": "2012345678903",
+  "deviceId": "scanner-in",
+  "scannedAt": "2026-10-18T09:00:00.000Z",
+  "recordedAt": "2026-10-18T09:00:01.250Z",
+  "resolvedAt": null,
+  "resolvedProductId": null,
+  "resolvedBy": null,
+  "feedDismissedAt": null
+}
+```
+
+- `id` is `storeLabel:` plus the scan ID, created **if not exists**, so a change-feed replay never records it twice.
+- **Assigning** (`POST /api/store-label-check-ins/{scanId}/assign`) creates one unit (id = the scan ID, `checkedInAt` = `scannedAt`, `barcode` = the label, `checkedInBy` = the user) and sets `resolvedAt`, `resolvedProductId` and `resolvedBy` (ETag-guarded). The label's barcode is **never** given a barcode lookup: the next pack with the same label is a new question.
+- `feedDismissedAt`: hidden from the scan feed (still on the scanners screen).
+- Lives in `products` (a handful of small documents, partition `/id`) rather than a container of its own.
 
 ### Barcode lookup document
 
@@ -271,11 +298,12 @@ This covers every way a product becomes known: Open Food Facts at check-in, the 
 
 | Field | Notes |
 |---|---|
-| `id` | For a scanned unit, the **check-in scan ID**, so replays of the same scan can never create a second unit. Units added in the app get a new GUID. |
+| `id` | For a scanned unit (and an assigned store label), the **check-in scan ID**, so replays of the same scan can never create a second unit. Units added in the app get an id derived from the add's `requestId`, so a retried add creates nothing twice. |
 | `productId` | The unit's product. **Partition key.** |
 | `barcode` | Optional. The barcode it was scanned with, exactly as scanned. `null` for units added in the app with no barcode (loose items). |
 | `status` | `inStock` or `checkedOut`. |
-| `checkInScanId`, `checkInDeviceId` | The scan and device that checked it in. `null` for units added in the app. |
+| `checkInScanId`, `checkInDeviceId` | The scan and device that checked it in. `null` for units added in the app; a store-label unit keeps its scan (#58). |
+| `checkInSource`, `checkedInBy` | For units added in the app (#58): `ui` and the user's Entra object ID. A store-label unit has `checkInSource: "scanner"` and the user who assigned it. Absent on scanned units. |
 | `checkedInAt` | The scan's `scannedAt` (or the time it was added in the app). **This is the bought date**; there is no separate field. |
 | `checkedOutAt`, `checkOutScanId` | Set when checked out: the check-out scan's `scannedAt` and ID, or for a check-out in the app the time it happened and `checkOutScanId: null`. |
 | `checkOutSource` | `scanner` (check-out scans) or `ui` (check-out from the stock list, #50). |
