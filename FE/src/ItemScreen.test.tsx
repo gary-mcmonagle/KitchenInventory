@@ -4,6 +4,19 @@ import { ItemScreen, unitLine } from "./ItemScreen";
 import { NameScreen } from "./NameScreen";
 import { StockScreen } from "./StockScreen";
 
+// Dates show the year only when it isn't this year, so pin "today" (only Date is faked; timers stay real).
+beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-18T09:00:00Z"));
+});
+afterEach(() => vi.useRealTimers());
+
+test("a date in another year shows the year", async () => {
+    setup([milk({ units: [unit("u1", { estimatedExpiryDate: "2028-10-16", daysUntilExpiry: 729 })] })]);
+    expect(await screen.findByText("Monday 16 October 2028")).toBeInTheDocument();
+    expect(screen.getByText("Bought 13 Oct · est. 16 Oct 2028")).toBeInTheDocument();
+});
+
 const unit = (id: string, overrides: Partial<ProductUnit> = {}): ProductUnit => ({
     unitId: id,
     checkedInAt: "2026-10-13T09:00:00.000Z",
