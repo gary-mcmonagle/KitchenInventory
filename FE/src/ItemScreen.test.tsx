@@ -292,7 +292,8 @@ test("Edit details validates like naming", async () => {
     render(<NameScreen api={api as unknown as ApiClient} productId="p-milk" mode="edit" />);
     await screen.findByRole("heading", { name: "Edit product" });
 
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: " " } });
+    // The heading shows at once; the fields only once the product has loaded.
+    fireEvent.change(await screen.findByLabelText("Name"), { target: { value: " " } });
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
 
     expect(screen.getByText("Enter a name.")).toBeInTheDocument();

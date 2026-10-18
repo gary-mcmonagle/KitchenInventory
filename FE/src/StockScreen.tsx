@@ -328,7 +328,7 @@ export function StockScreen({
         setOpenState((current) => {
             const next = {
                 ...current,
-                [group.aisle.id]: !(current[group.aisle.id] ?? group.useFirstCount > 0),
+                [group.aisle.id]: !(current[group.aisle.id] ?? true),
             };
             writeOpen(next);
             return next;
@@ -436,7 +436,7 @@ export function StockScreen({
                     <AisleSection
                         key={group.aisle.id}
                         group={group}
-                        open={useFirstOnly || (openState[group.aisle.id] ?? group.useFirstCount > 0)}
+                        open={useFirstOnly || (openState[group.aisle.id] ?? true)} // open unless closed on this device (Gary, 2026-10-18)
                         canCollapse={!useFirstOnly}
                         onToggle={() => toggleAisle(group)}
                     >

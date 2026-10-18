@@ -155,7 +155,7 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Frozen** – a unit put in the freezer. Its estimate becomes the freeze date plus how long the product keeps in the freezer, and it's checked out last. Shown with a **Frozen** label.
 
-**Aisle** – where a product sits on the stock list, like a supermarket (#71). A fixed list in shop order: Fruit & veg, Bakery, Meat & fish, Dairy & eggs, Chilled & deli, Frozen, Pasta, rice & grains, Tins & jars, Sauces, oils & condiments, Baking & spices, Breakfast & cereal, Snacks & sweets, Drinks, Other. Jev picks each product's aisle once; Gary can change it in Edit details. Aisles collapse, start open only when they have something to use first, and list use-first items first.
+**Aisle** – where a product sits on the stock list, like a supermarket (#71). A fixed list in shop order: Fruit & veg, Bakery, Meat & fish, Dairy & eggs, Chilled & deli, Frozen, Pasta, rice & grains, Tins & jars, Sauces, oils & condiments, Baking & spices, Breakfast & cereal, Snacks & sweets, Drinks, Other. Jev picks each product's aisle once; Gary can change it in Edit details. Aisles start open (closing one is remembered on that device) and list use-first items first.
 - In code: `Aisles`, `aisleId`
 
 **Use first view** – the stock list's **Use first** toggle (#71): only the products that need using, grouped by aisle, every aisle open. Off by default, never remembered.

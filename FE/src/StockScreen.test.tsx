@@ -370,7 +370,7 @@ const aisleStock = () =>
         product({ displayName: "Unknown item (1)", status: "noMatch", barcode: "1" }),
     );
 
-test("aisles start collapsed unless they have something to use first, and the choice is remembered", async () => {
+test("aisles start open, and closing one is remembered on this device (Gary, 2026-10-18)", async () => {
     window.localStorage.removeItem("cupboard.aisles.open");
     const { api } = fakeApi(aisleStock());
     const { unmount } = render(<StockScreen api={api} />);
@@ -379,15 +379,16 @@ test("aisles start collapsed unless they have something to use first, and the ch
     expect(fruit).toHaveAttribute("aria-expanded", "true");
     expect(fruit).toHaveTextContent("Fruit & veg1 to use first2 items");
     const sauces = screen.getByRole("button", { name: /Sauces, oils & condiments/ });
-    expect(sauces).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("Beef Gravy")).not.toBeInTheDocument();
+    expect(sauces).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Beef Gravy")).toBeInTheDocument();
 
     fireEvent.click(sauces);
-    expect(await screen.findByText("Beef Gravy")).toBeInTheDocument();
+    expect(screen.queryByText("Beef Gravy")).not.toBeInTheDocument();
     unmount();
 
     render(<StockScreen api={fakeApi(aisleStock()).api} />);
-    expect(await screen.findByText("Beef Gravy")).toBeInTheDocument(); // remembered on this device
+    await screen.findByText("Leeks");
+    expect(screen.queryByText("Beef Gravy")).not.toBeInTheDocument(); // still closed on this device
 });
 
 test("broken storage falls back to the defaults", async () => {
@@ -400,7 +401,7 @@ test("broken storage falls back to the defaults", async () => {
         "aria-expanded",
         "true",
     );
-    expect(screen.getByRole("button", { name: /Other/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Other/ })).toHaveAttribute("aria-expanded", "true");
     getItem.mockRestore();
 });
 
@@ -419,7 +420,7 @@ test("Use first shows only what needs using, in expanded aisles, and turning it 
     expect(screen.queryByText("Unknown item")).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
-    expect(screen.getByRole("button", { name: /Sauces/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Sauces/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Leeks")).toBeInTheDocument();
 });
 
