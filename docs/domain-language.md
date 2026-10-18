@@ -99,7 +99,7 @@ If you need a term that isn't here, add it as part of the card that introduces i
 - Not to be confused with: **Product lookup**, which resolves a barcode, including asking Open Food Facts.
 - In code: `BarcodeLookup`
 
-**Dismiss** – clearing an unmatched check-out from the scanners screen.
+**Dismiss** – hiding something without changing stock. In the scan feed, dismissing an amber "No match" toast hides it for the whole household (the product stays under Waiting for a name, and a newer check-in shows it again); a "Not in stock" toast is dismissed on that device only. On the scanners screen, dismissing clears an unmatched check-out.
 
 **Lookup failed** – product lookup couldn't reach Open Food Facts (down, rate-limited or timing out). Not a final answer: it's retried until it becomes a match or a no-match, or the product is named. Shown as `Unknown item (<barcode>)` meanwhile.
 - Not to be confused with: **No-match**, which is final.
@@ -164,7 +164,9 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Scan feed** – the live list of toasts in the UI, newest on top, one per scan event.
 
-**Scan feed event** – a live message pushed to every open app about one scan event, keyed by its scan ID: received (grey toast), identified (green), needs identification (yellow), unmatched check-out, or skipped. A hint only; the API is the source of truth.
+**Scan feed event** – a live message pushed to every open app (Azure SignalR), keyed by scan ID: `scanReceived` (grey toast), `scanIdentified` (green), `scanNeedsIdentification` (amber), `checkOutUnmatched` (amber "Not in stock"), or `scanSkipped`; plus `productNamed` and `feedDismissed`, which remove a product's amber toast everywhere. A hint only: the API is the source of truth, and the app catches up from `GET /api/scan-feed` after every reconnect.
+
+**Catch-up** – the app asking the API what the scan feed missed (`GET /api/scan-feed`), on load, after every reconnect and when it comes back to the foreground. It also brings back amber toasts still waiting for a name.
 - Not to be confused with: **Scan event**, the stored record of the scan itself.
 - In code: `ScanFeedEvent` (`ScanReceived`, `ScanIdentified`, `ScanNeedsIdentification`, `CheckOutUnmatched`, `ScanSkipped`), sent through `IScanFeedPublisher`
 

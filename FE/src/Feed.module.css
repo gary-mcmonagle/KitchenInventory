@@ -1,0 +1,121 @@
+/* The live scan feed's toasts (#54), matching project/Main.dc.html. */
+.feed {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Under the estimates line; no space when there are no toasts (the live region stays for screen readers). */
+.feed:not(:empty) {
+    margin-top: 14px;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 6px 12px;
+    border-radius: var(--radius-input);
+    border: 1px solid;
+}
+
+.loading {
+    background: var(--feed-loading-bg);
+    border-color: var(--feed-loading-border);
+    color: var(--feed-loading-fg);
+}
+
+.ok {
+    background: var(--feed-ok-bg);
+    border-color: var(--feed-ok-border);
+    color: var(--feed-ok-fg);
+}
+
+.warn {
+    padding: 6px 4px 6px 12px;
+    background: var(--warn-bg);
+    border-color: var(--feed-warn-border);
+    color: var(--feed-warn-fg);
+}
+
+.icon {
+    flex: none;
+}
+
+.spinner {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin: 2px;
+    border-radius: 9px;
+    border: 3px solid var(--feed-spinner);
+    border-top-color: var(--feed-loading-fg);
+    animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        animation: none;
+    }
+}
+
+.text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.title {
+    font-size: 14px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sub {
+    font-size: 12px;
+}
+
+.identify {
+    flex: none;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--feed-warn-fg);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* Not in the mockup (#54): dismiss, in the amber toast's colours, 44 px square. */
+.dismiss {
+    flex: none;
+    width: var(--touch);
+    height: var(--touch);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--feed-warn-fg);
+    cursor: pointer;
+}
+
+.more {
+    padding-left: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--warn-fg);
+}

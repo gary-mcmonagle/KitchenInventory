@@ -4,6 +4,9 @@ import { ItemScreen, unitLine } from "./ItemScreen";
 import { NameScreen } from "./NameScreen";
 import { StockScreen } from "./StockScreen";
 
+/** Status messages other than the scan feed region (#54). */
+const notFeed = { name: (name: string) => name !== "Scan feed" };
+
 // Dates show the year only when it isn't this year, so pin "today" (only Date is faked; timers stay real).
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -141,7 +144,7 @@ test("check out a unit: toast, then Undo puts it back", async () => {
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Check out unit 2" })));
 
     expect(api.checkOutUnit).toHaveBeenCalledWith("u2");
-    expect(screen.getByRole("status")).toHaveTextContent("Checked out Semi-skimmed milk");
+    expect(screen.getByRole("status", notFeed)).toHaveTextContent("Checked out Semi-skimmed milk");
     expect(screen.queryByRole("button", { name: "Check out unit 2" })).not.toBeInTheDocument(); // reloaded
 
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Undo" })));
@@ -173,7 +176,7 @@ test("a unit already gone says so", async () => {
 
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Check out unit 1" })));
 
-    expect(screen.getByRole("status")).toHaveTextContent("That one's already been checked out.");
+    expect(screen.getByRole("status", notFeed)).toHaveTextContent("That one's already been checked out.");
 });
 
 test("save a date for the chosen unit", async () => {
@@ -187,7 +190,7 @@ test("save a date for the chosen unit", async () => {
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save date" })));
 
     expect(api.setUnitExpiry).toHaveBeenCalledWith("u2", "2026-10-25");
-    expect(screen.getByRole("status")).toHaveTextContent("Saved the date for unit 2.");
+    expect(screen.getByRole("status", notFeed)).toHaveTextContent("Saved the date for unit 2.");
 });
 
 test("one unit: no unit picker", async () => {
@@ -223,7 +226,9 @@ test("change shelf life: the current value is preselected, and saving applies to
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save shelf life" })));
 
     expect(api.setShelfLife).toHaveBeenCalledWith("p-milk", 14);
-    expect(screen.getByRole("status")).toHaveTextContent("Saved. It applies to ones you buy from now on.");
+    expect(screen.getByRole("status", notFeed)).toHaveTextContent(
+        "Saved. It applies to ones you buy from now on.",
+    );
 });
 
 test("a current shelf life that isn't in the list is still offered", async () => {

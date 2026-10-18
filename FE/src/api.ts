@@ -1,5 +1,6 @@
 import { InteractionRequiredAuthError, type IPublicClientApplication } from "@azure/msal-browser";
 import type { AppConfig } from "./config";
+import type { FeedEvent } from "./scanFeed";
 
 /** The API refused this user (403): signed in, but not allowed. */
 export class NoAccessError extends Error {}
@@ -169,6 +170,27 @@ export class ApiClient {
         details: NameDetails,
     ): Promise<{ productId: string; displayName: string }> {
         return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/details`, details);
+    }
+
+    /** What the scan feed missed since <c>since</c>, plus toasts still waiting for a name (#54). */
+    scanFeed(since?: string): Promise<{ generatedAt: string; events: FeedEvent[] }> {
+        const query = since ? `?since=${encodeURIComponent(since)}` : "";
+        return this.get(`/api/scan-feed${query}`);
+    }
+
+    /** Hides a product's amber toast for the household (#54). */
+    dismissFeed(productId: string): Promise<{ productId: string; feedDismissedAt: string }> {
+        return this.send("POST", `/api/scan-feed/${encodeURIComponent(productId)}/dismiss`);
+    }
+
+    /** The scan feed hub's URL; @microsoft/signalr adds /negotiate. */
+    get feedUrl(): string {
+        return `${this.config.apiBaseUrl}/api`;
+    }
+
+    /** A token for the API (the scan feed's negotiate). Sends the user through sign-in again if it can't renew. */
+    accessToken(): Promise<string> {
+        return this.token();
     }
 
     /** Puts a checked-out unit back in stock (idempotent). */
