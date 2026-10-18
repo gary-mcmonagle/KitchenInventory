@@ -81,7 +81,10 @@ public static class BuildDailyDigest
         data.UseFirstLines.Count == 0
             ? null
             : new Section("Use first", [
-                new UseFirstLines(data.UseFirstLines),
+                // Grouped by aisle, with the aisle name as a small heading (#71); lines without an aisle get none.
+                .. data.UseFirstLines.GroupBy(l => l.Aisle).SelectMany(g => g.Key is null
+                    ? new Part[] { new UseFirstLines([.. g]) }
+                    : [new Label(g.Key), new UseFirstLines([.. g])]),
                 new Note("Dates are estimates: the day it was bought plus how long that kind of food usually keeps."),
             ]);
 

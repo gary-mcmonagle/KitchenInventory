@@ -72,10 +72,26 @@ public sealed record StockProduct(
     int OpenedCount = 0,
     int FrozenCount = 0,
     string? SoonestState = null,
-    DateOnly? SoonestStateOn = null);
+    DateOnly? SoonestStateOn = null,
+    string AisleId = "other",
+    string? Icon = null)
+{
+    /// <summary>In Use first: expired or due within <see cref="StockSettings.UseFirstDays"/> (#52).</summary>
+    public bool UseFirst => Section == StockSection.UseFirst;
+}
+
+/// <summary>One aisle of the stock list (#71): its products, use first first, and how many need using.</summary>
+public sealed record StockAisle(string AisleId, string Name, string Icon, int ItemCount, int UseFirstCount, bool AnyExpired, IReadOnlyList<StockProduct> Products);
 
 public sealed record StockView(
-    DateTimeOffset GeneratedAt, int TotalUnits, IReadOnlyList<StockProduct> Products, int UseFirstCount = 0);
+    DateTimeOffset GeneratedAt, int TotalUnits, IReadOnlyList<StockProduct> Products, int UseFirstCount = 0)
+{
+    /// <summary>Known products by aisle, in shop order (#71); empty aisles left out.</summary>
+    public IReadOnlyList<StockAisle> Aisles { get; init; } = [];
+
+    /// <summary>Unknown items (no match, or lookup failed), newest first.</summary>
+    public IReadOnlyList<StockProduct> WaitingForName => [.. Products.Where(p => p.Section == StockSection.WaitingForName)];
+}
 
 /// <summary>
 /// The stock list (#49, #52): in-stock units grouped by product, with counts, already sorted and put in sections so
@@ -121,15 +137,33 @@ public sealed class GetStock(IStockQueries queries, IProductRepository products,
                 group.Count(u => u.Opened),
                 group.Count(u => u.Frozen),
                 soonestState?.State,
-                soonestState?.On));
+                soonestState?.On,
+                Aisles.Of(product?.Aisle?.Id).Id,
+                product?.Icon?.Name));
         }
 
         var sorted = BySoonest(rows.Where(r => r.Section == StockSection.UseFirst))
             .Concat(BySoonest(rows.Where(r => r.Section == StockSection.Later)))
             .Concat(rows.Where(r => r.Section == StockSection.WaitingForName).OrderByDescending(r => r.LatestCheckedInAt))
             .ToList();
-        return new StockView(now, units.Count, sorted, sorted.Count(r => r.Section == StockSection.UseFirst));
+        return new StockView(now, units.Count, sorted, sorted.Count(r => r.Section == StockSection.UseFirst))
+        {
+            Aisles = ByAisle(rows.Where(r => r.Section != StockSection.WaitingForName)),
+        };
     }
+
+    /// <summary>Aisles in shop order; within each, use first (soonest first), then the rest by soonest, then name.</summary>
+    private static List<StockAisle> ByAisle(IEnumerable<StockProduct> known) =>
+        known.GroupBy(r => r.AisleId)
+            .OrderBy(g => Aisles.Order(g.Key))
+            .Select(g =>
+            {
+                var aisle = Aisles.Of(g.Key);
+                var products = BySoonest(g.Where(r => r.UseFirst)).Concat(BySoonest(g.Where(r => !r.UseFirst))).ToList();
+                return new StockAisle(aisle.Id, aisle.Name, aisle.Icon, products.Count, products.Count(p => p.UseFirst),
+                    products.Any(p => p.DaysUntilSoonest < 0), products);
+            })
+            .ToList();
 
     private static IEnumerable<StockProduct> BySoonest(IEnumerable<StockProduct> rows) =>
         rows.OrderBy(r => r.SoonestEstimatedExpiryDate is null)

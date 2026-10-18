@@ -99,6 +99,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ChangeUnitState>(); // #65
         services.AddTransient<UndoUnitStateChange>();
         services.AddTransient<OpenNextUnit>();
+        services.AddTransient<SetProductAisle>(); // #71
+        services.AddTransient<SetProductIcon>(); // #72
         services.AddTransient<SetOpenedShelfLife>();
         services.AddSingleton(sp => StockSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
 

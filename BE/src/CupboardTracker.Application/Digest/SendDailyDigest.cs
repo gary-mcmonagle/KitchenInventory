@@ -77,19 +77,22 @@ public sealed partial class SendDailyDigest(
             Group(checkedOut, Name),
             Group(inStock.Where(IsNamed), Name),
             Group(inStock.Where(u => !IsNamed(u)), Name),
-            UseFirst(inStock.Where(IsNamed), Name, window.Date));
+            UseFirst(inStock.Where(IsNamed), Name, u => known[u.ProductId]?.Aisle?.Id, window.Date));
     }
 
     /// <summary>Named products whose soonest unit is expired or due within the Use first threshold on the digest's
-    /// day, soonest first, then by name.</summary>
-    private List<DigestUseFirstLine> UseFirst(IEnumerable<DigestUnit> named, Func<DigestUnit, string> name, DateOnly today) =>
+    /// day, grouped by aisle in shop order (#71), then soonest first, then by name.</summary>
+    private List<DigestUseFirstLine> UseFirst(
+        IEnumerable<DigestUnit> named, Func<DigestUnit, string> name, Func<DigestUnit, string?> aisle, DateOnly today) =>
         named.GroupBy(u => u.ProductId)
             .Select(g => (Name: name(g.First()), Count: g.Count(), Soonest: g.Min(u => u.EstimatedExpiryDate),
-                Note: g.Where(u => u.EstimatedExpiryDate is not null).MinBy(u => u.EstimatedExpiryDate)?.StateNote))
+                Note: g.Where(u => u.EstimatedExpiryDate is not null).MinBy(u => u.EstimatedExpiryDate)?.StateNote,
+                Aisle: Aisles.Of(aisle(g.First()))))
             .Where(p => p.Soonest is { } soonest && stock.IsUseFirst(EstimatedExpiry.DaysUntil(soonest, today)))
-            .OrderBy(p => p.Soonest)
+            .OrderBy(p => Aisles.Order(p.Aisle.Id))
+            .ThenBy(p => p.Soonest)
             .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(p => new DigestUseFirstLine(p.Name, p.Count, ExpiryBadge.Text(p.Soonest!.Value, today), p.Note))
+            .Select(p => new DigestUseFirstLine(p.Name, p.Count, ExpiryBadge.Text(p.Soonest!.Value, today), p.Note, p.Aisle.Name))
             .ToList();
 
     /// <summary>Counts per name, alphabetical ignoring case.</summary>

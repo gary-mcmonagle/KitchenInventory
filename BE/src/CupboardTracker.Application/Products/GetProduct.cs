@@ -46,7 +46,9 @@ public sealed record ProductView(
     StateShelfLife? Opened = null,
     StateShelfLife? Frozen = null,
     StateShelfLife? Defrosted = null,
-    Storage? UsualStorage = null)
+    Storage? UsualStorage = null,
+    ProductAisle? Aisle = null,
+    ProductIcon? Icon = null)
 {
     public int OpenedCount => InStockUnits.Count(u => u.OpenedOn is not null);
 
@@ -88,7 +90,9 @@ public sealed class GetProduct(
             product.States.Opened,
             product.States.Frozen,
             product.States.Defrosted,
-            product.ShelfLife?.UsualStorage);
+            product.ShelfLife?.UsualStorage,
+            product.Aisle,
+            product.Icon);
     }
 
     private List<ProductUnitView> UnitViews(IEnumerable<Unit> inStock)

@@ -285,3 +285,28 @@ public sealed class UnitStateDocumentTests
         Assert.Equal(note, CosmosDigestQueries.StateNote(row));
     }
 }
+
+public sealed class AisleIconDocumentTests
+{
+    private static readonly DateTimeOffset At = new(2026, 10, 18, 8, 0, 0, TimeSpan.Zero);
+
+    private static JsonObject Stored(JsonObject document) => JsonNode.Parse(document.ToJsonString())!.AsObject();
+
+    [Fact]
+    public void Aisle_and_icon_round_trip_including_an_unsure_icon_and_let_jev_choose_removes_them()
+    {
+        var product = Product.Loose(Guid.NewGuid(), "Gravy", null, null, ProductSource.Manual, Guid.NewGuid(), At) with
+        {
+            Aisle = new ProductAisle("saucesOils", "jev", 0.6, At), Icon = new ProductIcon(null, "jev", 0.28, At),
+        };
+
+        var document = Stored(ProductDocument.Write(product, null));
+        Assert.Equal(("saucesOils", "jev", false), (document["aisle"]!.GetValue<string>(), document["iconSource"]!.GetValue<string>(), document.ContainsKey("icon")));
+        var read = ProductDocument.ToProduct(document);
+        Assert.Equal((product.Aisle, product.Icon), (read.Aisle, read.Icon));
+
+        var cleared = Stored(ProductDocument.Write(read.WithManualIcon(null, At), document));
+        Assert.False(cleared.ContainsKey("iconSource") || cleared.ContainsKey("iconConfidence"));
+        Assert.True(ProductDocument.ToProduct(cleared).NeedsClassification);
+    }
+}

@@ -7,7 +7,8 @@ using Microsoft.Extensions.Logging;
 namespace CupboardTracker.Application.ShelfLives;
 
 /// <summary>What one run did.</summary>
-public sealed record ShelfLifeRun(int Estimated, int LowConfidence, int UnitsFilled, bool Stopped, int StatesEstimated = 0, int PendingFilled = 0);
+public sealed record ShelfLifeRun(
+    int Estimated, int LowConfidence, int UnitsFilled, bool Stopped, int StatesEstimated = 0, int PendingFilled = 0, int Classified = 0);
 
 /// <summary>
 /// The shelf-life timer (#52). Each run:
@@ -19,7 +20,8 @@ public sealed record ShelfLifeRun(int Estimated, int LowConfidence, int UnitsFil
 /// <item>asks the opened / frozen / defrosted questions for products that have a shelf life but no state estimates
 /// (#65), a few per run: new products shortly after their shelf life, and on the first runs after deploy, all
 /// existing stock;</item>
-/// <item>fills in units opened, frozen or defrosted before their product had that estimate.</item>
+/// <item>fills in units opened, frozen or defrosted before their product had that estimate;</item>
+/// <item>gives known products an aisle and an icon (#71, #72), in one request each, a few per run.</item>
 /// </list>
 /// Check-in and naming never wait for it. If the estimator is down, products stay unestimated and the next run tries
 /// again. Everything it writes is derived, and re-running changes nothing that's already done.
@@ -32,7 +34,9 @@ public sealed partial class EstimateShelfLives(
     TimeProvider clock,
     ILogger<EstimateShelfLives> logger)
 {
-    public const int MaxPerRun = 20;
+    /// <summary>Products per step per run. 40 so a stock take of a couple of hundred products is filled in within
+    /// the evening (a run takes a few minutes at most; timer runs never overlap).</summary>
+    public const int MaxPerRun = 40;
 
     public async Task<ShelfLifeRun> ExecuteAsync(CancellationToken cancellationToken)
     {
@@ -41,12 +45,64 @@ public sealed partial class EstimateShelfLives(
         var (states, statesStopped) = stopped ? (0, true) : await EstimateStatesAsync(cancellationToken);
         var pendingFilled = await FillPendingAsync(cancellationToken);
         stopped |= statesStopped;
-        if (estimated > 0 || filled > 0 || states > 0 || pendingFilled > 0 || stopped)
+        var (classified, classifyStopped) = stopped ? (0, true) : await ClassifyAsync(cancellationToken);
+        stopped |= classifyStopped;
+        if (estimated > 0 || filled > 0 || states > 0 || pendingFilled > 0 || classified > 0 || stopped)
         {
-            LogRun(estimated, low, filled, states, pendingFilled, stopped);
+            LogRun(estimated, low, filled, states, pendingFilled, classified, stopped);
         }
 
-        return new ShelfLifeRun(estimated, low, filled, stopped, states, pendingFilled);
+        return new ShelfLifeRun(estimated, low, filled, stopped, states, pendingFilled, classified);
+    }
+
+    /// <summary>Aisle and icon (#71, #72): asks only what's missing; a manual choice is never overwritten.</summary>
+    private async Task<(int Classified, bool Stopped)> ClassifyAsync(CancellationToken cancellationToken)
+    {
+        var pending = await products.GetNeedingClassificationAsync(MaxPerRun, cancellationToken);
+        var classified = 0;
+        foreach (var product in pending)
+        {
+            var result = await estimator.ClassifyAsync(
+                Describe(product), product.ShelfLife?.UsualStorage, product.Aisle is null, product.Icon is null, cancellationToken);
+            switch (result)
+            {
+                case ClassificationResult.Classified { Classification: var c }:
+                    if (await TrySetClassificationAsync(product.ProductId, c, cancellationToken))
+                    {
+                        classified++;
+                        LogClassified(product.ProductId, product.DisplayName, c.AisleId, c.Icon, c.IconConfidence);
+                    }
+
+                    break;
+                case ClassificationResult.NotConfigured:
+                    LogNotConfigured();
+                    return (classified, true);
+                case ClassificationResult.Unavailable { Reason: var reason }:
+                    LogUnavailable(reason, pending.Count - classified);
+                    return (classified, true);
+                case ClassificationResult.Failed { Reason: var reason }:
+                    LogFailed(product.ProductId, reason);
+                    return (classified, true);
+            }
+        }
+
+        return (classified, false);
+    }
+
+    private async Task<bool> TrySetClassificationAsync(Guid productId, Classification c, CancellationToken cancellationToken)
+    {
+        if (await products.GetVersionedAsync(productId, cancellationToken) is not { Value.NeedsClassification: true } current)
+        {
+            return false;
+        }
+
+        var now = clock.GetUtcNow();
+        var product = current.Value;
+        var aisle = product.Aisle ?? (Aisles.Find(c.AisleId) is { } a ? new ProductAisle(a.Id, ShelfLife.JevSource, c.AisleConfidence, now) : null);
+        var icon = product.Icon ?? (c.Icon is null && c.IconConfidence <= 0 ? null : new ProductIcon(
+            ProductIcons.IsKnown(c.Icon) && c.IconConfidence >= ProductIcons.MinConfidence ? c.Icon : null,
+            ShelfLife.JevSource, c.IconConfidence, now));
+        return await products.TryReplaceAsync(current, product with { Aisle = aisle, Icon = icon }, cancellationToken);
     }
 
     private async Task<(int Estimated, bool Stopped)> EstimateStatesAsync(CancellationToken cancellationToken)
@@ -191,8 +247,12 @@ public sealed partial class EstimateShelfLives(
     private partial void LogEstimated(Guid productId, string displayName, int days, Storage storage, double confidence, bool lowConfidence);
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Shelf-life run: {Estimated} products estimated ({Low} low confidence), {Filled} units given an estimated expiry date, {States} products given state estimates, {Pending} pending units filled, stopped early: {Stopped}.")]
-    private partial void LogRun(int estimated, int low, int filled, int states, int pending, bool stopped);
+        Message = "Shelf-life run: {Estimated} products estimated ({Low} low confidence), {Filled} units given an estimated expiry date, {States} products given state estimates, {Pending} pending units filled, {Classified} products given an aisle or icon, stopped early: {Stopped}.")]
+    private partial void LogRun(int estimated, int low, int filled, int states, int pending, int classified, bool stopped);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Aisle and icon for {ProductId} ({DisplayName}): aisle {Aisle}, icon {Icon} (confidence {IconConfidence:0.00}).")]
+    private partial void LogClassified(Guid productId, string displayName, string? aisle, string? icon, double iconConfidence);
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "State estimates for {ProductId} ({DisplayName}): opened {OpenedDays} days in the {OpenedStorage}, frozen {FrozenDays} days, defrosted {DefrostedDays} days in the {DefrostedStorage}.")]

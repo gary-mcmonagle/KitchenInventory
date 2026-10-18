@@ -33,6 +33,18 @@ internal sealed class FakeEstimator : IShelfLifeEstimator
         StateCalls.Add((product, usualStorage));
         return Task.FromResult(StateAnswer(product));
     }
+
+    public List<(ProductDescription Product, Storage? Usual, bool Aisle, bool Icon)> ClassifyCalls { get; } = [];
+
+    public Func<ProductDescription, ClassificationResult> ClassifyAnswer { get; set; } =
+        _ => new ClassificationResult.Classified(new Classification("dairyEggs", 0.8, "milk", 0.7));
+
+    public Task<ClassificationResult> ClassifyAsync(
+        ProductDescription product, Storage? usualStorage, bool aisle, bool icon, CancellationToken cancellationToken)
+    {
+        ClassifyCalls.Add((product, usualStorage, aisle, icon));
+        return Task.FromResult(ClassifyAnswer(product));
+    }
 }
 
 public sealed class EstimateShelfLivesTests
@@ -74,7 +86,7 @@ public sealed class EstimateShelfLivesTests
 
         var run = await UseCase().ExecuteAsync(CancellationToken.None);
 
-        Assert.Equal(new ShelfLifeRun(1, 0, 2, false, StatesEstimated: 1), run); // and its state estimates (#65)
+        Assert.Equal(new ShelfLifeRun(1, 0, 2, false, StatesEstimated: 1, Classified: 1), run); // and its states (#65), aisle and icon (#71, #72)
         var call = Assert.Single(estimator.Calls); // once per product, not per unit
         Assert.Equal(("SEMI-SKIMMED BRITISH MILK", "Dairy Manor", "2.272 L"), (call.Name, call.Brand, call.Size));
         Assert.Equal(["en:dairies", "en:milks"], call.CategoryTags);

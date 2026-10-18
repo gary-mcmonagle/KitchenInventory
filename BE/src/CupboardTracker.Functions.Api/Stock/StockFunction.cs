@@ -28,35 +28,53 @@ public sealed class StockFunction(GetStock getStock)
         generatedAt = Timestamp(view.GeneratedAt),
         totalUnits = view.TotalUnits,
         useFirstCount = view.UseFirstCount,
-        products = view.Products.Select(p => new
+        products = view.Products.Select(Row),
+        // Known products by aisle, in shop order (#71), and unknown items on their own.
+        aisles = view.Aisles.Select(a => new
         {
-            productId = p.ProductId,
-            barcode = p.Barcode,
-            displayName = p.DisplayName,
-            brand = p.Brand,
-            size = p.Size,
-            count = p.Count,
-            latestCheckedInAt = Timestamp(p.LatestCheckedInAt),
-            status = p.Status switch
-            {
-                StockProductStatus.Known => "known",
-                StockProductStatus.NoMatch => "noMatch",
-                _ => "lookupFailed",
-            },
-            section = p.Section switch
-            {
-                StockSection.UseFirst => "useFirst",
-                StockSection.Later => "later",
-                _ => "waitingForName",
-            },
-            soonestEstimatedExpiryDate = p.SoonestEstimatedExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            daysUntilSoonest = p.DaysUntilSoonest,
-            shelfLifeDays = p.ShelfLifeDays,
-            openedCount = p.OpenedCount,
-            frozenCount = p.FrozenCount,
-            soonestState = p.SoonestState,
-            soonestStateOn = p.SoonestStateOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            aisleId = a.AisleId,
+            name = a.Name,
+            icon = a.Icon,
+            itemCount = a.ItemCount,
+            useFirstCount = a.UseFirstCount,
+            anyExpired = a.AnyExpired,
+            products = a.Products.Select(Row),
         }),
+        waitingForName = view.WaitingForName.Select(Row),
+    };
+
+
+    private static object Row(StockProduct p) => new
+    {
+        productId = p.ProductId,
+        barcode = p.Barcode,
+        displayName = p.DisplayName,
+        brand = p.Brand,
+        size = p.Size,
+        count = p.Count,
+        latestCheckedInAt = Timestamp(p.LatestCheckedInAt),
+        status = p.Status switch
+        {
+            StockProductStatus.Known => "known",
+            StockProductStatus.NoMatch => "noMatch",
+            _ => "lookupFailed",
+        },
+        section = p.Section switch
+        {
+            StockSection.UseFirst => "useFirst",
+            StockSection.Later => "later",
+            _ => "waitingForName",
+        },
+        soonestEstimatedExpiryDate = p.SoonestEstimatedExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        daysUntilSoonest = p.DaysUntilSoonest,
+        shelfLifeDays = p.ShelfLifeDays,
+        openedCount = p.OpenedCount,
+        frozenCount = p.FrozenCount,
+        soonestState = p.SoonestState,
+        soonestStateOn = p.SoonestStateOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        aisleId = p.AisleId,
+        icon = p.Icon,
+        useFirst = p.UseFirst,
     };
 
     private static string Timestamp(DateTimeOffset value) =>

@@ -100,7 +100,7 @@ public sealed class SendDailyDigestTests
         var data = await UseCase().GatherAsync(DigestWindow.EndingOn(today, TimeZoneInfo.Utc), CancellationToken.None);
 
         Assert.Equal(
-            [new DigestUseFirstLine("Bisto Gravy", 1, "Est. expired"), new DigestUseFirstLine("pg tips", 2, "Est. 3 days")],
+            [new DigestUseFirstLine("Bisto Gravy", 1, "Est. expired", Aisle: "Other"), new DigestUseFirstLine("pg tips", 2, "Est. 3 days", Aisle: "Other")],
             data.UseFirstLines);
     }
 

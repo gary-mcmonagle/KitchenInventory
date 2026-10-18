@@ -133,6 +133,9 @@ internal sealed class FakeProducts : IProductRepository
     public Task<IReadOnlyList<Product>> GetNeedingShelfLifeAsync(int max, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.NeedsShelfLife).Take(max).ToList());
 
+    public Task<IReadOnlyList<Product>> GetNeedingClassificationAsync(int max, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.NeedsClassification).Take(max).ToList());
+
     public Task<IReadOnlyList<Product>> GetNeedingStateEstimatesAsync(int max, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.NeedsStateEstimates).Take(max).ToList());
 

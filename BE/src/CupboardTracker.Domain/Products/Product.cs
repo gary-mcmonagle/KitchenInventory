@@ -44,8 +44,21 @@ public sealed record Product(
     Guid? EditedBy = null,
     DateTimeOffset? FeedDismissedAt = null,
     DateTimeOffset? LastAddedAt = null,
-    ProductStateEstimates? StateEstimates = null)
+    ProductStateEstimates? StateEstimates = null,
+    ProductAisle? Aisle = null,
+    ProductIcon? Icon = null)
 {
+    /// <summary>Known, and Jev hasn't given it an aisle or an icon yet (#71, #72): one request asks for both.</summary>
+    public bool NeedsClassification => Status == ProductStatus.Known && (Aisle is null || Icon is null);
+
+    /// <summary>An aisle chosen in Edit details (#71): Jev never overwrites it.</summary>
+    public Product WithManualAisle(string aisleId, DateTimeOffset at) =>
+        this with { Aisle = new ProductAisle(aisleId, ShelfLife.ManualSource, 1, at) };
+
+    /// <summary>An icon chosen in Edit details (#72), or <c>null</c> to let Jev choose again on the next run.</summary>
+    public Product WithManualIcon(string? icon, DateTimeOffset at) =>
+        this with { Icon = icon is null ? null : new ProductIcon(icon, ShelfLife.ManualSource, 1, at) };
+
     /// <summary>Has a shelf life but Jev hasn't answered the opened / frozen / defrosted questions yet (#65).</summary>
     public bool NeedsStateEstimates => Status == ProductStatus.Known && ShelfLife is not null && StateEstimates?.EstimatedAt is null;
 

@@ -208,7 +208,7 @@ public sealed class UnitStateUseCaseTests
 
         var data = await digest.GatherAsync(DigestWindow.EndingOn(new DateOnly(2026, 10, 18), TimeZoneInfo.Utc), CancellationToken.None);
 
-        Assert.Equal([new DigestUseFirstLine("Pesto", 2, "Est. today", "opened 12 Oct")], data.UseFirstLines);
+        Assert.Equal([new DigestUseFirstLine("Pesto", 2, "Est. today", "opened 12 Oct", "Other")], data.UseFirstLines);
         Assert.Contains("Pesto (opened 12 Oct) ×2 · Est. today", BuildDailyDigest.Build(data).PlainText, StringComparison.Ordinal);
     }
 

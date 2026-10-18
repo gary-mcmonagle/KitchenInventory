@@ -40,6 +40,9 @@ public interface IProductRepository
     /// <summary>Known products with a shelf life that Jev hasn't given state estimates yet (#65), up to <paramref name="max"/>.</summary>
     Task<IReadOnlyList<Product>> GetNeedingStateEstimatesAsync(int max, CancellationToken cancellationToken);
 
+    /// <summary>Known products with no aisle or no icon yet (#71, #72), up to <paramref name="max"/>.</summary>
+    Task<IReadOnlyList<Product>> GetNeedingClassificationAsync(int max, CancellationToken cancellationToken);
+
     /// <summary>Stores a shelf life, only if the product is still known with none (ETag-guarded). False otherwise.</summary>
     Task<bool> TrySetShelfLifeAsync(Product updated, CancellationToken cancellationToken);
 

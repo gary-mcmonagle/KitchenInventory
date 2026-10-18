@@ -165,6 +165,11 @@ public sealed class ProductFunctions(
         defrosted = StateJson(view.Defrosted),
         openedCount = view.OpenedCount,
         frozenCount = view.FrozenCount,
+        // Aisle and icon (#71, #72): the aisle ID (null until Jev has answered) and the icon name (null: use the aisle's).
+        aisleId = view.Aisle?.Id,
+        aisleSource = view.Aisle?.Source,
+        icon = view.Icon?.Name,
+        iconSource = view.Icon?.Source,
         units = view.InStockUnits.Select(UnitJson),
     };
 

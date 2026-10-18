@@ -153,6 +153,15 @@ public sealed class CosmosProductRepository(CosmosContainers containers, TimePro
         return documents.Select(ProductDocument.ToProduct).ToList();
     }
 
+    public async Task<IReadOnlyList<Product>> GetNeedingClassificationAsync(int max, CancellationToken cancellationToken)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.type = 'product' AND c.status = 'known' "
+            + "AND (NOT IS_DEFINED(c.aisle) OR IS_NULL(c.aisle) OR NOT IS_DEFINED(c.iconSource) OR IS_NULL(c.iconSource))");
+        var documents = await CosmosJson.QueryAsync(Products, query, partitionKey: null, max, cancellationToken);
+        return documents.Select(ProductDocument.ToProduct).ToList();
+    }
+
     public async Task<IReadOnlyList<Product>> GetNeedingStateEstimatesAsync(int max, CancellationToken cancellationToken)
     {
         var query = new QueryDefinition(
@@ -264,8 +273,44 @@ internal static class ProductDocument
             document["stateEstimatedAt"] = CosmosJson.Timestamp(statesAt);
         }
 
+        // Aisle and icon (#71, #72): set or removed, so "Let Jev choose" clears the icon fields.
+        Replace(document, "aisle", product.Aisle?.Id);
+        Replace(document, "aisleSource", product.Aisle?.Source);
+        Replace(document, "aisleConfidence", product.Aisle is { } aisle ? Math.Round(aisle.Confidence, 3) : null);
+        Replace(document, "aisleEstimatedAt", product.Aisle is { } a ? CosmosJson.Timestamp(a.At) : null);
+        Replace(document, "icon", product.Icon?.Name);
+        Replace(document, "iconSource", product.Icon?.Source);
+        Replace(document, "iconConfidence", product.Icon is { } icon ? Math.Round(icon.Confidence, 3) : null);
+        Replace(document, "iconEstimatedAt", product.Icon is { } i ? CosmosJson.Timestamp(i.At) : null);
         return document;
     }
+
+    private static void Replace(JsonObject document, string name, JsonNode? value)
+    {
+        if (value is null)
+        {
+            document.Remove(name);
+        }
+        else
+        {
+            document[name] = value;
+        }
+    }
+
+    private static ProductAisle? ReadAisle(JsonObject d) =>
+        CosmosJson.Text(d["aisle"]) is { } id
+            ? new ProductAisle(id, CosmosJson.Text(d["aisleSource"]) ?? ShelfLife.JevSource,
+                d["aisleConfidence"] is JsonValue c && c.TryGetValue<double>(out var conf) ? conf : 0,
+                CosmosJson.ParseTimestamp(d["aisleEstimatedAt"]) ?? DateTimeOffset.MinValue)
+            : null;
+
+    /// <summary>Present once Jev has answered (or Gary chose), even with no icon (below the confidence threshold).</summary>
+    private static ProductIcon? ReadIcon(JsonObject d) =>
+        CosmosJson.Text(d["iconSource"]) is { } source
+            ? new ProductIcon(CosmosJson.Text(d["icon"]), source,
+                d["iconConfidence"] is JsonValue c && c.TryGetValue<double>(out var conf) ? conf : 0,
+                CosmosJson.ParseTimestamp(d["iconEstimatedAt"]) ?? DateTimeOffset.MinValue)
+            : null;
 
     private static void WriteState(JsonObject document, string prefix, StateShelfLife? state, bool withStorage)
     {
@@ -348,7 +393,9 @@ internal static class ProductDocument
             Guid.TryParse(CosmosJson.Text(document["editedBy"]), out var editedBy) ? editedBy : null,
             CosmosJson.ParseTimestamp(document["feedDismissedAt"]),
             CosmosJson.ParseTimestamp(document["lastAddedAt"]),
-            ReadStates(document));
+            ReadStates(document),
+            ReadAisle(document),
+            ReadIcon(document));
     }
 
     private static ShelfLife? ReadShelfLife(JsonObject document)

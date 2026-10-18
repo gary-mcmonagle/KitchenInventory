@@ -59,6 +59,85 @@ public sealed class JevShelfLifeEstimator(JevClient client, JevOptions options) 
         };
     }
 
+    internal const string IconInstructions =
+        "Pick the icon that best shows what this food or drink product is, so someone can recognise it at a glance "
+        + "in a list of kitchen stock. Choose the closest kind of food, not the brand.";
+
+    /// <summary>Aisle and icon (#71, #72): a choice over the aisles and one over the curated icons, in one request,
+    /// asking only what's wanted (spike #60's wording).</summary>
+    public async Task<ClassificationResult> ClassifyAsync(
+        ProductDescription product, Storage? usualStorage, bool aisle, bool icon, CancellationToken cancellationToken)
+    {
+        if (!options.IsConfigured)
+        {
+            return new ClassificationResult.NotConfigured();
+        }
+
+        var state = State(product);
+        if (usualStorage is { } storage)
+        {
+            state["storage"] = StorageName(storage);
+        }
+
+        return await client.AskAsync(state, ClassificationQuestions(aisle, icon), cancellationToken) switch
+        {
+            JevResponse.Answered { Answers: var answers } => ReadClassification(answers),
+            JevResponse.Unavailable { Reason: var reason } => new ClassificationResult.Unavailable(reason),
+            JevResponse.Refused { Reason: var reason } => new ClassificationResult.Failed(reason),
+            var other => throw new InvalidOperationException($"Unexpected Jev response {other}."),
+        };
+    }
+
+    internal static JsonObject ClassificationQuestions(bool aisle, bool icon)
+    {
+        var questions = new JsonObject();
+        if (aisle)
+        {
+            var criteria = new JsonObject();
+            foreach (var a in Aisles.All)
+            {
+                criteria[a.Id] = a.Description;
+            }
+
+            questions["aisle"] = new JsonObject
+            {
+                ["type"] = "choice",
+                ["instructions"] = "Which supermarket aisle this product would be found in.",
+                ["criteria"] = criteria,
+            };
+        }
+
+        if (icon)
+        {
+            var criteria = new JsonObject();
+            foreach (var name in ProductIcons.Names)
+            {
+                criteria[name] = name.Replace('-', ' ');
+            }
+
+            questions["icon"] = new JsonObject { ["type"] = "choice", ["instructions"] = IconInstructions, ["criteria"] = criteria };
+        }
+
+        return questions;
+    }
+
+    internal static ClassificationResult ReadClassification(JsonObject answers)
+    {
+        static (string? Choice, double Confidence) Choice(JsonNode? answer) =>
+            answer is JsonObject o && o["choice"] is JsonValue c && c.TryGetValue<string>(out var choice)
+                ? (choice, o["confidence"] is JsonValue v && v.TryGetValue<double>(out var conf) ? conf : 0)
+                : (null, 0);
+
+        var (aisle, aisleConfidence) = Choice(answers["aisle"]);
+        var (icon, iconConfidence) = Choice(answers["icon"]);
+        if (answers["aisle"] is not null && Aisles.Find(aisle) is null)
+        {
+            return new ClassificationResult.Failed($"unknown aisle answer {aisle}");
+        }
+
+        return new ClassificationResult.Classified(new Classification(aisle, aisleConfidence, icon, iconConfidence));
+    }
+
     internal static JsonObject StateQuestions() => new()
     {
         ["opened_storage"] = Choice("Where this product should be kept at home once it has been opened.", withFreezer: true),

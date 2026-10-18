@@ -261,4 +261,26 @@ public sealed class JevTests
 
         Assert.IsType<StateEstimatesResult.Failed>(JevShelfLifeEstimator.ReadStates(answers));
     }
+
+    [Fact]
+    public async Task Aisle_and_icon_go_in_one_request_asking_only_whats_wanted()
+    {
+        var (estimator, handler) = Make(null, _ => Status(200, """
+            {"model":"jev-1.13.0","answers":{"aisle":{"type":"choice","choice":"bakery","confidence":0.91},"icon":{"type":"choice","choice":"bread","confidence":0.83}}}
+            """));
+
+        var result = await estimator.ClassifyAsync(NaanProduct, Storage.Cupboard, aisle: true, icon: true, CancellationToken.None);
+
+        Assert.Equal(new Classification("bakery", 0.91, "bread", 0.83), Assert.IsType<ClassificationResult.Classified>(result).Classification);
+        var json = JsonNode.Parse(Assert.Single(handler.Requests).Body)!;
+        Assert.Equal(14, json["questions"]!["aisle"]!["criteria"]!.AsObject().Count);
+        Assert.Equal(131, json["questions"]!["icon"]!["criteria"]!.AsObject().Count);
+        Assert.Equal("cupboard", json["state"]!["storage"]!.GetValue<string>());
+        Assert.Equal(["icon"], JevShelfLifeEstimator.ClassificationQuestions(aisle: false, icon: true).Select(q => q.Key));
+    }
+
+    [Fact]
+    public void An_aisle_answer_that_isnt_an_aisle_is_a_failure() =>
+        Assert.IsType<ClassificationResult.Failed>(JevShelfLifeEstimator.ReadClassification(
+            JsonNode.Parse("""{"aisle":{"type":"choice","choice":"garden","confidence":0.9}}""")!.AsObject()));
 }
