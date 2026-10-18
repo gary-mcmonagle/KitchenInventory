@@ -78,3 +78,14 @@ test("shelf life in words, and the bought note", async () => {
     expect(boughtNote("2026-10-15", 5)).toBe("Bought 10 Oct · keeps about 5 days");
     expect(boughtNote("2027-01-02", 7)).toBe("Bought 26 Dec · keeps about 7 days");
 });
+
+test("item detail dates show the year only when it isn't this year", async () => {
+    const { longDate, shortDate } = await import("./format");
+    const now = new Date("2026-10-18T09:00:00Z");
+    expect(longDate("2026-10-20", now)).toBe("Tuesday 20 October");
+    expect(longDate("2028-10-16", now)).toBe("Monday 16 October 2028");
+    expect(shortDate("2026-10-20", now)).toBe("20 Oct");
+    expect(shortDate("2027-04-15", now)).toBe("15 Apr 2027");
+    // New Year's Eve, 23:30 UTC on 31 Dec is still 31 Dec in the UK (GMT).
+    expect(shortDate("2027-01-02", new Date("2026-12-31T23:30:00Z"))).toBe("2 Jan 2027");
+});

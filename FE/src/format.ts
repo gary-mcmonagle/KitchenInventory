@@ -85,21 +85,28 @@ export function boughtNote(soonestIsoDate: string, shelfLifeDays: number): strin
     return `Bought ${date} · keeps about ${keepsAbout(shelfLifeDays)}`;
 }
 
-/** "Sunday 18 October", from a YYYY-MM-DD date. */
-export function longDate(isoDate: string): string {
+/** The year in the UK today. */
+function ukYear(now: Date): string {
+    return now.toLocaleDateString("en-GB", { year: "numeric", timeZone: UK });
+}
+
+/** "Sunday 18 October", from a YYYY-MM-DD date; with the year ("Monday 16 October 2028") when it isn't this year. */
+export function longDate(isoDate: string, now: Date = new Date()): string {
     return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("en-GB", {
         weekday: "long",
         day: "numeric",
         month: "long",
+        year: isoDate.slice(0, 4) === ukYear(now) ? undefined : "numeric",
         timeZone: "UTC",
     });
 }
 
-/** "18 Oct", from a YYYY-MM-DD date. */
-export function shortDate(isoDate: string): string {
+/** "18 Oct", from a YYYY-MM-DD date; "16 Oct 2028" when it isn't this year. */
+export function shortDate(isoDate: string, now: Date = new Date()): string {
     return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("en-GB", {
         day: "numeric",
         month: "short",
+        year: isoDate.slice(0, 4) === ukYear(now) ? undefined : "numeric",
         timeZone: "UTC",
     });
 }
