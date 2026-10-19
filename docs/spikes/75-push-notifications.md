@@ -8,6 +8,8 @@ Can Cupboard Tracker send **push notifications to household phones** from the we
 
 ## Summary
 
+> **Decision (Gary, 2026-10-19): option A.** Send directly from the API Function app with our own Web Push sender, not Notification Hubs. Gary asked to favour Azure; this route is all Azure (Function app, Key Vault, Cosmos). Notification Hubs was ruled out because its web push doesn't reach iOS, and because it only accepts shared access keys (no managed identity), which breaks the no-keys rule.
+
 - **Yes, including iPhone.** It uses the standard **Web Push** API with a **service worker**.
   - **iPhone and iPad:** the app has to be added to the **Home Screen** first, and needs iOS/iPadOS **16.4 or later**. Notifications are allowed from inside that installed app.
   - **Android, Mac and PC:** works straight from the browser.
@@ -90,6 +92,7 @@ What it needs:
 | Bicep | Only the Key Vault secret reference and a container | `Microsoft.NotificationHubs` plus VAPID credentials on the hub |
 | Code | ~150 lines: `IPushSender` in Application, `WebPushSender` in Infrastructure | An SDK, still needs our own subscription storage |
 | Cost | £0 | Free tier £0, but no SLA |
+| Auth | Managed identity everywhere; the only secret is our own VAPID private key in Key Vault | **Shared access keys only** (SAS); no managed identity [14] |
 
 **Library check:**
 
@@ -295,3 +298,4 @@ Also needed from Gary: **the iPhone's iOS version** (Settings → General → Ab
 11. Apple's push service requires `aes128gcm` and VAPID (third-party, confirmed in a library's release notes; no primary Apple statement found): https://newreleases.io/project/npm/@block65/webcrypto-web-push/release/2.0.0 ; RFC 8291 (encryption, test vector in section 5): https://www.rfc-editor.org/rfc/rfc8291 ; RFC 8292 (VAPID): https://www.rfc-editor.org/rfc/rfc8292
 12. NuGet, `Rask.WebPush` 0.23.0: https://www.nuget.org/packages/Rask.WebPush/
 13. web.dev, *Push notifications overview* (permission from a gesture, push services, encryption, TTL, urgency, topic): https://web.dev/articles/push-notifications-overview
+14. Microsoft Learn, *Notification Hubs security model* (shared access signatures with keys on the hub): https://learn.microsoft.com/azure/notification-hubs/notification-hubs-push-notification-security
