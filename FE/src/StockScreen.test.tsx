@@ -192,8 +192,12 @@ test("Check out and the name link on named rows, Name it on unnamed rows, nothin
             .getAllByRole("button")
             .map((b) => b.textContent),
     ).toEqual(["Name it"]);
-    // Only the known product's name is a link, to item detail (#53).
-    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual(["Beef Gravy"]);
+    // In the list, only the known product's name is a link, to item detail (#53); the header has Scanners and Add (#87).
+    expect(screen.getAllByRole("link").map((l) => l.getAttribute("aria-label") ?? l.textContent)).toEqual([
+        "Scanners and notifications",
+        "Add",
+        "Beef Gravy",
+    ]);
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
 });

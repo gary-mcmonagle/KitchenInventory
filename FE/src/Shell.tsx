@@ -4,6 +4,7 @@ import styles from "./App.module.css";
 import { AddScreen } from "./AddScreen";
 import { BottomNav } from "./BottomNav";
 import { ItemScreen } from "./ItemScreen";
+import { ListScreen } from "./ListScreen";
 import { NameScreen } from "./NameScreen";
 import { refreshPushSubscription } from "./push";
 import { RecipesScreen } from "./RecipesScreen";
@@ -13,6 +14,7 @@ import {
     matchEditPath,
     matchItemPath,
     matchNamePath,
+    LIST_PATH,
     RECIPES_PATH,
     SCANNERS_PATH,
     usePath,
@@ -66,6 +68,11 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                 <AddScreen api={api} />
             ) : assigning ? (
                 <AddScreen key={assigning} api={api} assignScanId={assigning} />
+            ) : path === LIST_PATH ? (
+                <>
+                    <ListScreen />
+                    <BottomNav current="list" />
+                </>
             ) : path === RECIPES_PATH ? (
                 <>
                     <RecipesScreen api={api} />
@@ -74,7 +81,7 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
             ) : path === SCANNERS_PATH ? (
                 <>
                     <ScannersScreen api={api} />
-                    <BottomNav current="scanners" />
+                    <BottomNav current="stock" />
                 </>
             ) : (
                 <>

@@ -21,7 +21,8 @@ import {
 import { AISLES, type AisleInfo } from "./aisles";
 import { takeFlash } from "./flash";
 import { ProductTile } from "./ProductTile";
-import { itemPath, namePath, navigate } from "./router";
+import { ADD_PATH, itemPath, namePath, navigate, SCANNERS_PATH } from "./router";
+import { scannerLabel, scannerStatus, type ScannerStatus } from "./scannerStatus";
 import styles from "./Stock.module.css";
 import { ScanFeedView } from "./ScanFeedView";
 import { signalRConnection, useScanFeed, type FeedConnection } from "./useScanFeed";
@@ -148,6 +149,7 @@ export function StockScreen({
     feedConnection?: (api: ApiClient) => FeedConnection;
 }) {
     const [stock, setStock] = useState<Stock | null>(null);
+    const [status, setStatus] = useState<ScannerStatus | null>(null);
     const [phase, setPhase] = useState<Phase>("loading");
     const [refreshing, setRefreshing] = useState(false);
     const [offline, setOffline] = useState(() => !navigator.onLine);
@@ -271,6 +273,11 @@ export function StockScreen({
                 return;
             }
             if (!quiet) setRefreshing(true);
+            // The Scanners button's dot (#87) refreshes with the stock list; it never holds the list up.
+            Promise.resolve()
+                .then(() => api.scanners())
+                .then((s) => live.current && setStatus(scannerStatus(s)))
+                .catch(() => undefined);
             try {
                 const next = await api.stock();
                 if (!live.current) return;
@@ -359,13 +366,70 @@ export function StockScreen({
             </div>
 
             <header className={styles.header}>
-                <div className={styles.date}>{todayLine()}</div>
-                <h1 className={styles.title}>Cupboard</h1>
-                {stock && (
-                    <div className={styles.summary}>
-                        {`${itemsLabel(stock.totalUnits)} · ${stock.useFirstCount} to use first`}
+                <div className={styles.headerRow}>
+                    <div className={styles.headerText}>
+                        <div className={styles.date}>{todayLine()}</div>
+                        <h1 className={styles.title}>Cupboard</h1>
+                        {stock && (
+                            <div className={styles.summary}>
+                                {`${itemsLabel(stock.totalUnits)} · ${stock.useFirstCount} to use first`}
+                            </div>
+                        )}
                     </div>
-                )}
+                    {/* Scanners and Add live here since the three-tab nav (#87). */}
+                    <a
+                        href={SCANNERS_PATH}
+                        className={styles.scannersButton}
+                        aria-label={scannerLabel(status)}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            navigate(SCANNERS_PATH);
+                        }}
+                    >
+                        <svg
+                            width="22"
+                            height="22"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M4 7v10M7 7v10M10 7v10M14 7v10M17 7v10M20 7v10" />
+                        </svg>
+                        {status && status.level !== "none" && (
+                            <span
+                                className={`${styles.statusDot} ${status.level === "problem" ? styles.dotProblem : styles.dotAttention}`}
+                                data-level={status.level}
+                                aria-hidden="true"
+                            />
+                        )}
+                    </a>
+                    <a
+                        href={ADD_PATH}
+                        className={styles.addButton}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            navigate(ADD_PATH);
+                        }}
+                    >
+                        <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.4"
+                            strokeLinecap="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                        Add
+                    </a>
+                </div>
                 <div className={styles.disclaimer}>
                     Dates are estimates: the day it was bought plus how long that kind of food usually keeps.
                 </div>

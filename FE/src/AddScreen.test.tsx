@@ -349,7 +349,7 @@ test("helpers: rows from a photo, what's sent, and the toast text", () => {
     ).toBe("Added 3 items");
 });
 
-test("the Add pill in the bottom nav opens the Add screen, and the stock list shows the toast after adding", async () => {
+test("+ Add in the stock list header opens the Add screen, and the stock list shows the toast after adding", async () => {
     const api = {
         me: async () => ({ name: "Cupboard test", objectId: "o" }),
         ping: async () => ({ status: "ok", commit: "abc1234" }),
@@ -364,7 +364,7 @@ test("the Add pill in the bottom nav opens the Add screen, and the stock list sh
     window.history.pushState(null, "", "/");
     render(<Shell api={api} buildSha="def5678" />);
 
-    fireEvent.click(screen.getByRole("link", { name: "Add an item" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Add" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Add to stock" })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Bananas" }));
     fireEvent.click(screen.getByRole("button", { name: "Add to stock" }));

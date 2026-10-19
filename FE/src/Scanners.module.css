@@ -16,10 +16,33 @@
 }
 
 .header {
-    padding: 28px var(--page-x) 8px;
+    padding: 16px var(--page-x) 8px;
     display: flex;
     flex-direction: column;
     gap: 2px;
+}
+
+/* "‹ Stock" (#87): Scanners is reached from the stock list header now, not the nav. */
+.back {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: var(--touch);
+    margin: 0 0 4px -12px;
+    padding-right: 8px;
+    text-decoration: none;
+    color: var(--accent-dark);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.backIcon {
+    width: 32px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .checked {

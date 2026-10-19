@@ -143,6 +143,31 @@ export function ScannersScreen({
                 {pull > 0 && (pull >= PULL_TO_REFRESH ? "Release to refresh" : "Pull to refresh")}
             </div>
             <header className={styles.header}>
+                <a
+                    href="/"
+                    className={styles.back}
+                    aria-label="Back to stock"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        navigate("/");
+                    }}
+                >
+                    <span className={styles.backIcon} aria-hidden="true">
+                        <svg
+                            width="22"
+                            height="22"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
+                            <path d="M15 5l-7 7 7 7" />
+                        </svg>
+                    </span>
+                    Stock
+                </a>
                 <div className={styles.checked}>
                     {data ? `Last checked ${relativeTime(data.generatedAt, nowDate)}` : "Checking…"}
                 </div>

@@ -1,4 +1,4 @@
-/* The bottom nav (#55), matching the mockups. Sticks to the bottom of the page column. */
+/* The bottom nav (#87, the canvas's option A): three tabs. Sticks to the bottom of the page column. */
 .nav {
     position: sticky;
     bottom: 0;
@@ -13,16 +13,28 @@
 
 .item {
     flex: 1;
-    min-height: 52px;
+    min-height: 56px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 4px;
     text-decoration: none;
-    color: var(--ink-strong);
+    color: var(--muted);
     font-size: 12px;
     font-weight: 600;
+}
+
+/* The icon sits in a 64 × 32 pill, light green when its tab is open. */
+.pill {
+    position: relative;
+    width: 64px;
+    height: 32px;
+    border-radius: 16px;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .item[aria-current="page"] {
@@ -30,13 +42,23 @@
     font-weight: 700;
 }
 
-/* The centre Add pill (#58). */
-.pill {
-    width: 44px;
-    height: 32px;
-    border-radius: 16px;
+.item[aria-current="page"] .pill {
+    background: var(--accent-tint);
+}
+
+/* The List tab's count. */
+.badge {
+    position: absolute;
+    top: -4px;
+    right: 6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
     background: var(--accent);
     color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;

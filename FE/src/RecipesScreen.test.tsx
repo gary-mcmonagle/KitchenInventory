@@ -7,7 +7,6 @@ import {
     type RecipeSuggestion,
     type StockProduct,
 } from "./api";
-import { BottomNav } from "./BottomNav";
 import { defaultMeal, RecipesScreen } from "./RecipesScreen";
 import { Shell } from "./Shell";
 
@@ -340,23 +339,6 @@ test("with nothing known in stock, there's a note and no button to press", async
     expect(await screen.findByText("There's nothing in stock to cook with yet.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Get a recipe" })).toBeDisabled();
 });
-
-test.each(["stock", "recipes", "scanners"] as const)(
-    "the bottom nav has Stock · Recipes · Add · Scanners (on %s)",
-    (current) => {
-        render(<BottomNav current={current} />);
-        const nav = screen.getByRole("navigation", { name: "Main" });
-        expect(
-            within(nav)
-                .getAllByRole("link")
-                .map((l) => l.textContent),
-        ).toEqual(["Stock", "Recipes", "Add", "Scanners"]);
-        const label = { stock: "Stock", recipes: "Recipes", scanners: "Scanners" }[current];
-        expect(within(nav).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
-        fireEvent.click(within(nav).getByRole("link", { name: "Recipes" }));
-        expect(window.location.pathname).toBe("/recipes");
-    },
-);
 
 test("the shell shows the Recipes screen at /recipes, with the nav", async () => {
     window.history.pushState(null, "", "/recipes");

@@ -19,6 +19,7 @@ export function navigate(path: string): void {
 export const SCANNERS_PATH = "/scanners";
 export const ADD_PATH = "/add";
 export const RECIPES_PATH = "/recipes";
+export const LIST_PATH = "/list";
 
 /** "What is this?" for a store-label check-in (#58). */
 export const assignPath = (scanId: string) => `/store-labels/${encodeURIComponent(scanId)}`;

@@ -1,6 +1,5 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ApiClient, Scanners } from "./api";
-import { BottomNav } from "./BottomNav";
 import { ScannersScreen } from "./ScannersScreen";
 import { ScanFeedView } from "./ScanFeedView";
 import { applyEvent, type FeedState } from "./scanFeed";
@@ -217,16 +216,6 @@ test("returning to the app reloads", async () => {
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     await act(async () => document.dispatchEvent(new Event("visibilitychange")));
     expect(api.scanners).toHaveBeenCalledTimes(2);
-});
-
-test("the bottom nav marks the current screen and navigates", () => {
-    render(<BottomNav current="scanners" />);
-    const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getByRole("link", { name: "Scanners" })).toHaveAttribute("aria-current", "page");
-    fireEvent.click(within(nav).getByRole("link", { name: "Stock" }));
-    expect(window.location.pathname).toBe("/");
-    fireEvent.click(within(nav).getByRole("link", { name: "Scanners" }));
-    expect(window.location.pathname).toBe("/scanners");
 });
 
 test("the feed's +n more waiting line links to Scanners", () => {
