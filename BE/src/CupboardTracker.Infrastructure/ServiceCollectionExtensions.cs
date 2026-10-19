@@ -93,6 +93,12 @@ public static class ServiceCollectionExtensions
         services.AddTransient<SetPushPreferences>();
         services.AddTransient<ExpireStalePushSubscriptions>();
         services.AddSingleton<SendTestPush>(); // holds the per-person hourly limit
+        // Stock change push (#80): batches in pushSeen, a delayed job on the stock-push queue.
+        services.AddSingleton(sp => StockPushSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<IStockChangeBatchRepository, CosmosStockChangeBatchRepository>();
+        services.AddSingleton<IStockPushScheduler, StorageQueueStockPushScheduler>();
+        services.AddTransient<AddStockChangeToPush>();
+        services.AddTransient<SendStockChangePush>();
 
         // Recipe ideas (#73): gpt-4o on the same Foundry account, with a per-user hourly cost guard.
         services.AddSingleton(sp => RecipeGenerationOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
@@ -186,6 +192,16 @@ public static class ServiceCollectionExtensions
             : ScannersSettings.DefaultHeartbeatInterval);
 
     /// <summary>PUSH_TEST_PER_HOUR (default 5): test pushes per person per hour (#77).</summary>
+    internal static StockPushSettings StockPushSettingsFromConfiguration(IConfiguration config)
+    {
+        static TimeSpan? Seconds(string? value, int min, int max) =>
+            int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= min && n <= max ? TimeSpan.FromSeconds(n) : null;
+
+        var delay = Seconds(config["STOCK_PUSH_DELAY_SECONDS"], 5, 600) ?? StockPushSettings.Default.Delay;
+        var maxWait = Seconds(config["STOCK_PUSH_MAX_WAIT_SECONDS"], 5, 3600) ?? StockPushSettings.Default.MaxWait;
+        return new StockPushSettings(delay, maxWait < delay ? delay : maxWait);
+    }
+
     internal static PushTestSettings PushTestSettingsFromConfiguration(IConfiguration config) =>
         int.TryParse(config["PUSH_TEST_PER_HOUR"], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n > 0
             ? new PushTestSettings(n)

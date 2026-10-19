@@ -208,3 +208,34 @@ public sealed class PushExpiryTimer(ExpireStalePushSubscriptions expire)
     public Task Run([TimerTrigger("0 15 3 * * *")] TimerInfo timer, CancellationToken cancellationToken) =>
         expire.ExecuteAsync(cancellationToken);
 }
+
+/// <summary>Sends a stock change batch when it's due (#80). Never throws for a bad message: it's logged and dropped.</summary>
+public sealed partial class StockPushFunction(SendStockChangePush send, ILogger<StockPushFunction> logger)
+{
+    [Function("stockPush")]
+    public async Task Run(
+        [QueueTrigger(StorageQueueStockPushScheduler.QueueName, Connection = "AzureWebJobsStorage")] string message,
+        CancellationToken cancellationToken)
+    {
+        Guid? batchId;
+        try
+        {
+            batchId = StorageQueueStockPushScheduler.Deserialize(message);
+        }
+        catch (JsonException)
+        {
+            batchId = null;
+        }
+
+        if (batchId is not { } id)
+        {
+            LogUnreadable();
+            return;
+        }
+
+        await send.ExecuteAsync(id, cancellationToken);
+    }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "A stock push message couldn't be read; dropped.")]
+    private partial void LogUnreadable();
+}

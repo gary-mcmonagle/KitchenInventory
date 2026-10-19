@@ -258,3 +258,50 @@ public sealed class PushStorageTests
         Assert.Equal(job.Audience.ExceptUsers, back.Audience.ExceptUsers);
     }
 }
+
+public sealed class StockChangePushStorageTests
+{
+    [Fact]
+    public void The_open_batch_is_one_document_in_push_seen_and_round_trips()
+    {
+        var at = new DateTimeOffset(2026, 10, 19, 13, 0, 0, TimeSpan.Zero);
+        var batch = new StockChangeBatch(Guid.NewGuid(), at, at.AddSeconds(30),
+        [
+            new StockChange("scan:a", StockChangeKind.Added, "Milk", at),
+            new StockChange("scan:b", StockChangeKind.Removed, "Hummus", at.AddSeconds(30)),
+        ]);
+
+        var document = CosmosStockChangeBatchRepository.ToDocument(batch);
+
+        Assert.Equal(("batch:stock", "batch:stock", 86400), (document["id"]!.GetValue<string>(), document["eventKey"]!.GetValue<string>(), document["ttl"]!.GetValue<int>()));
+        Assert.Equal("removed", document["changes"]![1]!["kind"]!.GetValue<string>());
+        var back = CosmosStockChangeBatchRepository.FromDocument(JsonNode.Parse(document.ToJsonString())!.AsObject());
+        Assert.Equal((batch.BatchId, batch.FirstAt, batch.LastAt), (back.BatchId, back.FirstAt, back.LastAt));
+        Assert.Equal(batch.Changes, back.Changes);
+    }
+
+    [Fact]
+    public void The_queue_message_carries_only_the_batch_id()
+    {
+        var id = Guid.NewGuid();
+
+        var message = StorageQueueStockPushScheduler.Serialize(id);
+
+        Assert.Equal($"{{\"batchId\":\"{id}\"}}", message);
+        Assert.Equal(id, StorageQueueStockPushScheduler.Deserialize(message));
+        Assert.Null(StorageQueueStockPushScheduler.Deserialize("{}"));
+    }
+
+    [Fact]
+    public void Settings_default_to_a_minute_and_five_minutes_and_ignore_nonsense()
+    {
+        static StockPushSettings With(Dictionary<string, string?> values) =>
+            ServiceCollectionExtensions.StockPushSettingsFromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(values).Build());
+
+        Assert.Equal(StockPushSettings.Default, With([]));
+        Assert.Equal(new StockPushSettings(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(120)),
+            With(new() { ["STOCK_PUSH_DELAY_SECONDS"] = "30", ["STOCK_PUSH_MAX_WAIT_SECONDS"] = "120" }));
+        Assert.Equal(StockPushSettings.Default, With(new() { ["STOCK_PUSH_DELAY_SECONDS"] = "0", ["STOCK_PUSH_MAX_WAIT_SECONDS"] = "lots" }));
+        Assert.Equal(TimeSpan.FromSeconds(90), With(new() { ["STOCK_PUSH_DELAY_SECONDS"] = "90", ["STOCK_PUSH_MAX_WAIT_SECONDS"] = "60" }).MaxWait);
+    }
+}

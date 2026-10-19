@@ -587,3 +587,14 @@ Declarative Web Push JSON (WebKit; iOS 18.4+ shows it without the service worker
 ```
 
 Sent with `Content-Encoding: aes128gcm` (RFC 8291), VAPID (RFC 8292; subject `https://kitchen.garymcmonagle.com`), `TTL`, `Urgency` and a letters-and-digits `Topic` equal to the tag, so a newer push of the same kind replaces an older one. Delayed pushes are jobs on the API app's `push-jobs` Storage queue; each runs once.
+
+### Stock change pushes (#80)
+
+No endpoint of their own: they use the subscription, preferences and seen receipt endpoints above.
+
+- **Which changes:** scanner check-ins of a named product (a new unit, not a replay) and scanner check-outs that took a unit, the ones that show a green toast (`scanIdentified`). Their key is `scan:<scanId>`. Not amber toasts, unmatched check-outs or store labels.
+- **Seen:** the app sends `scan:<scanId>` to `POST /api/push/seen` once a green check-in or check-out toast is **shown** (one of the three on screen) while the page is visible, live or from catch-up.
+- **Batching:** changes join the household's open batch; it's sent `STOCK_PUSH_DELAY_SECONDS` (default 60) after the last change, but no later than `STOCK_PUSH_MAX_WAIT_SECONDS` (default 300) after the first. Each change queues a `{ "batchId": "…" }` message on the API app's `stock-push` queue, hidden until the batch is due; a message for a batch that was pushed back or already sent does nothing.
+- **Who:** each person with a device whose `preferences.stockChanges` is `true` gets **one** push for the batch's changes they have **no** seen receipt for (from any of their devices), on each such device. Saw them all → nothing.
+- **What:** title `Cupboard updated`, body like `Added Milk, Bread, Eggs and 4 more · Removed Hummus` (up to 3 names a side, repeats as `2 × Milk`, an empty side left out), topic and tag `stock`, opens `/`, TTL 3 hours.
+- **Quiet hours** (21:30–07:30 UK): changes then aren't batched, and a batch falling due then is closed without sending, so night-time changes are never pushed later.

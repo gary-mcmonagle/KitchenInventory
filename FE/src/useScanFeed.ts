@@ -7,6 +7,7 @@ import {
     applyEvent,
     changesStock,
     expire,
+    visibleToasts,
     type FeedEvent,
     type FeedState,
     type FeedToast,
@@ -53,6 +54,7 @@ export function useScanFeed(
     api: ApiClient,
     onStockChanged: () => void,
     connect: (api: ApiClient) => FeedConnection = signalRConnection,
+    markSeen: (eventKey: string) => void = () => undefined,
 ) {
     const [feed, setFeed] = useState<FeedState>(new Map());
     const [now, setNow] = useState(() => Date.now());
@@ -61,6 +63,7 @@ export function useScanFeed(
     const stockChanged = useRef(onStockChanged);
     stockChanged.current = onStockChanged;
     const connectRef = useRef(connect); // the first one is used for the screen's lifetime
+    const reported = useRef(new Set<string>());
 
     const refetchStock = useCallback(() => {
         clearTimeout(refetchTimer.current);
@@ -132,6 +135,18 @@ export function useScanFeed(
         if (state !== feed) setFeed(state);
         if (loadingTimedOut) refetchStock();
     }, [feed, now, refetchStock]);
+
+    // Seen receipts (#80): a green check-in or check-out toast counts as seen once it's shown on a visible page
+    // (live or from catch-up), so this person is left out of the push for it. Rechecked every tick, so a toast still
+    // showing when the page comes back counts too.
+    useEffect(() => {
+        if (document.visibilityState !== "visible") return;
+        for (const toast of visibleToasts(feed).shown) {
+            if (toast.kind !== "ok" || !toast.seenKey || reported.current.has(toast.seenKey)) continue;
+            reported.current.add(toast.seenKey);
+            markSeen(toast.seenKey);
+        }
+    }, [feed, now, markSeen]);
 
     /** Amber "No match" and store labels: hidden for the whole household. "Not in stock": just here. */
     const dismiss = useCallback(

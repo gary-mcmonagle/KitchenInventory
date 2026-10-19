@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import {
     ApiError,
     NoAccessError,
@@ -21,6 +21,7 @@ import {
 import { AISLES, type AisleInfo } from "./aisles";
 import { takeFlash } from "./flash";
 import { ProductTile } from "./ProductTile";
+import { createSeenReporter } from "./push";
 import { ADD_PATH, itemPath, namePath, navigate, SCANNERS_PATH } from "./router";
 import { scannerLabel, scannerStatus, type ScannerStatus } from "./scannerStatus";
 import styles from "./Stock.module.css";
@@ -314,7 +315,8 @@ export function StockScreen({
     }, [load]);
 
     // The live scan feed (#54): toasts, and the stock list refetches itself when a scan changes stock.
-    const scanFeed = useScanFeed(api, () => void load({ quiet: true }), feedConnection);
+    const markSeen = useMemo(() => createSeenReporter(api), [api]);
+    const scanFeed = useScanFeed(api, () => void load({ quiet: true }), feedConnection, markSeen);
 
     const onTouchStart = (e: TouchEvent) => {
         pullStart.current = window.scrollY <= 0 ? e.touches[0].clientY : null;

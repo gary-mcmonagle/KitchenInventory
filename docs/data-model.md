@@ -523,6 +523,7 @@ One document per **device** that has push notifications turned on, partitioned b
 - **`endpoint`** is a capability URL on the browser's push service (Apple, Google, Mozilla or Microsoft only): it's never logged or sent back to the app.
 - **`lastSeenAt`** is refreshed every time the app opens; a daily timer deletes subscriptions not seen for **30 days**. A push answered 404 or 410 deletes the subscription straight away.
 - **`preferences`**: one boolean per notification type, named by the features (letters and digits). A type that isn't set counts as off.
+  - **`stockChanges`** (#80): stock change pushes. Set to `true` when the device turns notifications on ("This phone" on the Scanners screen); the toggle there changes it.
 
 ## Container: `pushSeen` (#77)
 
@@ -530,6 +531,7 @@ Short-lived documents, partitioned by **`/eventKey`**, each with its own **`ttl`
 
 - **Seen receipts:** `{ "id": "<eventKey>:<oid>", "eventKey": "scan:<scanId>", "userId": "<oid>", "seenAt": "…", "ttl": 86400 }`. Written when the app shows an event on a visible screen. A person counts as having seen an event if any of their devices sent a receipt; a delayed push can leave them out.
 - **Push job claims:** `{ "id": "job:<jobId>", "eventKey": "job:<jobId>", "claimedAt": "…", "ttl": 691200 }`. Created (never upserted) when a queued push job runs, so a re-delivered queue message finds it and sends nothing (8 days: longer than the queue keeps messages).
+- **The open stock change batch** (#80): at most one, `{ "id": "batch:stock", "eventKey": "batch:stock", "type": "stockChangeBatch", "batchId": "…", "firstAt": "…", "lastAt": "…", "changes": [{ "eventKey": "scan:<scanId>", "kind": "added" | "removed", "name": "Beef Gravy", "at": "…" }], "ttl": 86400 }`. A change creates it (create-only, so two at once conflict and one retries) or joins it (ETag replace; a key already there is skipped). It falls due 60 s after `lastAt`, but no later than 5 minutes after `firstAt`. Sending **deletes** it (ETag delete), so a stale or re-delivered queue message finds nothing to send, and the next change starts a new batch. At most 200 changes.
 
 ## Container: `leases` (infrastructure)
 

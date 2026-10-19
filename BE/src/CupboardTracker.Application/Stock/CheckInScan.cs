@@ -1,4 +1,5 @@
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Push;
 using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Domain;
 using CupboardTracker.Domain.Stock;
@@ -9,7 +10,7 @@ namespace CupboardTracker.Application.Stock;
 /// <summary>
 /// A check-in scan becomes one unit in stock (id = scan ID, so replays are no-ops), identified as a product. If the
 /// product already has a shelf life, the unit gets its estimated expiry date now; otherwise the shelf-life timer fills
-/// it in later (#52), so check-in never waits for Jev.
+/// it in later (#52), so check-in never waits for Jev. A new unit of a named product joins the stock change push (#80).
 /// </summary>
 public sealed partial class CheckInScan(
     ProductResolver resolver,
@@ -17,7 +18,8 @@ public sealed partial class CheckInScan(
     StockSettings settings,
     ScanFeedNotifier feed,
     TimeProvider clock,
-    ILogger<CheckInScan> logger)
+    ILogger<CheckInScan> logger,
+    AddStockChangeToPush? pushes = null)
 {
     public async Task ExecuteAsync(ScanEvent scan, CancellationToken cancellationToken)
     {
@@ -29,7 +31,8 @@ public sealed partial class CheckInScan(
                 ? EstimatedExpiry.For(scan.ScannedAt, shelfLife.Days, settings.HomeTimeZone)
                 : null);
 
-        if (await units.CreateIfNotExistsAsync(unit, cancellationToken))
+        var created = await units.CreateIfNotExistsAsync(unit, cancellationToken);
+        if (created)
         {
             LogCheckedIn(scan.ScanId, scan.Barcode.Value, product.DisplayName);
         }
@@ -46,6 +49,14 @@ public sealed partial class CheckInScan(
                 : new ScanIdentified(scan.ScanId, scan.DeviceId, scan.Role, clock.GetUtcNow(), ScanOutcome.CheckedIn,
                     product.ProductId, product.DisplayName, product.Details?.Brand, product.Details?.Size, unit.UnitId),
             cancellationToken);
+
+        // Not on a replay (it was pushed the first time), and not unnamed items (amber toasts).
+        if (created && !product.IsUnnamed && pushes is not null)
+        {
+            await pushes.ExecuteAsync(
+                new StockChange(StockChangeKeys.ForScan(scan.ScanId), StockChangeKind.Added, product.DisplayName, clock.GetUtcNow()),
+                cancellationToken);
+        }
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Checked in {ScanId}: {Barcode} as {DisplayName}.")]

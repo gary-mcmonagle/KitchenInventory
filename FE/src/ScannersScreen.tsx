@@ -6,6 +6,7 @@ import { feedTime } from "./scanFeed";
 import { TOAST_MS } from "./StockScreen";
 import { signalRConnection, useScanFeed, type FeedConnection } from "./useScanFeed";
 import styles from "./Scanners.module.css";
+import { ThisPhoneCard } from "./ThisPhoneCard";
 
 type Device = Scanners["devices"][number];
 type Toast = { kind: "undone"; name: string } | { kind: "error"; text: string };
@@ -207,6 +208,8 @@ export function ScannersScreen({
                                 <span className={`${styles.pill} ${styles.unknown}`}>Unknown</span>
                             )}
                         </div>
+
+                        <ThisPhoneCard api={api} />
 
                         <Section
                             id="no-match-in"

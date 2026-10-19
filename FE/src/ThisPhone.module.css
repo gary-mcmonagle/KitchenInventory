@@ -1,0 +1,290 @@
+/* "This phone" (#80), from project/Scanners.dc.html. */
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.title {
+    margin: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.titleNote {
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.tile {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.headText {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.name {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.line {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.pill {
+    flex: none;
+    padding: 4px 10px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.on {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.off {
+    background: var(--off-bg);
+    color: var(--muted);
+}
+
+.pill.off {
+    color: var(--ink-strong);
+}
+
+.blocked {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.toggles {
+    display: flex;
+    flex-direction: column;
+}
+
+.toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    border-top: 1px solid var(--off-bg);
+}
+
+.toggleText {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.toggleLabel {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.toggleHelp {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.35;
+}
+
+.switch {
+    flex: none;
+    width: 52px;
+    height: var(--touch);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.track {
+    position: relative;
+    width: 48px;
+    height: 28px;
+    border-radius: 14px;
+    background: var(--input-border);
+    display: block;
+}
+
+.trackOn {
+    background: var(--accent);
+}
+
+.knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(28, 42, 36, 0.3);
+    transition: left 0.15s;
+}
+
+.trackOn .knob {
+    left: 23px;
+}
+
+.quiet {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
+    padding-top: 4px;
+}
+
+.buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.outline,
+.plain {
+    flex: 1;
+    min-height: var(--touch);
+    border-radius: var(--radius-button);
+    background: var(--surface);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.outline {
+    border: 1px solid var(--accent);
+    color: var(--accent-dark);
+}
+
+.plain {
+    border: 1px solid var(--input-border);
+    color: var(--ink);
+}
+
+.primary {
+    min-height: 48px;
+    border-radius: var(--radius-button);
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.primary:active {
+    background: var(--accent-dark);
+}
+
+.outline:disabled,
+.plain:disabled,
+.primary:disabled,
+.switch:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.text {
+    font-size: 14px;
+    color: var(--ink-strong);
+    line-height: 1.45;
+}
+
+.warn {
+    padding: 12px;
+    border-radius: var(--radius-button);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.steps li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+}
+
+.step {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 13px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stepText {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: inherit;
+}
+
+.stepText svg {
+    color: var(--accent-dark);
+}
+
+.problem {
+    margin: 0;
+    font-size: 13px;
+    color: var(--danger-fg);
+}

@@ -228,8 +228,17 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Push subscription** – one device's permission and address for push notifications, stored per person and device, with which notification types it wants (preferences). Removed when the device turns notifications off, when the push service says it's gone, or after 30 days without the app being opened.
 - In code: `PushSubscription`, `pushSubscriptions` container
 
-**Seen receipt** – a note from the app that a person saw an event (e.g. a scan's toast) on a visible screen, so a push about it leaves them out. Kept for about a day.
+**Seen receipt** – a note from the app that a person saw an event (e.g. a scan's toast) on a visible screen, so a push about it leaves them out. Kept for about a day. For stock changes, a green check-in or check-out toast counts once it's shown on a visible page; nothing else does.
 - In code: `RecordPushSeen`, `markSeen`, `pushSeen` container
+
+**Stock change push** – one "Cupboard updated" push saying what was added or removed (#80), sent to each person who didn't see those changes' green toasts in the app. Turned on or off per device ("Stock changes" on the "This phone" card).
+- In code: `SendStockChangePush`, `AddStockChangeToPush`, `StockChange`, preference `stockChanges`
+
+**Batch (stock change batch)** – the household's stock changes waiting to be pushed together, so a big shop is one push: sent a minute after the last change, at most five minutes after the first.
+- In code: `StockChangeBatch`, `IStockChangeBatchRepository`, the `stock-push` queue
+
+**This phone** – the card on the Scanners screen where a person turns notifications on or off for the device they're holding, chooses what it gets, and sends a test.
+- In code: `ThisPhoneCard`, `phoneNotifications`
 
 **Quiet hours** – 21:30 to 07:30 UK time, when no pushes are sent.
 - In code: `QuietHours`

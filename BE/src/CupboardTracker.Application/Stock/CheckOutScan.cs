@@ -1,4 +1,5 @@
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Push;
 using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Domain;
 using CupboardTracker.Domain.Products;
@@ -10,6 +11,7 @@ namespace CupboardTracker.Application.Stock;
 /// <summary>
 /// A check-out scan takes one in-stock unit of the barcode's product (chosen by <see cref="UnitSelection"/>) and marks it
 /// checked out. No unit to take → an unmatched check-out. Replays do nothing; concurrent check-outs take different units.
+/// A check-out joins the stock change push (#80).
 /// </summary>
 public sealed partial class CheckOutScan(
     IProductRepository products,
@@ -17,7 +19,8 @@ public sealed partial class CheckOutScan(
     IUnmatchedCheckOutRepository unmatched,
     ScanFeedNotifier feed,
     TimeProvider clock,
-    ILogger<CheckOutScan> logger)
+    ILogger<CheckOutScan> logger,
+    AddStockChangeToPush? pushes = null)
 {
     public const string Source = "scanner";
     private const int MaxRounds = 5;
@@ -60,11 +63,18 @@ public sealed partial class CheckOutScan(
                 {
                     LogCheckedOut(scan.ScanId, candidate.UnitId, scan.Barcode.Value);
                     var product = await products.GetAsync(productId.Value, cancellationToken);
+                    var name = product?.DisplayName ?? Product.UnknownName(scan.Barcode.Value);
                     await feed.NotifyAsync(
                         new ScanIdentified(scan.ScanId, scan.DeviceId, scan.Role, clock.GetUtcNow(), ScanOutcome.CheckedOut,
-                            productId.Value, product?.DisplayName ?? Product.UnknownName(scan.Barcode.Value),
-                            product?.Details?.Brand, product?.Details?.Size, candidate.UnitId),
+                            productId.Value, name, product?.Details?.Brand, product?.Details?.Size, candidate.UnitId),
                         cancellationToken);
+                    if (pushes is not null)
+                    {
+                        await pushes.ExecuteAsync(
+                            new StockChange(StockChangeKeys.ForScan(scan.ScanId), StockChangeKind.Removed, name, clock.GetUtcNow()),
+                            cancellationToken);
+                    }
+
                     return;
                 }
 

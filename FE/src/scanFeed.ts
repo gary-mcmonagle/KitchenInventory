@@ -77,6 +77,8 @@ export interface FeedToast {
     productId: string | null;
     /** When this toast goes by itself (green and "not in stock": 10 s; grey: 60 s), as epoch ms. */
     expiresAt: number | null;
+    /** Green scanner check-ins and check-outs (#80): the seen receipt key to report once it's shown. */
+    seenKey?: string;
 }
 
 export const OK_MS = 10_000;
@@ -115,6 +117,7 @@ export function applyEvent(state: FeedState, event: FeedEvent, now: number): Fee
                 title: `${verb} ${event.displayName}`,
                 productId: event.productId,
                 expiresAt: now + OK_MS,
+                seenKey: `scan:${event.scanId}`,
             });
             return next;
         }

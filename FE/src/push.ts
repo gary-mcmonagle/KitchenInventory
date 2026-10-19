@@ -139,7 +139,9 @@ export function createSeenReporter(
         if (doc.visibilityState !== "visible" || pending.size === 0) return;
         const keys = [...pending].slice(0, 50);
         keys.forEach((k) => pending.delete(k));
-        api.pushSeen(keys).catch((error: unknown) => console.warn("Couldn't send seen receipts", error));
+        Promise.resolve()
+            .then(() => api.pushSeen(keys))
+            .catch((error: unknown) => console.warn("Couldn't send seen receipts", error));
         if (pending.size > 0) timer = setTimeout(flush, delayMs);
     };
 
@@ -148,4 +150,43 @@ export function createSeenReporter(
         pending.add(eventKey);
         timer ??= setTimeout(flush, delayMs);
     };
+}
+
+/** The "This phone" card's states (#80, project/Scanners.dc.html). */
+export type PhoneNotifications =
+    | { kind: "unsupported" }
+    | { kind: "needsInstall" }
+    | { kind: "blocked" }
+    | { kind: "off" }
+    | { kind: "on"; preferences: Record<string, boolean> };
+
+/** Stock change pushes (#80): the preference key on this device's subscription. */
+export const STOCK_CHANGES = "stockChanges";
+
+const WORKER_WAIT_MS = 5000;
+
+/**
+ * Where this device stands. When notifications are on, it re-saves the subscription (as on every app open) to read
+ * this device's preferences back. Never asks for permission.
+ */
+export async function phoneNotifications(
+    api: Pick<ApiClient, "putPushSubscription">,
+    env: PushEnvironment = defaultEnv(),
+): Promise<PhoneNotifications> {
+    const support = pushSupport(env);
+    if (support !== "supported") return { kind: support };
+    const permission = (env.win as Window & typeof globalThis).Notification.permission;
+    if (permission === "denied") return { kind: "blocked" };
+    if (permission !== "granted") return { kind: "off" };
+    const registration = await Promise.race([
+        env.nav.serviceWorker.ready,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), WORKER_WAIT_MS)),
+    ]);
+    const subscription = registration ? await registration.pushManager.getSubscription() : null;
+    if (!subscription) return { kind: "off" };
+    const device = await api.putPushSubscription({
+        ...subscription.toJSON(),
+        deviceLabel: deviceLabel(env.nav),
+    });
+    return { kind: "on", preferences: device.preferences };
 }
