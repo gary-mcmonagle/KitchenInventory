@@ -17,7 +17,7 @@ public sealed class WebPushSender(HttpClient http, string vapidPublicKey, string
     /// <summary>Push service answers, as the feature would act on them.</summary>
     public enum Outcome { Delivered, Gone, Retry, Refused }
 
-    public async Task<(Outcome Outcome, int Status)> SendAsync(
+    public async Task<(Outcome Outcome, int Status, string Reason)> SendAsync(
         string endpoint, string p256dh, string auth, string payload, int ttlSeconds, string? topic, string urgency,
         CancellationToken cancellationToken)
     {
@@ -35,6 +35,8 @@ public sealed class WebPushSender(HttpClient http, string vapidPublicKey, string
 
         using var response = await http.SendAsync(request, cancellationToken);
         var status = (int)response.StatusCode;
+        // Push services explain refusals in the body (Apple: {"reason":"BadJwtToken"}); it holds no secrets.
+        var reason = response.IsSuccessStatusCode ? "" : await response.Content.ReadAsStringAsync(cancellationToken);
         return (response.StatusCode switch
         {
             HttpStatusCode.Created or HttpStatusCode.OK or HttpStatusCode.Accepted => Outcome.Delivered,
@@ -42,7 +44,7 @@ public sealed class WebPushSender(HttpClient http, string vapidPublicKey, string
             HttpStatusCode.TooManyRequests => Outcome.Retry,
             _ when status >= 500 => Outcome.Retry,
             _ => Outcome.Refused, // 400 bad request, 403 VAPID mismatch, 413 too big: a bug or configuration
-        }, status);
+        }, status, reason);
     }
 
     /// <summary>RFC 8291 encryption: one aes128gcm record (payloads are far below 4 KB).</summary>

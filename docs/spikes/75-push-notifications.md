@@ -19,7 +19,7 @@ Can Cupboard Tracker send **push notifications to household phones** from the we
 - **Proven on desktop.** A proof of concept (`docs/spikes/75-push-poc/`) subscribed real Google Chrome, and a push sent from .NET was shown as a notification with the right title, body, tag and tap target.
   - The sender matches RFC 8291's test vector **byte for byte**.
   - After the browser unsubscribed, the push service answered **410 Gone**, which is how dead subscriptions get pruned.
-  - **The iPhone test is still to do with Gary** (below).
+  - **Proven on Gary's iPhone too** (Home Screen app, 2026-10-19), once two Apple-specific rules were followed (below).
 - **First slice:** a **morning "Use first today" push** at about 07:30 UK time, only when something is due today or tomorrow, at most one a day. Plus the **hub offline** alert as a push alongside the existing email.
 - **Cost: nothing extra.** The browser vendors' push services (Apple, Google, Mozilla) are free. There's no new Azure resource, only a Cosmos container (serverless, pennies) and one Key Vault secret.
 - **Build order (suggested cards below):**
@@ -174,7 +174,7 @@ What it needs:
     "title": "Use first today",
     "body": "Milk, gnocchi and 1 more need using.",
     "navigate": "https://kitchen.garymcmonagle.com/?filter=use-first",
-    "tag": "use-first",
+    "tag": "useFirst",
     "lang": "en-GB"
   }
 }
@@ -230,15 +230,20 @@ In `docs/spikes/75-push-poc/` (see its README). Results (2026-10-18/19, desktop 
 | Send with own sender (`aes128gcm`, VAPID, TTL, Urgency, Topic) | `HTTP 201 → Delivered`; notification shown: title "Use first today", body, tag `poc-use-first`, `navigate` `/?filter=use-first` |
 | Send after the browser unsubscribed | **`HTTP 410 → Gone`** (prune) |
 | Send to profiles that were closed, not unsubscribed | Still `201`: the push service can't tell. Hence the 30-day `lastSeenAt` expiry |
-| **iPhone (Home Screen app)** | **To do with Gary:** see "Next step" |
+| iPhone in a Safari tab (not installed) | `PushManager: false`, `Notification` undefined: **no push in a tab**, as Apple documents |
+| **iPhone, installed to the Home Screen** (2026-10-19, via a temporary Cloudflare quick tunnel) | Subscribed with `web.push.apple.com`. First send: **403 `BadJwtToken`** with VAPID subject `mailto:…@example.invalid`; with `https://kitchen.garymcmonagle.com`, the next: **400 `BadWebPushTopic`** for `Topic: poc-use-first`; with `pocUseFirst`: **201 Delivered**, and the notification showed on Gary's iPhone with the app icon, "Use first today", "from Push PoC" and the body |
 
 No VAPID private key is in the repo: the PoC reads keys from an env file outside it, and `.gitignore` covers `*.env` and `subscriptions.json`.
 
-### Next step: the iPhone test (needs Gary)
+### Apple's extra rules (found on the iPhone)
 
-The phone needs a **public HTTPS URL** for the PoC page. **Proposed:** a temporary Cloudflare quick tunnel from the Mac (`brew install cloudflared`, then `cloudflared tunnel --url http://localhost:8075`), only while testing, with no account. The PoC server only accepts small, well-formed subscriptions, at most 20. Steps are in the PoC README. **This needs Gary's OK** (installing `cloudflared` and briefly exposing the PoC). The alternative is to skip the PoC on the phone and do the iPhone check as the first step of the "installable app" card, on the real site.
+Google accepted all of these; Apple didn't. The feature's sender must follow Apple's stricter rules, and its tests should check them:
 
-Also needed from Gary: **the iPhone's iOS version** (Settings → General → About). 16.4+ is required; 18.4+ gets Declarative Web Push.
+- **VAPID subject:** Apple rejects a made-up contact (`403 {"reason":"BadJwtToken"}` for `mailto:…@example.invalid`). Use a real one: `https://kitchen.garymcmonagle.com` works and keeps Gary's email out of config.
+- **Topic:** Apple rejects hyphens (`400 {"reason":"BadWebPushTopic"}` for `poc-use-first`), although RFC 8030 allows them. Use **letters and digits only** (`useFirst`, `hubOffline`), at most 32.
+- **Error bodies:** push services explain refusals in the response body (Apple: `{"reason":"…"}`). Log that reason (it holds no secrets) with the status, or problems are guesswork.
+
+The iPhone needed iOS 16.4+ and the page **added to the Home Screen and opened from there** (Share → Add to Home Screen, "Open as Web App" on). In a Safari tab, `Notification` doesn't exist.
 
 ## Recommended design (for the feature)
 
@@ -261,7 +266,7 @@ Also needed from Gary: **the iPhone's iOS version** (Settings → General → Ab
 - **Infrastructure:** `WebPushSender` (from the PoC), `CosmosPushSubscriptionRepository`.
 - **Bicep:**
   - the `pushSubscriptions` container (`/userId`), plus `sentPushes` (`/id`) or a reuse of `sentDigests` with a type prefix;
-  - API app settings `VAPID_PUBLIC_KEY` (from `main.bicepparam`), `VAPID_SUBJECT` (`mailto:` Gary's alert address, which is already a parameter, so it's not committed) and `VAPID_PRIVATE_KEY` (a Key Vault reference to `vapid-private-key`);
+  - API app settings `VAPID_PUBLIC_KEY` (from `main.bicepparam`), `VAPID_SUBJECT` (`https://kitchen.garymcmonagle.com`: Apple needs a real contact, and this keeps Gary's email out of config) and `VAPID_PRIVATE_KEY` (a Key Vault reference to `vapid-private-key`);
   - **no new Azure resources.**
 - **Docs:** `docs/data-model.md` (the container), `docs/domain-language.md` (push notification, push subscription, quiet hours), and CLAUDE.md (the secret, VAPID rotation, removing a member's devices).
 

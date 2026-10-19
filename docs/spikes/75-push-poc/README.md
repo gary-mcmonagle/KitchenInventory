@@ -13,13 +13,13 @@ Findings and the recommendation are in [`../75-push-notifications.md`](../75-pus
 
 ## Keys (never in the repo)
 
-Generate a throwaway VAPID pair into a file **outside the repo** (mode 600):
+Generate a throwaway VAPID pair (Apple rejects a made-up subject such as `mailto:…@example.invalid`: use a real `https:` URL or email) into a file **outside the repo** (mode 600):
 
 ```bash
 node -e '
 const c=require("crypto"),k=c.generateKeyPairSync("ec",{namedCurve:"prime256v1"});
 const p=k.publicKey.export({format:"jwk"}),d=k.privateKey.export({format:"jwk"}).d,b=s=>Buffer.from(s,"base64url");
-require("fs").writeFileSync(process.argv[1],`VAPID_PUBLIC_KEY=${Buffer.concat([Buffer.from([4]),b(p.x),b(p.y)]).toString("base64url")}\nVAPID_PRIVATE_KEY=${d}\nVAPID_SUBJECT=mailto:push-poc@example.invalid\n`,{mode:0o600})' ~/push-poc-vapid.env
+require("fs").writeFileSync(process.argv[1],`VAPID_PUBLIC_KEY=${Buffer.concat([Buffer.from([4]),b(p.x),b(p.y)]).toString("base64url")}\nVAPID_PRIVATE_KEY=${d}\nVAPID_SUBJECT=https://kitchen.garymcmonagle.com\n`,{mode:0o600})' ~/push-poc-vapid.env
 ```
 
 ## Desktop (what the agent ran)

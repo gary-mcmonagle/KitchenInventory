@@ -67,9 +67,9 @@ foreach (var s in subscriptions)
 {
     var endpoint = s.GetProperty("endpoint").GetString()!;
     var keys = s.GetProperty("keys");
-    var (outcome, status) = await sender.SendAsync(endpoint, keys.GetProperty("p256dh").GetString()!, keys.GetProperty("auth").GetString()!,
-        payload, ttlSeconds: 60 * 60 * 12, topic: "poc-use-first", urgency: "normal", CancellationToken.None);
-    Console.WriteLine($"{new Uri(endpoint).Host}: HTTP {status} → {outcome} (aes128gcm, {Encoding.UTF8.GetByteCount(payload)}-byte payload)");
+    var (outcome, status, reason) = await sender.SendAsync(endpoint, keys.GetProperty("p256dh").GetString()!, keys.GetProperty("auth").GetString()!,
+        payload, ttlSeconds: 60 * 60 * 12, topic: "pocUseFirst", urgency: "normal", CancellationToken.None);
+    Console.WriteLine($"{new Uri(endpoint).Host}: HTTP {status} → {outcome} (aes128gcm, {Encoding.UTF8.GetByteCount(payload)}-byte payload) {reason}");
 }
 
 return 0;
