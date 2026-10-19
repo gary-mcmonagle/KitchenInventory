@@ -25,6 +25,24 @@ export function pushSupport(env: PushEnvironment = defaultEnv()): PushSupport {
     return isAppleMobile(nav) && !isInstalled(env) ? "needsInstall" : "unsupported";
 }
 
+/** A short label for this device, sent with its subscription ("iPhone", "Android", "Mac", ...). */
+export function deviceLabel(nav: Navigator = navigator): string {
+    const ua = nav.userAgent;
+    return /iPhone/.test(ua)
+        ? "iPhone"
+        : /iPad/.test(ua) || (/Macintosh/.test(ua) && nav.maxTouchPoints > 1)
+          ? "iPad"
+          : /Android/.test(ua)
+            ? "Android"
+            : /Macintosh/.test(ua)
+              ? "Mac"
+              : /Windows/.test(ua)
+                ? "Windows"
+                : /Linux/.test(ua)
+                  ? "Linux"
+                  : "Browser";
+}
+
 export type SubscribeResult = "subscribed" | "denied" | "unsupported" | "notConfigured";
 
 function toKey(base64Url: string): Uint8Array {
@@ -52,7 +70,7 @@ export async function subscribe(
             userVisibleOnly: true,
             applicationServerKey: toKey(publicKey) as BufferSource,
         }));
-    await api.putPushSubscription(subscription.toJSON());
+    await api.putPushSubscription({ ...subscription.toJSON(), deviceLabel: deviceLabel(env.nav) });
     return "subscribed";
 }
 
@@ -100,7 +118,7 @@ export async function refreshPushSubscription(
             applicationServerKey: toKey(publicKey) as BufferSource,
         });
     }
-    await api.putPushSubscription(subscription.toJSON());
+    await api.putPushSubscription({ ...subscription.toJSON(), deviceLabel: deviceLabel(env.nav) });
 }
 
 /**

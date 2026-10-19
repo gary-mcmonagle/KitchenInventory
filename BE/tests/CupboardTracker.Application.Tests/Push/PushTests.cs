@@ -289,4 +289,11 @@ public sealed class PushTests
     [InlineData(null, "Browser")]
     public void Device_labels_come_from_the_user_agent(string? userAgent, string label) =>
         Assert.Equal(label, PushSubscriptionRules.DeviceLabel(userAgent));
+
+    [Theory]
+    [InlineData("iphone", "Mozilla/5.0 (Macintosh)", "iPhone")] // the app's hint wins (any case)
+    [InlineData("Toaster", "Mozilla/5.0 (Linux; Android 14)", "Android")] // an unknown hint falls back to the header
+    [InlineData(null, null, "Browser")]
+    public void The_apps_device_label_hint_is_used_when_it_is_a_known_label(string? hint, string? userAgent, string label) =>
+        Assert.Equal(label, PushSubscriptionRules.DeviceLabel(hint, userAgent));
 }

@@ -2,6 +2,7 @@ import type { ApiClient } from "./api";
 import swText from "../public/sw.js?raw";
 import {
     createSeenReporter,
+    deviceLabel,
     pushSupport,
     refreshPushSubscription,
     setPreferences,
@@ -87,7 +88,7 @@ describe("subscribe", () => {
         ];
         expect(options[0].userVisibleOnly).toBe(true);
         expect(options[0].applicationServerKey).toHaveLength(65);
-        expect(api.putPushSubscription).toHaveBeenCalledWith(json);
+        expect(api.putPushSubscription).toHaveBeenCalledWith({ ...json, deviceLabel: "Mac" });
     });
 
     test("stops when permission is refused, the keys aren't set, or push isn't supported", async () => {
@@ -125,7 +126,7 @@ describe("refreshPushSubscription (on app open)", () => {
     test("re-saves an existing subscription, never asking for permission", async () => {
         const { e, api, requestPermission, json } = env({ permission: "granted", existing: true });
         await refreshPushSubscription(api, e);
-        expect(api.putPushSubscription).toHaveBeenCalledWith(json);
+        expect(api.putPushSubscription).toHaveBeenCalledWith({ ...json, deviceLabel: "Mac" });
         expect(requestPermission).not.toHaveBeenCalled();
     });
 
@@ -279,4 +280,13 @@ describe("the service worker's push handlers", () => {
             ["https://kitchen.garymcmonagle.com/"],
         ]);
     });
+});
+
+test.each([
+    [IPHONE, 0, "iPhone"],
+    ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/18.4 Safari/605.1.15", 5, "iPad"], // iPadOS says Mac
+    [MAC_CHROME, 0, "Mac"],
+    ["Mozilla/5.0 (Linux; Android 14; Pixel 8)", 5, "Android"],
+])("the device label comes from the user agent (%s)", (ua, touch, label) => {
+    expect(deviceLabel({ userAgent: ua, maxTouchPoints: touch } as Navigator)).toBe(label);
 });

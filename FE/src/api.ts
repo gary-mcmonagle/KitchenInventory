@@ -467,7 +467,7 @@ export class ApiClient {
     }
 
     /** Saves or refreshes this device's push subscription (the browser's PushSubscription.toJSON()). */
-    putPushSubscription(subscription: PushSubscriptionJSON): Promise<PushDevice> {
+    putPushSubscription(subscription: PushSubscriptionJSON & { deviceLabel?: string }): Promise<PushDevice> {
         return this.send("PUT", "/api/push/subscriptions", subscription);
     }
 

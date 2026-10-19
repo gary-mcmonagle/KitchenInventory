@@ -5,12 +5,10 @@ import { AddScreen } from "./AddScreen";
 import { BottomNav } from "./BottomNav";
 import { ItemScreen } from "./ItemScreen";
 import { NameScreen } from "./NameScreen";
-import { PushTestScreen } from "./PushTestScreen";
 import { refreshPushSubscription } from "./push";
 import { RecipesScreen } from "./RecipesScreen";
 import {
     ADD_PATH,
-    navigate,
     matchAssignPath,
     matchEditPath,
     matchItemPath,
@@ -68,8 +66,6 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                 <AddScreen api={api} />
             ) : assigning ? (
                 <AddScreen key={assigning} api={api} assignScanId={assigning} />
-            ) : path === "/push-test" ? (
-                <PushTestScreen api={api} />
             ) : path === RECIPES_PATH ? (
                 <>
                     <RecipesScreen api={api} />
@@ -83,14 +79,7 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
             ) : (
                 <>
                     <StockScreen api={api} />
-                    <footer className={styles.footer}>
-                        {footer}
-                        {/* TEMPORARY (#77 verification): remove with PushTestScreen. */}
-                        <br />
-                        <a href="/push-test" onClick={(e) => (e.preventDefault(), navigate("/push-test"))}>
-                            Test notifications
-                        </a>
-                    </footer>
+                    <footer className={styles.footer}>{footer}</footer>
                     <BottomNav current="stock" />
                 </>
             )}

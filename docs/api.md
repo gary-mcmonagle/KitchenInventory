@@ -545,7 +545,7 @@ The plumbing for push notifications ([Task] Web Push plumbing, spike #75). Every
 
 ### `PUT /api/push/subscriptions`
 
-This device's subscription, as `PushSubscription.toJSON()` gives it: `{ "endpoint": "https://…", "keys": { "p256dh": "…", "auth": "…" } }`. Saves it for the caller, or refreshes it (the app sends it on every open, which keeps `lastSeenAt` fresh); preferences already set are kept. The device label comes from the `User-Agent`.
+This device's subscription, as `PushSubscription.toJSON()` gives it: `{ "endpoint": "https://…", "keys": { "p256dh": "…", "auth": "…" } }`. Saves it for the caller, or refreshes it (the app sends it on every open, which keeps `lastSeenAt` fresh); preferences already set are kept. Optional `deviceLabel` (`iPhone`, `iPad`, `Android`, `Mac`, `Windows`, `Linux` or `Browser`), worked out by the app; otherwise it comes from the `User-Agent` (which didn't reach the API from an installed iPhone app).
 
 - **200** `{ "id": "…", "deviceLabel": "iPhone", "preferences": { "stockChanges": true } }` (the endpoint is never sent back).
 - **400** `{ "error": "…" }`: the endpoint isn't on a known push service (Apple `web.push.apple.com`, Google `fcm.googleapis.com`, Mozilla `updates.push.services.mozilla.com`, Microsoft `*.notify.windows.com`, HTTPS, default port), or the keys aren't a P-256 key and a 16-byte secret (base64url).

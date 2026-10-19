@@ -35,7 +35,7 @@ public sealed class PushFunctions(
             return await JsonAsync(request, HttpStatusCode.BadRequest, new { error = "Body must be a JSON object." });
         }
 
-        var input = new PushSubscriptionInput(Text(body, "endpoint"), Text(body, "keys", "p256dh"), Text(body, "keys", "auth"));
+        var input = new PushSubscriptionInput(Text(body, "endpoint"), Text(body, "keys", "p256dh"), Text(body, "keys", "auth"), Text(body, "deviceLabel"));
         var userAgent = request.Headers.TryGetValues("User-Agent", out var values) ? values.FirstOrDefault() : null;
         return await RespondAsync(request, await register.ExecuteAsync(input, userAgent, context.GetCurrentUser(), cancellationToken));
     }

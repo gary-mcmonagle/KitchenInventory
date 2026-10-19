@@ -6,8 +6,9 @@ using Microsoft.Extensions.Logging;
 
 namespace CupboardTracker.Application.Push;
 
-/// <summary>A browser's push subscription as the app sends it (<c>PushSubscription.toJSON()</c>).</summary>
-public sealed record PushSubscriptionInput(string? Endpoint, string? P256dh, string? Auth);
+/// <summary>A browser's push subscription as the app sends it (<c>PushSubscription.toJSON()</c>), plus the app's own
+/// device label hint (one of <see cref="PushSubscriptionRules.DeviceLabels"/>).</summary>
+public sealed record PushSubscriptionInput(string? Endpoint, string? P256dh, string? Auth, string? DeviceLabel = null);
 
 public abstract record PushSubscriptionResult
 {
@@ -24,6 +25,13 @@ public abstract record PushSubscriptionResult
 public static class PushSubscriptionRules
 {
     public const int MaxPreferenceTypes = 20;
+
+    /// <summary>The labels a device can have. The app sends one (from <c>navigator.userAgent</c>; the User-Agent header
+    /// didn't reach the API from an installed iPhone app, found on #77); otherwise it's worked out from the header.</summary>
+    public static readonly IReadOnlyList<string> DeviceLabels = ["iPhone", "iPad", "Android", "Mac", "Windows", "Linux", "Browser"];
+
+    public static string DeviceLabel(string? hint, string? userAgent) =>
+        DeviceLabels.FirstOrDefault(l => string.Equals(l, hint, StringComparison.OrdinalIgnoreCase)) ?? DeviceLabel(userAgent);
 
     /// <summary>The document id: a hash of the endpoint, so the same subscription always lands on the same document.</summary>
     public static string IdFor(string endpoint) =>
@@ -95,7 +103,7 @@ public sealed partial class RegisterPushSubscription(
         var id = PushSubscriptionRules.IdFor(input.Endpoint!);
         var existing = await repository.GetAsync(user.ObjectId, id, cancellationToken);
         var subscription = new PushSubscription(
-            id, user.ObjectId, input.Endpoint!, input.P256dh!, input.Auth!, PushSubscriptionRules.DeviceLabel(userAgent),
+            id, user.ObjectId, input.Endpoint!, input.P256dh!, input.Auth!, PushSubscriptionRules.DeviceLabel(input.DeviceLabel, userAgent),
             existing?.CreatedAt ?? now, now, existing?.LastSuccessAt, existing?.Preferences ?? new Dictionary<string, bool>());
         await repository.UpsertAsync(subscription, cancellationToken);
         if (existing is null)
