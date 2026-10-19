@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-GB">
+    <head>
+        <meta charset="utf-8" />
+        <title>MSAL offline check</title>
+    </head>
+    <body>
+        <h1>MSAL start-up offline (spike #83)</h1>
+        <p>Runs the app's own MSAL start-up (initialize, handleRedirectPromise, accounts) with a made-up client ID. No
+        sign-in, no credentials.</p>
+        <pre id="log"></pre>
+        <script src="/vendor/msal-browser.min.js"></script>
+        <script>
+            const log = (line) => (document.getElementById("log").textContent += line + "\n");
+            window.check = (async () => {
+                const result = { online: navigator.onLine };
+                try {
+                    const app = new msal.PublicClientApplication({
+                        auth: {
+                            clientId: "00000000-0000-0000-0000-000000000000",
+                            authority: "https://login.microsoftonline.com/common",
+                            redirectUri: location.origin + "/",
+                        },
+                        cache: { cacheLocation: "localStorage" },
+                    });
+                    let t = performance.now();
+                    await app.initialize();
+                    result.initializeMs = Math.round(performance.now() - t);
+                    t = performance.now();
+                    result.redirect = String(await app.handleRedirectPromise());
+                    result.handleRedirectMs = Math.round(performance.now() - t);
+                    result.accounts = app.getAllAccounts().length;
+                    try {
+                        await app.acquireTokenSilent({
+                            scopes: ["User.Read"],
+                            account: { homeAccountId: "x.y", environment: "login.microsoftonline.com", tenantId: "y", username: "nobody@example.invalid", localAccountId: "x" },
+                        });
+                    } catch (e) {
+                        result.silentError = `${e.name}: ${e.errorCode}`;
+                    }
+                } catch (e) {
+                    result.startupError = `${e.name}: ${e.errorCode ?? e.message}`;
+                }
+                log(JSON.stringify(result, null, 2));
+                return result;
+            })();
+        </script>
+    </body>
+</html>
