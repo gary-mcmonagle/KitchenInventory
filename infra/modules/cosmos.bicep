@@ -71,26 +71,29 @@ resource sqlContainers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/conta
     parent: database
     name: c.name
     properties: {
-      resource: {
-        id: c.name
-        partitionKey: {
-          paths: [c.partitionKey]
-          kind: 'Hash'
-          version: 2
-        }
-        // Azure's defaults, stated so what-if matches the live containers.
-        indexingPolicy: {
-          automatic: true
-          indexingMode: 'consistent'
-          includedPaths: [{ path: '/*' }]
-          excludedPaths: [{ path: '/"_etag"/?' }]
-        }
-        conflictResolutionPolicy: {
-          mode: 'LastWriterWins'
-          conflictResolutionPath: '/_ts'
-        }
-        defaultTtl: c.?defaultTtl
-      }
+      // defaultTtl only where a container sets one: Cosmos rejects an explicit null (the #77 deploy failed on it).
+      resource: union(
+        {
+          id: c.name
+          partitionKey: {
+            paths: [c.partitionKey]
+            kind: 'Hash'
+            version: 2
+          }
+          // Azure's defaults, stated so what-if matches the live containers.
+          indexingPolicy: {
+            automatic: true
+            indexingMode: 'consistent'
+            includedPaths: [{ path: '/*' }]
+            excludedPaths: [{ path: '/"_etag"/?' }]
+          }
+          conflictResolutionPolicy: {
+            mode: 'LastWriterWins'
+            conflictResolutionPath: '/_ts'
+          }
+        },
+        contains(c, 'defaultTtl') ? { defaultTtl: c.defaultTtl } : {}
+      )
     }
   }
 ]
