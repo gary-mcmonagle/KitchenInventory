@@ -23,6 +23,8 @@ public sealed class WiringTests
     [InlineData(typeof(ClassificationFunctions))]
     [InlineData(typeof(RecipeFunctions))]
     [InlineData(typeof(PushFunctions))]
+    [InlineData(typeof(GenericNameFunctions))]
+    [InlineData(typeof(EstimateShelfLivesTimer))]
     [InlineData(typeof(PushJobFunction))]
     [InlineData(typeof(PushExpiryTimer))]
     public async Task Functions_resolve(Type functions)

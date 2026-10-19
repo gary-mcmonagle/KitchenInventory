@@ -170,6 +170,8 @@ public sealed class ProductFunctions(
         aisleSource = view.Aisle?.Source,
         icon = view.Icon?.Name,
         iconSource = view.Icon?.Source,
+        // Generic name (#90): the shopping-list name and where it came from; null until worked out.
+        genericName = view.Generic is { } g ? new { id = g.Id, name = g.Name, source = Domain.Products.GenericNames.SourceName(g.Source) } : null,
         units = view.InStockUnits.Select(UnitJson),
     };
 

@@ -210,6 +210,7 @@ A product, for naming (#51) and item detail (#53).
 | `openedCount`, `frozenCount` | In-stock units opened, and in the freezer now. |
 | `aisleId`, `aisleSource` | Its aisle (#71) and who chose it (`jev` / `manual`); `null` until the shelf-life timer has asked Jev. |
 | `icon`, `iconSource` | Its icon name (#72, IconPark Outline) and who chose it; `icon` is `null` when Jev wasn't sure (below 0.3), so the UI shows the aisle's icon. |
+| `genericName` | `{ id, name, source }` (#90): the shopping-list name and where it came from (`jevMatch`, `foundry`, `manual`, `fallback`); `null` until the timer has worked it out. |
 | `units` | In-stock units in **check-out order**: **opened first, in the freezer last** (#65), then soonest estimated expiry (none last), then oldest check-in. Item detail labels them Unit 1…n. |
 | `units[].expirySource` | `shelfLife` (bought date + shelf life), `manual` (set in item detail), or `opened` / `frozen` / `defrosted` (#65: what its estimate is from now); `null` with no date yet. |
 | `units[].openedOn`, `frozenOn`, `defrostedOn` | `YYYY-MM-DD` (UK) when marked, or `null`. Frozen now = `frozenOn` set and `defrostedOn` not. |
@@ -263,6 +264,17 @@ The latest action decides, and a manual date is replaced (Undo brings it back; e
 Puts a known product in an aisle by hand (#71): `{ "aisle": "bakery" }`, one of the 14 aisle IDs (`fruitVeg`, `bakery`, `meatFish`, `dairyEggs`, `chilledDeli`, `frozen`, `pastaRiceGrains`, `tinsJars`, `saucesOils`, `bakingSpices`, `breakfastCereal`, `snacksSweets`, `drinks`, `other`). Sets `aisleSource: manual`; Jev never overwrites it.
 
 - **200** `{ "productId": "…", "aisle": "bakery" }`; **400** not an aisle; **404**; **409** not known yet (name it first), or changed while saving.
+
+### `GET /api/generic-names`
+
+Every generic name (#90), A–Z, for Edit details' picker: `{ "genericNames": [{ "id": "semi-skimmed milk", "name": "Semi-skimmed milk", "aisleId": "dairyEggs", "aisleName": "Dairy & eggs", "productCount": 3 }] }`.
+
+### `PUT /api/products/{productId}/generic-name`
+
+Sets a known product's generic name by hand (#90): `{ "genericNameId": "semi-skimmed milk" }` (an existing name, the usual path) or `{ "name": "Whole milk" }` (a new one, created in the product's aisle; a name that normalizes to an existing record uses it). Saved as `genericNameSource: manual`, never overwritten.
+
+- **200** `{ "productId": "…", "genericName": { "id": "…", "name": "…", "source": "manual" }, "created": false }`
+- **400** neither or both fields, no such name, or a bad new name (1–40 characters, no size, not the brand); **404** not a known product; **409** changed meanwhile.
 
 ### `PUT /api/products/{productId}/icon`
 

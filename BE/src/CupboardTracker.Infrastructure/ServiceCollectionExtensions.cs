@@ -5,6 +5,7 @@ using CupboardTracker.Application.Digest;
 using CupboardTracker.Application.Hubs;
 using CupboardTracker.Application.Notifications;
 using CupboardTracker.Application.Ping;
+using CupboardTracker.Application.GenericNaming;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Push;
 using CupboardTracker.Application.Recipes;
@@ -15,6 +16,7 @@ using CupboardTracker.Application.ShelfLives;
 using CupboardTracker.Application.Stock;
 using CupboardTracker.Infrastructure.Cosmos;
 using CupboardTracker.Infrastructure.Email;
+using CupboardTracker.Infrastructure.GenericNaming;
 using CupboardTracker.Infrastructure.Jev;
 using CupboardTracker.Infrastructure.Photos;
 using CupboardTracker.Infrastructure.Push;
@@ -140,6 +142,17 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IShelfLifeEstimator, JevShelfLifeEstimator>();
         services.AddTransient<EstimateShelfLives>();
 
+        // Generic names (#90): Jev matches existing names first; Foundry writes new ones, throttled.
+        services.AddSingleton(sp => GenericNameSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton(sp => GenericNameWriterOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<FoundryThrottle>();
+        services.AddSingleton<IGenericNameRepository, CosmosGenericNameRepository>();
+        services.AddTransient<IGenericNameMatcher, JevGenericNameMatcher>();
+        services.AddHttpClient<IGenericNameWriter, FoundryGenericNameWriter>();
+        services.AddTransient<AssignGenericNames>();
+        services.AddTransient<ListGenericNames>();
+        services.AddTransient<SetProductGenericName>();
+
         // Hubs: heartbeats (ingest) and the offline alert (API timer), emailed through ACS with the managed identity.
         // Settings are read lazily, so the ingest app needs none of the email settings.
         services.AddSingleton<IHubRepository, CosmosHubRepository>();
@@ -177,6 +190,13 @@ public static class ServiceCollectionExtensions
         int.TryParse(config["PUSH_TEST_PER_HOUR"], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n > 0
             ? new PushTestSettings(n)
             : new PushTestSettings();
+
+    /// <summary>GENERIC_NAME_MATCH_MIN_CONFIDENCE (default 0.9) and GENERIC_NAME_BATCH_SIZE (default 254) (#90).</summary>
+    internal static GenericNameSettings GenericNameSettingsFromConfiguration(IConfiguration config) => new(
+        double.TryParse(config["GENERIC_NAME_MATCH_MIN_CONFIDENCE"], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var c) && c is > 0 and <= 1
+            ? c : GenericNameSettings.DefaultMatchMinConfidence,
+        int.TryParse(config["GENERIC_NAME_BATCH_SIZE"], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var b) && b is > 0 and <= 254
+            ? b : GenericNameSettings.DefaultBatchSize);
 
     /// <summary>RECIPE_REQUESTS_PER_HOUR (default 30): the per-user cost guard on recipe suggestions (#73).</summary>
     internal static RecipeSettings RecipeSettingsFromConfiguration(IConfiguration config)

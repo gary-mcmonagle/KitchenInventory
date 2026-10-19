@@ -223,6 +223,27 @@ A check-in scan of an in-store printed label (see [domain language](domain-langu
 - `feedDismissedAt`: hidden from the scan feed (still on the scanners screen).
 - Lives in `products` (a handful of small documents, partition `/id`) rather than a container of its own.
 
+### Generic name (#90)
+
+One document per **generic name** (what you'd say to someone going to the shop: "Semi-skimmed milk"), shared by every product of that kind. Kept in `products` as a document kind rather than a container of its own, so no infrastructure change was needed; every product query already filters on `type`.
+
+```json
+{
+  "id": "generic:semi-skimmed milk",
+  "type": "genericName",
+  "name": "Semi-skimmed milk",
+  "aisle": "dairyEggs",
+  "createdAt": "2026-10-19T21:30:00.000Z",
+  "createdBy": "foundry"
+}
+```
+
+- **`id`** is `generic:` plus the normalized name (lower case, trimmed, single spaces). Created with a create-only write, so two products can never make two records for the same name: the second one finds the first.
+- **`aisle`** comes from the product that created it; matching starts in the product's aisle.
+- **`createdBy`**: `foundry` (written by the timer) or `manual` (typed in Edit details). #89 adds `addWhenOut` to the same record.
+
+On each **product**: `genericName` (display), `genericNameId` (the record's normalized id), `genericNameSource` (`jevMatch` | `foundry` | `manual` | `fallback`), `genericNameConfidence` (Jev's, when matched) and `genericNameEstimatedAt`. Filled by the estimate timer after the aisle is known; `manual` is never overwritten.
+
 ### Barcode lookup document
 
 Maps one barcode to its product, so "which product is this barcode?" is a single point read.

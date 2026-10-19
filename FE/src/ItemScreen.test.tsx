@@ -57,6 +57,7 @@ const milk = (overrides: Partial<Product> = {}): Product => ({
     aisleSource: null,
     icon: null,
     iconSource: null,
+    genericName: null,
     units: [
         unit("u1"),
         unit("u2", {
@@ -130,6 +131,19 @@ test.each([
     const card = (await screen.findByText("Estimated use by")).parentElement!;
     expect(card.className).toMatch(new RegExp(tone));
     expect(card).toHaveTextContent(text);
+});
+
+test("the generic name shows under the heading, once there is one (#90)", async () => {
+    setup([
+        milk({ genericName: { id: "semi-skimmed milk", name: "Semi-skimmed milk", source: "jevMatch" } }),
+    ]);
+    expect(await screen.findByText("Generic name: Semi-skimmed milk")).toBeInTheDocument();
+});
+
+test("no generic name yet shows nothing for it (#90)", async () => {
+    setup([milk()]);
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByText(/Generic name/)).not.toBeInTheDocument();
 });
 
 test("no estimate yet is neutral", async () => {

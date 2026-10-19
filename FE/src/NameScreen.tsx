@@ -4,6 +4,7 @@ import {
     SignInRequiredError,
     type ApiClient,
     type FieldErrors,
+    type GenericNameOption,
     type PhotoRecognition,
     type Product,
 } from "./api";
@@ -51,6 +52,7 @@ export function NameScreen({
     const [brand, setBrand] = useState("");
     const [size, setSize] = useState("");
     const [aisle, setAisle] = useState("");
+    const [generic, setGeneric] = useState<GenericChoice | null>(null);
     const [errors, setErrors] = useState<Errors>({});
     const [formError, setFormError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -106,6 +108,10 @@ export function NameScreen({
                 await api.editDetails(productId, details);
                 // The aisle (#71) is saved with the form, only when it changed.
                 if (aisle && aisle !== product?.aisleId) await api.setAisle(productId, aisle);
+                // The generic name (#90): only when one was picked or typed.
+                if (generic?.kind === "existing" && generic.id !== product?.genericName?.id)
+                    await api.setGenericName(productId, { genericNameId: generic.id });
+                else if (generic?.kind === "new") await api.setGenericName(productId, { name: generic.name });
             } else await api.nameProduct(productId, details);
             back();
         } catch (error) {
@@ -238,6 +244,14 @@ export function NameScreen({
                                         ))}
                                     </select>
                                 </div>
+                            )}
+                            {editing && (
+                                <GenericNamePicker
+                                    api={api}
+                                    current={product.genericName?.name ?? null}
+                                    choice={generic}
+                                    onChoose={setGeneric}
+                                />
                             )}
                         </div>
                         {editing && (
@@ -519,6 +533,129 @@ function PhotoGuess({
                         </button>
                     ))}
                 </div>
+            )}
+        </div>
+    );
+}
+
+/** What's been picked in Edit details' "Generic name" (#90): an existing name, or a new one typed in. */
+export type GenericChoice = { kind: "existing"; id: string; name: string } | { kind: "new"; name: string };
+
+/**
+ * "Generic name" in Edit details (#90): a searchable list of existing names (with their aisles), plus "Use a new
+ * name: <typed>". Picking an existing one is the default path, so fixes don't create near-duplicates. Saved with the
+ * form. The list loads the first time the field is focused.
+ */
+function GenericNamePicker({
+    api,
+    current,
+    choice,
+    onChoose,
+}: {
+    api: ApiClient;
+    current: string | null;
+    choice: GenericChoice | null;
+    onChoose: (choice: GenericChoice | null) => void;
+}) {
+    const [options, setOptions] = useState<GenericNameOption[] | null>(null);
+    const [query, setQuery] = useState("");
+    const [open, setOpen] = useState(false);
+    const [failed, setFailed] = useState(false);
+
+    const load = () => {
+        setOpen(true);
+        if (options) return;
+        api.genericNames()
+            .then((r) => setOptions(r.genericNames))
+            .catch((error: unknown) => {
+                if (!(error instanceof SignInRequiredError)) setFailed(true);
+            });
+    };
+
+    const typed = query.trim().replace(/\s+/g, " ");
+    const key = typed.toLowerCase();
+    const matches = (options ?? []).filter((o) => !key || o.name.toLowerCase().includes(key));
+    const exact = (options ?? []).some((o) => o.name.toLowerCase() === key);
+    const shown = choice?.name ?? current;
+
+    return (
+        <div className={styles.field}>
+            <label htmlFor="generic-name" className={styles.label}>
+                Generic name
+            </label>
+            <div className={styles.iconNote}>
+                {shown ? `Shopping list name: ${shown}` : "Not worked out yet"}
+                {choice && " (changed)"}
+            </div>
+            <input
+                id="generic-name"
+                type="search"
+                role="combobox"
+                aria-expanded={open}
+                aria-controls="generic-name-list"
+                autoComplete="off"
+                className={styles.input}
+                placeholder="Search names, or type a new one"
+                value={query}
+                onFocus={load}
+                onChange={(e) => {
+                    setQuery(e.target.value);
+                    setOpen(true);
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === "Escape") setOpen(false);
+                }}
+            />
+            {open && (
+                <ul
+                    id="generic-name-list"
+                    role="listbox"
+                    aria-label="Generic names"
+                    className={styles.guesses}
+                >
+                    {failed && <li className={styles.photoNote}>Couldn't load the names. Try again.</li>}
+                    {!options && !failed && <li className={styles.photoNote}>Loading names…</li>}
+                    {matches.slice(0, 30).map((o) => (
+                        <li
+                            key={o.id}
+                            role="option"
+                            aria-selected={choice?.kind === "existing" && choice.id === o.id}
+                        >
+                            <button
+                                type="button"
+                                className={styles.guess}
+                                aria-pressed={choice?.kind === "existing" && choice.id === o.id}
+                                onClick={() => {
+                                    onChoose({ kind: "existing", id: o.id, name: o.name });
+                                    setQuery("");
+                                    setOpen(false);
+                                }}
+                            >
+                                <span className={styles.guessName}>{o.name}</span>
+                                <span className={styles.guessDetails}>
+                                    {o.aisleName}
+                                    {o.productCount > 0 &&
+                                        ` · ${o.productCount} product${o.productCount === 1 ? "" : "s"}`}
+                                </span>
+                            </button>
+                        </li>
+                    ))}
+                    {options && typed && !exact && (
+                        <li role="option" aria-selected={choice?.kind === "new" && choice.name === typed}>
+                            <button
+                                type="button"
+                                className={styles.guess}
+                                onClick={() => {
+                                    onChoose({ kind: "new", name: typed });
+                                    setQuery("");
+                                    setOpen(false);
+                                }}
+                            >
+                                <span className={styles.guessName}>Use a new name: {typed}</span>
+                            </button>
+                        </li>
+                    )}
+                </ul>
             )}
         </div>
     );

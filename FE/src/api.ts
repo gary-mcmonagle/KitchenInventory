@@ -122,6 +122,17 @@ export interface Product {
     aisleSource: string | null;
     icon: string | null;
     iconSource: string | null;
+    /** #90: the shopping-list name; null until worked out. source: jevMatch, foundry, manual or fallback. */
+    genericName: { id: string; name: string; source: string } | null;
+}
+
+/** GET /api/generic-names (#90): every generic name, A–Z, for Edit details' picker. */
+export interface GenericNameOption {
+    id: string;
+    name: string;
+    aisleId: string;
+    aisleName: string;
+    productCount: number;
 }
 
 export interface ProductUnit {
@@ -369,6 +380,23 @@ export class ApiClient {
     /** Puts a product in an aisle by hand (#71); Jev never overwrites it. */
     setAisle(productId: string, aisle: string): Promise<{ productId: string; aisle: string }> {
         return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/aisle`, { aisle });
+    }
+
+    /** Every generic name (#90), A–Z. */
+    genericNames(): Promise<{ genericNames: GenericNameOption[] }> {
+        return this.get("/api/generic-names");
+    }
+
+    /** Sets a product's generic name by hand (#90): an existing one, or a new name typed in. Saved as manual. */
+    setGenericName(
+        productId: string,
+        choice: { genericNameId: string } | { name: string },
+    ): Promise<{
+        productId: string;
+        genericName: { id: string; name: string; source: string };
+        created: boolean;
+    }> {
+        return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/generic-name`, choice);
     }
 
     /** Sets a product's icon by hand (#72), or null to let Jev choose again. */

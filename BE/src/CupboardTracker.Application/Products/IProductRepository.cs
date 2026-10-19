@@ -43,6 +43,9 @@ public interface IProductRepository
     /// <summary>Known products with no aisle or no icon yet (#71, #72), up to <paramref name="max"/>.</summary>
     Task<IReadOnlyList<Product>> GetNeedingClassificationAsync(int max, CancellationToken cancellationToken);
 
+    /// <summary>Known products with an aisle and no generic name yet (#90).</summary>
+    Task<IReadOnlyList<Product>> GetNeedingGenericNameAsync(int max, CancellationToken cancellationToken);
+
     /// <summary>Stores a shelf life, only if the product is still known with none (ETag-guarded). False otherwise.</summary>
     Task<bool> TrySetShelfLifeAsync(Product updated, CancellationToken cancellationToken);
 

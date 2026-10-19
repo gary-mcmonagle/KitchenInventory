@@ -26,6 +26,7 @@ const unknown: Product = {
     aisleSource: null,
     icon: null,
     iconSource: null,
+    genericName: null,
 };
 
 function deferred<T>() {
@@ -237,6 +238,90 @@ test("Edit details: the aisle is saved with the form, and an icon is picked from
 
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
     expect(api.setAisle).toHaveBeenCalledWith("p-1", "bakery");
+});
+
+describe("Edit details: generic name (#90)", () => {
+    const known: Product = {
+        ...unknown,
+        status: "known",
+        displayName: "SEMI-SKIMMED BRITISH MILK",
+        aisleId: "dairyEggs",
+        aisleSource: "jev",
+        genericName: { id: "milk", name: "Milk", source: "foundry" },
+    };
+    const names = [
+        {
+            id: "mature cheddar",
+            name: "Mature cheddar",
+            aisleId: "dairyEggs",
+            aisleName: "Dairy & eggs",
+            productCount: 2,
+        },
+        {
+            id: "semi-skimmed milk",
+            name: "Semi-skimmed milk",
+            aisleId: "dairyEggs",
+            aisleName: "Dairy & eggs",
+            productCount: 3,
+        },
+    ];
+    const setup = () => {
+        const api = {
+            product: vi.fn(async () => known),
+            editDetails: vi.fn(async () => ({ productId: "p-1", displayName: known.displayName })),
+            setAisle: vi.fn(),
+            genericNames: vi.fn(async () => ({ genericNames: names })),
+            setGenericName: vi.fn(async () => ({ productId: "p-1", genericName: names[1], created: false })),
+        };
+        window.history.pushState(null, "", "/products/p-1/edit");
+        render(<NameScreen api={api as unknown as ApiClient} productId="p-1" mode="edit" />);
+        return api;
+    };
+
+    test("shows the current name, searches existing names with their aisles, and saves the pick as manual", async () => {
+        const api = setup();
+        expect(await screen.findByText("Shopping list name: Milk")).toBeInTheDocument();
+
+        const search = screen.getByRole("combobox", { name: "Generic name" });
+        await act(async () => fireEvent.focus(search));
+        fireEvent.change(search, { target: { value: "skim" } });
+        const list = screen.getByRole("listbox", { name: "Generic names" });
+        expect(
+            within(list)
+                .getAllByRole("option")
+                .map((o) => o.textContent),
+        ).toEqual(["Semi-skimmed milkDairy & eggs · 3 products", "Use a new name: skim"]);
+
+        fireEvent.click(within(list).getByRole("button", { name: /Semi-skimmed milk/ }));
+        expect(screen.getByText("Shopping list name: Semi-skimmed milk (changed)")).toBeInTheDocument();
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+
+        expect(api.genericNames).toHaveBeenCalledTimes(1);
+        expect(api.setGenericName).toHaveBeenCalledWith("p-1", { genericNameId: "semi-skimmed milk" });
+    });
+
+    test("a new name can be typed in, and an exact existing name isn't offered as new", async () => {
+        const api = setup();
+        const search = await screen.findByRole("combobox", { name: "Generic name" });
+        await act(async () => fireEvent.focus(search));
+
+        fireEvent.change(search, { target: { value: "mature cheddar" } });
+        expect(screen.queryByText(/Use a new name/)).not.toBeInTheDocument();
+
+        fireEvent.change(search, { target: { value: "  Whole   milk " } });
+        fireEvent.click(screen.getByRole("button", { name: "Use a new name: Whole milk" }));
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+
+        expect(api.setGenericName).toHaveBeenCalledWith("p-1", { name: "Whole milk" });
+    });
+
+    test("saving without touching it doesn't change the generic name", async () => {
+        const api = setup();
+        await screen.findByText("Shopping list name: Milk");
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+        expect(api.setGenericName).not.toHaveBeenCalled();
+        expect(api.genericNames).not.toHaveBeenCalled(); // loaded only when the field is used
+    });
 });
 
 describe("Identify from a photo (Gary, 2026-10-18)", () => {

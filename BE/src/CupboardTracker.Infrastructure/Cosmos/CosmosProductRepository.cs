@@ -162,6 +162,15 @@ public sealed class CosmosProductRepository(CosmosContainers containers, TimePro
         return documents.Select(ProductDocument.ToProduct).ToList();
     }
 
+    public async Task<IReadOnlyList<Product>> GetNeedingGenericNameAsync(int max, CancellationToken cancellationToken)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.type = 'product' AND c.status = 'known' AND IS_STRING(c.aisle) "
+            + "AND (NOT IS_DEFINED(c.genericNameId) OR IS_NULL(c.genericNameId))");
+        var documents = await CosmosJson.QueryAsync(Products, query, partitionKey: null, max, cancellationToken);
+        return documents.Select(ProductDocument.ToProduct).ToList();
+    }
+
     public async Task<IReadOnlyList<Product>> GetNeedingStateEstimatesAsync(int max, CancellationToken cancellationToken)
     {
         var query = new QueryDefinition(
@@ -282,6 +291,13 @@ internal static class ProductDocument
         Replace(document, "iconSource", product.Icon?.Source);
         Replace(document, "iconConfidence", product.Icon is { } icon ? Math.Round(icon.Confidence, 3) : null);
         Replace(document, "iconEstimatedAt", product.Icon is { } i ? CosmosJson.Timestamp(i.At) : null);
+
+        // Generic name (#90).
+        Replace(document, "genericName", product.Generic?.Name);
+        Replace(document, "genericNameId", product.Generic?.Id);
+        Replace(document, "genericNameSource", product.Generic is { } g ? GenericNames.SourceName(g.Source) : null);
+        Replace(document, "genericNameConfidence", product.Generic?.Confidence is { } gc ? Math.Round(gc, 3) : null);
+        Replace(document, "genericNameEstimatedAt", product.Generic is { } ga ? CosmosJson.Timestamp(ga.At) : null);
         return document;
     }
 
@@ -302,6 +318,19 @@ internal static class ProductDocument
             ? new ProductAisle(id, CosmosJson.Text(d["aisleSource"]) ?? ShelfLife.JevSource,
                 d["aisleConfidence"] is JsonValue c && c.TryGetValue<double>(out var conf) ? conf : 0,
                 CosmosJson.ParseTimestamp(d["aisleEstimatedAt"]) ?? DateTimeOffset.MinValue)
+            : null;
+
+    private static ProductGenericName? ReadGeneric(JsonObject d) =>
+        CosmosJson.Text(d["genericNameId"]) is { } id && CosmosJson.Text(d["genericName"]) is { } name
+            ? new ProductGenericName(id, name, CosmosJson.Text(d["genericNameSource"]) switch
+                {
+                    "jevMatch" => GenericNameSource.JevMatch,
+                    "foundry" => GenericNameSource.Foundry,
+                    "manual" => GenericNameSource.Manual,
+                    _ => GenericNameSource.Fallback,
+                },
+                d["genericNameConfidence"] is JsonValue c && c.TryGetValue<double>(out var conf) ? conf : null,
+                CosmosJson.ParseTimestamp(d["genericNameEstimatedAt"]) ?? DateTimeOffset.MinValue)
             : null;
 
     /// <summary>Present once Jev has answered (or Gary chose), even with no icon (below the confidence threshold).</summary>
@@ -395,7 +424,8 @@ internal static class ProductDocument
             CosmosJson.ParseTimestamp(document["lastAddedAt"]),
             ReadStates(document),
             ReadAisle(document),
-            ReadIcon(document));
+            ReadIcon(document),
+            ReadGeneric(document));
     }
 
     private static ShelfLife? ReadShelfLife(JsonObject document)

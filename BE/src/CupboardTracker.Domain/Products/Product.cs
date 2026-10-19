@@ -46,8 +46,16 @@ public sealed record Product(
     DateTimeOffset? LastAddedAt = null,
     ProductStateEstimates? StateEstimates = null,
     ProductAisle? Aisle = null,
-    ProductIcon? Icon = null)
+    ProductIcon? Icon = null,
+    ProductGenericName? Generic = null)
 {
+    /// <summary>Known, with an aisle, and no generic name yet (#90): the estimate timer works one out.</summary>
+    public bool NeedsGenericName => Status == ProductStatus.Known && Aisle is not null && Generic is null;
+
+    /// <summary>A generic name chosen in Edit details (#90): never overwritten.</summary>
+    public Product WithManualGenericName(GenericName name, DateTimeOffset at) =>
+        this with { Generic = new ProductGenericName(name.Id, name.Name, GenericNameSource.Manual, null, at) };
+
     /// <summary>Known, and Jev hasn't given it an aisle or an icon yet (#71, #72): one request asks for both.</summary>
     public bool NeedsClassification => Status == ProductStatus.Known && (Aisle is null || Icon is null);
 

@@ -255,6 +255,9 @@ function Detail({
                 />
                 <div className={styles.headingText}>
                     <h1 className={styles.name}>{product.displayName}</h1>
+                    {product.genericName && (
+                        <div className={styles.meta}>Generic name: {product.genericName.name}</div>
+                    )}
                     {meta && <div className={styles.meta}>{meta}</div>}
                     <a
                         className={styles.link}
