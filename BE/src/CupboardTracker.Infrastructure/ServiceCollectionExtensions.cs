@@ -6,6 +6,7 @@ using CupboardTracker.Application.Hubs;
 using CupboardTracker.Application.Notifications;
 using CupboardTracker.Application.Ping;
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Push;
 using CupboardTracker.Application.Recipes;
 using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Application.Scanners;
@@ -16,6 +17,7 @@ using CupboardTracker.Infrastructure.Cosmos;
 using CupboardTracker.Infrastructure.Email;
 using CupboardTracker.Infrastructure.Jev;
 using CupboardTracker.Infrastructure.Photos;
+using CupboardTracker.Infrastructure.Push;
 using CupboardTracker.Infrastructure.Recipes;
 using CupboardTracker.Infrastructure.SignalR;
 using CupboardTracker.Infrastructure.OpenFoodFacts;
@@ -70,6 +72,25 @@ public static class ServiceCollectionExtensions
         services.AddTransient<StoreLabelCheckInScan>();
         services.AddTransient<AssignStoreLabel>();
         services.AddTransient<DismissStoreLabelFromFeed>();
+
+        // Push notifications (#77, spike #75): our own Web Push sender (aes128gcm + VAPID), subscriptions and "seen"
+        // receipts in Cosmos, delayed jobs on a Storage queue. The VAPID private key is a Key Vault reference.
+        services.AddSingleton(sp => WebPushOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton(sp => new PushSettings(sp.GetRequiredService<WebPushOptions>() is { IsConfigured: true } o ? o.PublicKey : null));
+        services.AddSingleton(sp => PushTestSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddHttpClient<IPushSender, WebPushSender>();
+        services.AddSingleton<IPushSubscriptionRepository, CosmosPushSubscriptionRepository>();
+        services.AddSingleton<IPushSeenRepository, CosmosPushSeenRepository>();
+        services.AddSingleton<IPushJobScheduler, StorageQueuePushJobScheduler>();
+        services.AddTransient<SendPush>();
+        services.AddTransient<SchedulePush>();
+        services.AddTransient<RunPushJob>();
+        services.AddTransient<RecordPushSeen>();
+        services.AddTransient<RegisterPushSubscription>();
+        services.AddTransient<RemovePushSubscription>();
+        services.AddTransient<SetPushPreferences>();
+        services.AddTransient<ExpireStalePushSubscriptions>();
+        services.AddSingleton<SendTestPush>(); // holds the per-person hourly limit
 
         // Recipe ideas (#73): gpt-4o on the same Foundry account, with a per-user hourly cost guard.
         services.AddSingleton(sp => RecipeGenerationOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
@@ -150,6 +171,12 @@ public static class ServiceCollectionExtensions
                 System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds >= 10
             ? TimeSpan.FromSeconds(seconds)
             : ScannersSettings.DefaultHeartbeatInterval);
+
+    /// <summary>PUSH_TEST_PER_HOUR (default 5): test pushes per person per hour (#77).</summary>
+    internal static PushTestSettings PushTestSettingsFromConfiguration(IConfiguration config) =>
+        int.TryParse(config["PUSH_TEST_PER_HOUR"], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n > 0
+            ? new PushTestSettings(n)
+            : new PushTestSettings();
 
     /// <summary>RECIPE_REQUESTS_PER_HOUR (default 30): the per-user cost guard on recipe suggestions (#73).</summary>
     internal static RecipeSettings RecipeSettingsFromConfiguration(IConfiguration config)

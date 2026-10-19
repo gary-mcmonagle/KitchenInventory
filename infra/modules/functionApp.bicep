@@ -30,11 +30,15 @@ param appSettings object = {}
 @description('Browser origins allowed to call this app (CORS). Empty: no CORS rules.')
 param corsAllowedOrigins array = []
 
+@description('Give the app Storage Queue Data Contributor on its own storage account (queue triggers and sends).')
+param queueDataContributor bool = false
+
 var deploymentContainerName = 'app-package'
 
 // Built-in Azure role IDs.
 var storageBlobDataOwner = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
 var monitoringMetricsPublisher = '3913510d-42f4-4e42-8a64-420c390055eb'
+var storageQueueDataContributor = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
   name: appInsightsName
@@ -145,6 +149,16 @@ resource blobOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataOwner)
+  }
+}
+
+resource queueContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (queueDataContributor) {
+  scope: storage
+  name: guid(storage.id, functionApp.id, storageQueueDataContributor)
+  properties: {
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageQueueDataContributor)
   }
 }
 

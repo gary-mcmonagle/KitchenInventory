@@ -218,4 +218,16 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Basic staples** – the few things a recipe suggestion may assume without them being in stock: salt, pepper, cooking oil and water. Anything else not in stock is listed under "You'll also need" (at most 3).
 
+**Push notification** – a message that appears on a household member's phone or computer from Cupboard Tracker, even when the app is closed (#77). Only on devices where they turned notifications on; on iPhone, only in the app added to the Home Screen.
+- In code: `SendPush`, `PushMessage`, `IPushSender`
+
+**Push subscription** – one device's permission and address for push notifications, stored per person and device, with which notification types it wants (preferences). Removed when the device turns notifications off, when the push service says it's gone, or after 30 days without the app being opened.
+- In code: `PushSubscription`, `pushSubscriptions` container
+
+**Seen receipt** – a note from the app that a person saw an event (e.g. a scan's toast) on a visible screen, so a push about it leaves them out. Kept for about a day.
+- In code: `RecordPushSeen`, `markSeen`, `pushSeen` container
+
+**Quiet hours** – 21:30 to 07:30 UK time, when no pushes are sent.
+- In code: `QuietHours`
+
 **Toast states** – loading (grey), needs identification (yellow, tap to open photo identification), identified (green, shows the product name).

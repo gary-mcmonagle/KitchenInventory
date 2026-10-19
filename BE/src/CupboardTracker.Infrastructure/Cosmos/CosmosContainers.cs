@@ -16,4 +16,8 @@ public sealed class CosmosContainers(CosmosClient client, string databaseName)
     public Container UnmatchedCheckOuts { get; } = client.GetContainer(databaseName, "unmatchedCheckOuts");
 
     public Container SentDigests { get; } = client.GetContainer(databaseName, "sentDigests");
+
+    public Container PushSubscriptions { get; } = client.GetContainer(databaseName, "pushSubscriptions");
+
+    public Container PushSeen { get; } = client.GetContainer(databaseName, "pushSeen");
 }

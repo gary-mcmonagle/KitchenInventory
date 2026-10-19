@@ -534,3 +534,44 @@ The **stock is read on the server from Cosmos**, never taken from the app: every
 - **400** `{ "error": "…" }`: bad shape or meal, comments over 300 characters, more than 20 included, or an included product that isn't a known product in stock.
 - **422** `{ "error": "There's nothing in stock to cook with." }`: no known products in stock.
 - **429** `{ "error": "That's a lot of recipes for one hour. Try again a bit later." }`: over `RECIPE_REQUESTS_PER_HOUR` (default 30) for this user in the last hour. Counted per API app instance, in memory: a cost guard, not an exact quota.
+
+## Push notifications (#77)
+
+The plumbing for push notifications ([Task] Web Push plumbing, spike #75). Every endpoint needs a signed-in user (**401** without a token) and only touches the **caller's own** subscriptions. The features decide what to send and when; nothing here sends a push except the test.
+
+### `GET /api/push/config`
+
+`{ "publicKey": "<VAPID public key, base64url>" }`, or `null` until the keys are set. The app subscribes with it.
+
+### `PUT /api/push/subscriptions`
+
+This device's subscription, as `PushSubscription.toJSON()` gives it: `{ "endpoint": "https://…", "keys": { "p256dh": "…", "auth": "…" } }`. Saves it for the caller, or refreshes it (the app sends it on every open, which keeps `lastSeenAt` fresh); preferences already set are kept. The device label comes from the `User-Agent`.
+
+- **200** `{ "id": "…", "deviceLabel": "iPhone", "preferences": { "stockChanges": true } }` (the endpoint is never sent back).
+- **400** `{ "error": "…" }`: the endpoint isn't on a known push service (Apple `web.push.apple.com`, Google `fcm.googleapis.com`, Mozilla `updates.push.services.mozilla.com`, Microsoft `*.notify.windows.com`, HTTPS, default port), or the keys aren't a P-256 key and a 16-byte secret (base64url).
+
+### `DELETE /api/push/subscriptions`
+
+`{ "endpoint": "…" }`: removes the caller's subscription for that endpoint. **200** `{ "removed": true }`; **404** if the caller has none for it; **400** without an endpoint.
+
+### `PATCH /api/push/subscriptions/preferences`
+
+`{ "endpoint": "…", "preferences": { "stockChanges": true } }`: merges these types into the caller's subscription. Types are letters and digits (at most 20). **200** as for `PUT`; **404** if the caller has no such subscription; **400** for a bad body or type.
+
+### `POST /api/push/seen`
+
+`{ "eventKeys": ["scan:<scanId>", …] }`: the caller saw these events on a visible screen, so a delayed push about them leaves the caller out (on all their devices). Keys are 1–100 characters without `/ \ ? #`, at most 50 per call; the user comes from the token. **204**; **400** for a bad body. Fire-and-forget: a lost receipt only means an extra push.
+
+### `POST /api/push/test`
+
+Sends "Test notification" to the caller's own devices only. **200** `{ "targeted": 2, "delivered": 2, "removed": 0, "failed": 0 }`; **409** if the caller has no devices with notifications on; **429** after 5 in an hour (`PUSH_TEST_PER_HOUR`); **503** until the VAPID keys are set.
+
+### What a push looks like
+
+Declarative Web Push JSON (WebKit; iOS 18.4+ shows it without the service worker, and the app's worker shows it everywhere else):
+
+```json
+{ "web_push": 8030, "notification": { "title": "…", "body": "…", "navigate": "https://kitchen.garymcmonagle.com/…", "tag": "stock", "lang": "en-GB" } }
+```
+
+Sent with `Content-Encoding: aes128gcm` (RFC 8291), VAPID (RFC 8292; subject `https://kitchen.garymcmonagle.com`), `TTL`, `Urgency` and a letters-and-digits `Topic` equal to the tag, so a newer push of the same kind replaces an older one. Delayed pushes are jobs on the API app's `push-jobs` Storage queue; each runs once.

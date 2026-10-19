@@ -9,6 +9,10 @@ param appName = 'cupboard'
 // as an SPA redirect URI: deploy/entra.sh --swa-host <default> --swa-host kitchen.garymcmonagle.com.
 param customDomains = ['kitchen.garymcmonagle.com']
 
+// Push notifications (#77): the VAPID PUBLIC key (not secret; the private one is only in Key Vault). Empty until Gary
+// generates the pair (steps on Trello #77).
+param vapidPublicKey = ''
+
 // Set by deploy/infra.sh from the live apps, so re-running infra never resets the deployed commit.
 param ingestCommitSha = readEnvironmentVariable('INGEST_COMMIT_SHA', 'not-deployed')
 param apiCommitSha = readEnvironmentVariable('API_COMMIT_SHA', 'not-deployed')

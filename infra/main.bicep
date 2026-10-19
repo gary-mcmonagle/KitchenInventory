@@ -57,6 +57,9 @@ param offlineThresholdMinutes int = 20
 @description('Custom domains set up on the Static Web App by hand (e.g. kitchen.garymcmonagle.com): allowed in CORS for the API and SignalR, next to its default hostname.')
 param customDomains array = []
 
+@description('The VAPID public key for push notifications (#77; not secret). Empty until Gary generates the key pair; the private key is the Key Vault secret vapid-private-key.')
+param vapidPublicKey string = ''
+
 @description('Maximum Flex Consumption instances per Function app (a cost guard; household load is tiny).')
 @minValue(1)
 @maxValue(1000)
@@ -190,6 +193,8 @@ module api 'modules/functionApp.bicep' = {
     instanceMemoryMB: functionInstanceMemoryMB
     // The React app calls the API directly from the browser (#37): the Static Web App, and Vite's dev server.
     corsAllowedOrigins: appOrigins
+    // Delayed push jobs (#77) on a queue in its own storage account.
+    queueDataContributor: true
     appSettings: union({
       COMMIT_SHA: apiCommitSha
       COSMOS_ENDPOINT: cosmos.outputs.endpoint
@@ -218,6 +223,11 @@ module api 'modules/functionApp.bicep' = {
       PHOTO_MODEL_DEPLOYMENT: 'gpt-4o'
       // Recipe ideas (#73): the same deployment by default; RECIPE_REQUESTS_PER_HOUR defaults to 30 in code.
       RECIPE_MODEL_DEPLOYMENT: 'gpt-4o'
+      // Push notifications (#77, spike #75): our own Web Push sender. The private key is a Key Vault reference (Gary
+      // sets the secret by hand); the app's origin is the VAPID subject (Apple wants a real one) and the tap URL base.
+      VAPID_PUBLIC_KEY: vapidPublicKey
+      VAPID_PRIVATE_KEY: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=vapid-private-key)'
+      PUSH_APP_ORIGIN: 'https://kitchen.garymcmonagle.com'
     }, signalRSettings)
   }
 }

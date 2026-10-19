@@ -173,6 +173,7 @@ There is **one environment, and it's the live household system**. Treat it with 
   | Secret | App setting | Read by | Used for |
   |---|---|---|---|
   | `jev-api-key` | `JEV_API_KEY` | API app | Jev (TypeSafe System One): shelf life (#52) |
+  | `vapid-private-key` | `VAPID_PRIVATE_KEY` | API app | Signing push notifications (#77). Made by `deploy/vapid-keys.sh` (the private key goes straight to the clipboard, never shown) |
 
 - **Access:** the API app's managed identity has **Key Vault Secrets User** on the vault (ingest has no access: it needs no secret). Whoever runs `deploy/infra.sh` (Gary) gets **Key Vault Secrets Officer** (`VAULT_OFFICER_PRINCIPAL_ID` overrides it), so he can set them.
 - **How code gets them:** the app setting is a Key Vault reference, `@Microsoft.KeyVault(VaultName=…;SecretName=…)` with no version, so it follows the latest version. Code reads `JEV_API_KEY` like any setting. Until the secret exists, the setting holds the reference text itself; code must treat that as "not configured".
@@ -186,6 +187,17 @@ There is **one environment, and it's the live household system**. Treat it with 
 - **How it works:** ingest sends `scanReceived` once a scan is stored. The change-feed processor sends the outcome (`scanIdentified`, `scanNeedsIdentification`, `checkOutUnmatched`, `scanSkipped`). Naming sends `productNamed`, and dismissing sends `feedDismissed`. Sending is in `SignalRScanFeed` (Infrastructure, SignalR Management SDK) behind `IScanFeedPublisher`, and always goes through `ScanFeedNotifier`, which is **best-effort**: a failure is a **warning** and never fails a scan. The UI connects through `POST /api/negotiate` (bearer token) and catches up from `GET /api/scan-feed` after every (re)connect. Contract: `docs/api.md` (Live scan feed).
 - **Check it's sending:** `deploy/verify/logs.sh ingest` (or `api`) shows `Scan feed: sent <event> for scan <id>`, or a warning when it couldn't.
 - **Local development:** without SignalR settings, publishing does nothing, and the UI still fills the feed from catch-up. To try the live feed locally, use the **SignalR emulator**, so local scans stay off the live feed: `dotnet tool install -g Microsoft.Azure.SignalR.Emulator`, `asrs-emulator start`, then put its connection string in `AzureSignalRConnectionString` in your git-ignored `local.settings.json` for both apps. Never point a local app at the live SignalR resource.
+
+### Push notifications (#77, spike #75)
+
+- **Sending:** our own Web Push sender in the API app (`WebPushSender`, Infrastructure): `aes128gcm` (RFC 8291, a unit test reproduces its test vector) and VAPID (RFC 8292), in-box crypto. **Not** Notification Hubs (no iOS web push, keys only) and **not** the `WebPush` NuGet package (old `aesgcm`, which Apple rejects).
+- **Apple's rules** (Google accepts what Apple rejects, so test on an iPhone): the VAPID subject is a real URL (`PUSH_APP_ORIGIN`, `https://kitchen.garymcmonagle.com`; a fake `mailto:` gets 403 `BadJwtToken`); `Topic` is **letters and digits only**, at most 32 (hyphens get 400 `BadWebPushTopic`); **every push must show a notification** (iOS revokes silent ones). On iPhone, push only works in the app added to the Home Screen.
+- **Keys:** `VAPID_PUBLIC_KEY` from `vapidPublicKey` in `infra/main.bicepparam` (not secret); the private key only in Key Vault (`vapid-private-key`, made by `deploy/vapid-keys.sh`). Until both are set, nothing is sent and `/api/push/test` says 503. Rotating them makes every device turn notifications on again.
+- **Storage:** `pushSubscriptions` (per person and device; pruned on 404/410 and after 30 days unseen by a daily timer) and `pushSeen` (seen receipts and job claims, each with a `ttl`). Delayed pushes are messages on the API app's `push-jobs` Storage queue (managed identity, Storage Queue Data Contributor), run once by the `pushJob` queue trigger.
+- **Allowed push services only:** Apple, Google FCM, Mozilla and Microsoft WNS endpoints; anything else is refused.
+- **Quiet hours:** 21:30–07:30 UK (`QuietHours`), for features to use.
+- **Testing:** Claude Code's built-in browser can't do push. Use `playwright-core` with the Mac's Google Chrome and a **throwaway profile** (never Gary's), grant notifications, subscribe, and read `registration.getNotifications()`. iPhone checks need Gary.
+- **Check it's sending:** `deploy/verify/logs.sh api` shows `Push <topic>: n targeted, n delivered, …`. Refusals are logged at Error with the push service's reason (e.g. `BadJwtToken`), which fires the error alert.
 
 ### Error alert ("Cupboard Tracker errors", #48)
 

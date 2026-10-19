@@ -20,6 +20,10 @@ var containers = [
   { name: 'unmatchedCheckOuts', partitionKey: '/id' }
   { name: 'sentDigests', partitionKey: '/id' }
   { name: 'leases', partitionKey: '/id' }
+  // Push notifications (#77): one document per device, by person; and short-lived "seen" receipts and job claims,
+  // which Cosmos deletes itself (each document sets its own ttl; the default is a day).
+  { name: 'pushSubscriptions', partitionKey: '/userId' }
+  { name: 'pushSeen', partitionKey: '/eventKey', defaultTtl: 86400 }
 ]
 
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
@@ -85,6 +89,7 @@ resource sqlContainers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/conta
           mode: 'LastWriterWins'
           conflictResolutionPath: '/_ts'
         }
+        defaultTtl: c.?defaultTtl
       }
     }
   }

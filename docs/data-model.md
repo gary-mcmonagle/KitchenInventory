@@ -480,6 +480,36 @@ A hub that has never sent a heartbeat has no document, so it never alerts.
 
 ---
 
+## Container: `pushSubscriptions` (#77)
+
+One document per **device** that has push notifications turned on, partitioned by **`/userId`** (the person's Entra `oid`), so each person's devices sit together and only they can change them.
+
+```json
+{
+  "id": "<base64url SHA-256 of the endpoint>",
+  "userId": "caf87c93-9030-44e8-a25d-fed63261ea67",
+  "endpoint": "https://web.push.apple.com/…",
+  "keys": { "p256dh": "<base64url P-256 key>", "auth": "<base64url 16 bytes>" },
+  "deviceLabel": "iPhone",
+  "createdAt": "2026-10-19T08:00:00.000Z",
+  "lastSeenAt": "2026-10-19T08:00:00.000Z",
+  "lastSuccessAt": null,
+  "preferences": { "stockChanges": true }
+}
+```
+
+- **`id`** is a hash of the endpoint, so re-saving the same subscription updates the same document.
+- **`endpoint`** is a capability URL on the browser's push service (Apple, Google, Mozilla or Microsoft only): it's never logged or sent back to the app.
+- **`lastSeenAt`** is refreshed every time the app opens; a daily timer deletes subscriptions not seen for **30 days**. A push answered 404 or 410 deletes the subscription straight away.
+- **`preferences`**: one boolean per notification type, named by the features (letters and digits). A type that isn't set counts as off.
+
+## Container: `pushSeen` (#77)
+
+Short-lived documents, partitioned by **`/eventKey`**, each with its own **`ttl`** (the container's default is a day), so Cosmos deletes them itself.
+
+- **Seen receipts:** `{ "id": "<eventKey>:<oid>", "eventKey": "scan:<scanId>", "userId": "<oid>", "seenAt": "…", "ttl": 86400 }`. Written when the app shows an event on a visible screen. A person counts as having seen an event if any of their devices sent a receipt; a delayed push can leave them out.
+- **Push job claims:** `{ "id": "job:<jobId>", "eventKey": "job:<jobId>", "claimedAt": "…", "ttl": 691200 }`. Created (never upserted) when a queued push job runs, so a re-delivered queue message finds it and sends nothing (8 days: longer than the queue keeps messages).
+
 ## Container: `leases` (infrastructure)
 
 Used by the Azure Functions Cosmos DB trigger to track its position in the `scanEvents` change feed. Not a domain container; no application code reads or writes it.

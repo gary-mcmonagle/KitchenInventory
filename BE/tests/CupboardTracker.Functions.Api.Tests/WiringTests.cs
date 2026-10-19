@@ -1,4 +1,5 @@
 using CupboardTracker.Functions.Api.Adding;
+using CupboardTracker.Functions.Api.Push;
 using CupboardTracker.Functions.Api.Recipes;
 using CupboardTracker.Functions.Api.ScanFeed;
 using CupboardTracker.Functions.Api.Scanners;
@@ -21,6 +22,9 @@ public sealed class WiringTests
     [InlineData(typeof(UnitStateFunctions))]
     [InlineData(typeof(ClassificationFunctions))]
     [InlineData(typeof(RecipeFunctions))]
+    [InlineData(typeof(PushFunctions))]
+    [InlineData(typeof(PushJobFunction))]
+    [InlineData(typeof(PushExpiryTimer))]
     public async Task Functions_resolve(Type functions)
     {
         var services = new ServiceCollection();

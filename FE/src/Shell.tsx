@@ -5,6 +5,7 @@ import { AddScreen } from "./AddScreen";
 import { BottomNav } from "./BottomNav";
 import { ItemScreen } from "./ItemScreen";
 import { NameScreen } from "./NameScreen";
+import { refreshPushSubscription } from "./push";
 import { RecipesScreen } from "./RecipesScreen";
 import {
     ADD_PATH,
@@ -40,6 +41,14 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
             live = false;
         };
     }, [api, buildSha]);
+
+    // If notifications are on for this device, tell the API it's still in use (#77). Never asks for permission.
+    useEffect(() => {
+        refreshPushSubscription(api).catch((error: unknown) => {
+            if (!(error instanceof SignInRequiredError))
+                console.warn("Couldn't refresh this device's notifications", error);
+        });
+    }, [api]);
 
     const naming = matchNamePath(path);
     const editing = matchEditPath(path);

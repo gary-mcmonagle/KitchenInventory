@@ -281,6 +281,13 @@ export interface RecipeSuggestion {
     message?: string;
 }
 
+/** This device's push subscription as the API stores it (#77). */
+export interface PushDevice {
+    id: string;
+    deviceLabel: string;
+    preferences: Record<string, boolean>;
+}
+
 export interface Ping {
     status: string;
     commit: string;
@@ -454,6 +461,36 @@ export class ApiClient {
         return this.send<RecipeSuggestion>("POST", "/api/recipes/suggest", request);
     }
 
+    /** Push notifications (#77): the VAPID public key to subscribe with (null until the keys are set). */
+    pushConfig(): Promise<{ publicKey: string | null }> {
+        return this.get("/api/push/config");
+    }
+
+    /** Saves or refreshes this device's push subscription (the browser's PushSubscription.toJSON()). */
+    putPushSubscription(subscription: PushSubscriptionJSON): Promise<PushDevice> {
+        return this.send("PUT", "/api/push/subscriptions", subscription);
+    }
+
+    /** Removes this device's push subscription. */
+    deletePushSubscription(endpoint: string): Promise<{ removed: boolean }> {
+        return this.send("DELETE", "/api/push/subscriptions", { endpoint });
+    }
+
+    /** Which notification types this device wants (types are letters and digits, e.g. stockChanges). */
+    setPushPreferences(endpoint: string, preferences: Record<string, boolean>): Promise<PushDevice> {
+        return this.send("PATCH", "/api/push/subscriptions/preferences", { endpoint, preferences });
+    }
+
+    /** Tells the API this person saw these events (e.g. "scan:<scanId>"), so they aren't pushed them. 204. */
+    pushSeen(eventKeys: string[]): Promise<void> {
+        return this.send("POST", "/api/push/seen", { eventKeys });
+    }
+
+    /** Sends a test notification to this person's own devices (a few an hour). */
+    pushTest(): Promise<{ targeted: number; delivered: number; removed: number; failed: number }> {
+        return this.send("POST", "/api/push/test");
+    }
+
     /** Public: no token needed. */
     async ping(): Promise<Ping> {
         const response = await this.fetcher(`${this.config.apiBaseUrl}/api/ping`);
@@ -465,7 +502,11 @@ export class ApiClient {
         return this.send<T>("GET", path);
     }
 
-    async send<T>(method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<T> {
+    async send<T>(
+        method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+        path: string,
+        body?: unknown,
+    ): Promise<T> {
         const token = await this.token();
         const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
         const init: RequestInit = { headers };
@@ -478,6 +519,9 @@ export class ApiClient {
             init.body = JSON.stringify(body);
         }
         const response = await this.fetcher(`${this.config.apiBaseUrl}${path}`, init);
+        if (response.status === 204) {
+            return undefined as T;
+        }
         if (response.status === 401) {
             await this.reauthenticate();
         }
