@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { createMsal } from "./auth";
 import { readConfig } from "./config";
+import { registerServiceWorker } from "./pwa";
 import "./tokens.css";
 
 const config = readConfig();
@@ -27,3 +28,5 @@ createRoot(document.getElementById("root")!).render(
         </MsalProvider>
     </StrictMode>,
 );
+
+registerServiceWorker();

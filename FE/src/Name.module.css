@@ -292,3 +292,10 @@
     font-size: 13px;
     color: var(--muted);
 }
+
+/* Installed app (#76): clear the home bar. Only when installed, so the browser is unchanged. */
+@media (display-mode: standalone) {
+    .bar {
+        padding-bottom: max(28px, env(safe-area-inset-bottom, 0px));
+    }
+}

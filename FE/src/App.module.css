@@ -105,3 +105,10 @@
 .primary:active {
     background: var(--accent-dark);
 }
+
+/* Installed app (#76): clear the notch or Dynamic Island. Only when installed, so the browser is unchanged. */
+@media (display-mode: standalone) {
+    .page {
+        padding-top: env(safe-area-inset-top, 0px);
+    }
+}

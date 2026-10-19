@@ -41,3 +41,10 @@
     align-items: center;
     justify-content: center;
 }
+
+/* Installed app (#76): clear the home bar. Only when installed, so the browser is unchanged. */
+@media (display-mode: standalone) {
+    .nav {
+        padding-bottom: max(22px, env(safe-area-inset-bottom, 0px));
+    }
+}
