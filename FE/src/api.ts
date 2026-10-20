@@ -56,6 +56,8 @@ export interface StockProduct {
     icon: string | null;
     /** Expired or due within 3 days. */
     useFirst: boolean;
+    /** Its generic name (#90), when it has one; the stock search matches it (#91). */
+    genericName?: string | null;
 }
 
 /** Opened, frozen, defrosted (#65). */

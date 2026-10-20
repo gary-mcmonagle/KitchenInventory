@@ -198,7 +198,7 @@ test("Check out and the name link on named rows, Name it on unnamed rows, nothin
         "Add",
         "Beef Gravy",
     ]);
-    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search stock" })).toBeInTheDocument(); // #91
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
 });
 

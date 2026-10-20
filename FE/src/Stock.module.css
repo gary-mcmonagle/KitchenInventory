@@ -547,3 +547,58 @@
     background: var(--accent);
     color: #ffffff;
 }
+
+/* The stock search (#91), as drawn on project/Main.dc.html. */
+.searchBox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 48px;
+    box-sizing: border-box;
+    padding: 0 0 0 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    color: var(--muted);
+}
+
+.searchInput {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.searchInput::placeholder {
+    color: var(--muted);
+}
+
+.searchInput::-webkit-search-cancel-button {
+    display: none;
+}
+
+.searchClear {
+    flex: none;
+    width: var(--touch);
+    height: var(--touch);
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.noMatches {
+    margin: 40px 0 0;
+    text-align: center;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.5;
+}

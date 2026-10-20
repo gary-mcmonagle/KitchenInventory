@@ -24,6 +24,7 @@ import { ProductTile } from "./ProductTile";
 import { createSeenReporter } from "./push";
 import { ADD_PATH, itemPath, namePath, navigate, SCANNERS_PATH } from "./router";
 import { scannerLabel, scannerStatus, type ScannerStatus } from "./scannerStatus";
+import { matchesSearch, searchWords } from "./stockSearch";
 import styles from "./Stock.module.css";
 import { ScanFeedView } from "./ScanFeedView";
 import { signalRConnection, useScanFeed, type FeedConnection } from "./useScanFeed";
@@ -141,6 +142,15 @@ type Phase = "loading" | "ready" | "error" | "noAccess";
 
 /** The stock list (#49, #52): what's in the house now, in Use first, Later and Waiting for a name. Reloads on open, on
  * returning to the app, and on pull-to-refresh. */
+/** The search (#91), kept in memory while the app is open, so it survives a trip to item detail and back but not a
+ * reload. Never stored on the device. */
+let rememberedQuery = "";
+
+/** For tests: start with an empty search, as after a reload. */
+export const forgetStockSearch = () => {
+    rememberedQuery = "";
+};
+
 export function StockScreen({
     api,
     feedConnection = signalRConnection,
@@ -333,6 +343,13 @@ export function StockScreen({
 
     const [openState, setOpenState] = useState<Record<string, boolean>>(readOpen);
     const [useFirstOnly, setUseFirstOnly] = useState(false); // never remembered: always off on open
+    const [query, setQueryState] = useState(rememberedQuery);
+    const setQuery = (text: string) => {
+        rememberedQuery = text;
+        setQueryState(text);
+    };
+    const words = searchWords(query);
+    const searching = words.length > 0;
     const toggleAisle = (group: AisleGroup) =>
         setOpenState((current) => {
             const next = {
@@ -344,8 +361,9 @@ export function StockScreen({
         });
 
     const all = stock?.products ?? [];
-    const groups = groupByAisle(useFirstOnly ? all.filter((p) => p.section === "useFirst") : all);
-    const waiting = useFirstOnly ? [] : all.filter((p) => p.section === "waitingForName");
+    const found = searching ? all.filter((p) => matchesSearch(p, words)) : all;
+    const groups = groupByAisle(useFirstOnly ? found.filter((p) => p.section === "useFirst") : found);
+    const waiting = useFirstOnly ? [] : found.filter((p) => p.section === "waitingForName");
     const renderKnown = (p: StockProduct) => (
         <KnownRow
             key={p.productId}
@@ -432,6 +450,58 @@ export function StockScreen({
                         Add
                     </a>
                 </div>
+                {stock && stock.products.length > 0 && (
+                    <div className={styles.searchBox}>
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            aria-hidden="true"
+                        >
+                            <circle cx="11" cy="11" r="7" />
+                            <path d="M20 20l-3.5-3.5" />
+                        </svg>
+                        <input
+                            type="search"
+                            enterKeyHint="search"
+                            aria-label="Search stock"
+                            className={styles.searchInput}
+                            placeholder="Search your stock"
+                            autoComplete="off"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Escape") setQuery("");
+                                if (e.key === "Enter") e.currentTarget.blur(); // just closes the keyboard
+                            }}
+                        />
+                        {query && (
+                            <button
+                                type="button"
+                                aria-label="Clear search"
+                                className={styles.searchClear}
+                                onClick={() => setQuery("")}
+                            >
+                                <svg
+                                    width="18"
+                                    height="18"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.2"
+                                    strokeLinecap="round"
+                                    aria-hidden="true"
+                                >
+                                    <path d="M6 6l12 12M18 6L6 18" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+                )}
                 <div className={styles.disclaimer}>
                     Dates are estimates: the day it was bought plus how long that kind of food usually keeps.
                 </div>
@@ -494,16 +564,29 @@ export function StockScreen({
                     </div>
                 )}
 
-                {useFirstOnly && groups.length === 0 && (
-                    <p className={styles.empty}>Nothing needs using up right now.</p>
+                {searching &&
+                stock &&
+                stock.products.length > 0 &&
+                groups.length === 0 &&
+                waiting.length === 0 ? (
+                    <p className={styles.noMatches}>
+                        Nothing matches that.
+                        <br />
+                        Try another word or filter.
+                    </p>
+                ) : (
+                    useFirstOnly &&
+                    groups.length === 0 && <p className={styles.empty}>Nothing needs using up right now.</p>
                 )}
 
                 {groups.map((group) => (
                     <AisleSection
                         key={group.aisle.id}
                         group={group}
-                        open={useFirstOnly || (openState[group.aisle.id] ?? true)} // open unless closed on this device (Gary, 2026-10-18)
-                        canCollapse={!useFirstOnly}
+                        // Open unless closed on this device (Gary, 2026-10-18); a filter or search opens every aisle it shows,
+                        // without changing the remembered state (#91).
+                        open={useFirstOnly || searching || (openState[group.aisle.id] ?? true)}
+                        canCollapse={!useFirstOnly && !searching}
                         onToggle={() => toggleAisle(group)}
                     >
                         {group.products.map(renderKnown)}

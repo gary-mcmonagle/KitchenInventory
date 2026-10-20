@@ -147,6 +147,7 @@ The stock list (#49, #52): every product with units in stock, grouped, put in se
 | `shelfLifeDays` | The product's shelf life, for the "keeps about …" note (the soonest unit was bought on `soonestEstimatedExpiryDate − shelfLifeDays`). `null` until estimated. |
 | `openedCount`, `frozenCount` | In-stock units opened, and in the freezer now (#65): the row's **Opened** / **n frozen** pills. |
 | `aisleId`, `icon`, `useFirst` | Its aisle (#71; `other` until Jev has chosen), its icon (#72; `null`: show the aisle's icon, or the letter for `other`) and whether it's in Use first. |
+| `genericName` | Its generic name (#90), or `null`. Added for the stock search (#91), which filters in the app. |
 | `aisles` | Known products **by aisle in shop order** (#71): `[{ aisleId, name, icon, itemCount, useFirstCount, anyExpired, products: [...] }]`, empty aisles left out. Within an aisle: use first (soonest first), then the rest by soonest estimated expiry, then name. The UI's Use first view filters this in the app. |
 | `waitingForName` | Unknown items (`noMatch` / `lookupFailed`), newest first, apart from the aisles. |
 | `soonestState`, `soonestStateOn` | When the soonest unit's date comes from being `opened`, `frozen` or `defrosted` (#65): which, and since when (`YYYY-MM-DD`). The row then says "Opened 12 Oct" instead of the bought note. `null` otherwise. |

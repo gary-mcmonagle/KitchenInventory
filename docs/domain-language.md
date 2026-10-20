@@ -181,6 +181,9 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Unit state** – opened, frozen or defrosted: what happened to a unit after it was bought (#65), marked from the **More** button on a unit in item detail, today or on a different day, with Undo. The product's estimates for each state come from Jev once per product, so marking is instant; until they arrive, the new estimate is "on its way".
 - In code: `UnitState`, `UnitStates`, `ProductStateEstimates`
 
+**Stock search** – the box at the top of the stock list (#91). It filters the list in the app as you type: every word must be part of a product's name, brand, generic name, aisle name or barcode, ignoring case and accents. Matching aisles show open; the rest are hidden. The search is kept while the app is open, never stored on the device.
+- In code: `matchesSearch`, `stockSearch.ts`
+
 **Use first** – the stock list section (and the digest's first section) for products whose soonest unit is estimated to be expired or due within 3 days (`USE_FIRST_DAYS`).
 
 ---
