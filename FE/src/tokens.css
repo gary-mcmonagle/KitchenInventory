@@ -13,6 +13,7 @@
     --accent: #2f6b4f; /* primary buttons, active chip */
     --accent-dark: #1f5238; /* pressed, accent text */
     --accent-tint: #e4f0e9; /* tiles, "later" badges */
+    --skeleton: #e6ece8; /* loading placeholders (#100) */
     --off-bg: #eef2ef; /* "This phone": off tile and pill, toggle divider */
 
     --warn-bg: #ffe9c7;

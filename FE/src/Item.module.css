@@ -443,3 +443,118 @@
     font-weight: 700;
     color: var(--ink-strong);
 }
+
+/* Item detail while loading (#100): placeholders the size of the real sections. */
+.srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.skeleton {
+    display: block;
+    background: var(--skeleton);
+    border-radius: 8px;
+    animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.tile.skeleton {
+    border-radius: 16px;
+}
+
+@keyframes shimmer {
+    50% {
+        opacity: 0.55;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none;
+    }
+}
+
+.skeletonCard {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+}
+
+.barTitle {
+    width: 200px;
+    max-width: 100%;
+    height: 26px;
+}
+
+.barShort {
+    width: 120px;
+    height: 14px;
+}
+
+.barDate {
+    width: 220px;
+    max-width: 100%;
+    height: 30px;
+}
+
+.barLine {
+    width: 70%;
+    height: 14px;
+}
+
+.barButton {
+    flex: none;
+    width: 96px;
+    height: var(--touch);
+    border-radius: var(--radius-button);
+}
+
+.barInput {
+    width: 100%;
+    height: 48px;
+    border-radius: var(--radius-button);
+}
+
+.skeletonUnit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 48px;
+}
+
+.stillLoading {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+    text-align: center;
+}
+
+.errorCard {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-card);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.tryAgain {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border-radius: var(--radius-button);
+    border: 1px solid var(--warn-fg);
+    background: transparent;
+    color: var(--warn-fg);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}

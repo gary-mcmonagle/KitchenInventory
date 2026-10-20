@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ApiError,
     NoAccessError,
@@ -6,8 +6,10 @@ import {
     type ApiClient,
     type Product,
     type ProductUnit,
+    type StockProduct,
     type UnitState,
 } from "./api";
+import { itemPreview } from "./itemPreview";
 import { useOptionalShoppingList } from "./useShoppingList";
 import {
     boughtDate,
@@ -54,9 +56,15 @@ const MARKED: Record<UnitState, string> = {
 const tone = (days: number): ExpiryTone => (days < 0 ? "expired" : days <= 3 ? "soon" : "later");
 
 /** Item detail (#53, project/Item.dc.html): a known product's units, fixing an estimate, and editing its details. */
+/** After this long still loading, a calm "Still loading…" line appears under the placeholders (#100). */
+export const SLOW_MS = 10_000;
+
 export function ItemScreen({ api, productId }: { api: ApiClient; productId: string }) {
     const [product, setProduct] = useState<Product | null>(null);
-    const [loadError, setLoadError] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState<{ text: string; retry: boolean } | null>(null);
+    const [slow, setSlow] = useState(false);
+    // Opened from the stock list: what its row already knew, shown at once (#100).
+    const preview = useMemo(() => itemPreview(productId), [productId]);
     const [busy, setBusy] = useState(false);
     const [toast, setToast] = useState<Toast | null>(null);
     const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -77,14 +85,15 @@ export function ItemScreen({ api, productId }: { api: ApiClient; productId: stri
                 return;
             }
             setProduct(next);
+            setLoadError(null);
         } catch (error) {
             if (!live.current || error instanceof SignInRequiredError) return;
             setLoadError(
                 error instanceof NoAccessError
-                    ? "You're signed in, but this account can't use Cupboard Tracker."
+                    ? { text: "You're signed in, but this account can't use Cupboard Tracker.", retry: false }
                     : error instanceof ApiError && error.status === 404
-                      ? "We couldn't find that product."
-                      : "Couldn't load this product. Try again.",
+                      ? { text: "We couldn't find that product.", retry: false }
+                      : { text: "Couldn't load this item.", retry: true },
             );
         }
     }, [api, productId]);
@@ -92,11 +101,18 @@ export function ItemScreen({ api, productId }: { api: ApiClient; productId: stri
     useEffect(() => {
         live.current = true;
         void load();
+        const slowTimer = setTimeout(() => live.current && setSlow(true), SLOW_MS);
         return () => {
             live.current = false;
             clearTimeout(toastTimer.current);
+            clearTimeout(slowTimer);
         };
     }, [load]);
+
+    const retry = () => {
+        setLoadError(null);
+        void load();
+    };
 
     const back = () => navigate("/");
 
@@ -188,12 +204,20 @@ export function ItemScreen({ api, productId }: { api: ApiClient; productId: stri
             </div>
 
             <div className={styles.content}>
-                {loadError && (
-                    <p className={styles.notice} role="alert">
-                        {loadError}
-                    </p>
+                {!product && (
+                    <Loading preview={preview} slow={slow && !loadError} error={!!loadError}>
+                        {loadError && (
+                            <div className={styles.errorCard} role="alert">
+                                <span>{loadError.text}</span>
+                                {loadError.retry && (
+                                    <button type="button" className={styles.tryAgain} onClick={retry}>
+                                        Try again
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </Loading>
                 )}
-                {!product && !loadError && <p className={styles.muted}>Loading…</p>}
                 {product && (
                     <Detail
                         api={api}
@@ -771,5 +795,121 @@ function AddToListButton({ name, productId }: { name: string; productId: string 
             </svg>
             {onList ? `${name} is on the list` : `Add ${name} to the list`}
         </button>
+    );
+}
+
+/**
+ * Item detail while it loads (#100): opened from the stock list, the heading, Add to list and estimate come straight
+ * from the row; the rest are placeholders the size of the real sections, so nothing jumps when the product arrives.
+ * Opened directly, the heading is a placeholder too. Never a blank screen or a lone spinner.
+ */
+function Loading({
+    preview,
+    slow,
+    error,
+    children,
+}: {
+    preview: StockProduct | undefined;
+    slow: boolean;
+    error: boolean;
+    children?: React.ReactNode;
+}) {
+    const rows = Math.min(Math.max(preview?.count ?? 2, 1), 3);
+    return (
+        <>
+            {!error && (
+                <span className={styles.srOnly} role="status">
+                    Loading
+                </span>
+            )}
+            {preview ? (
+                <div className={styles.heading}>
+                    <ProductTile
+                        className={styles.tile}
+                        name={preview.displayName}
+                        icon={preview.icon}
+                        aisleId={preview.aisleId}
+                    />
+                    <div className={styles.headingText}>
+                        <h1 className={styles.name}>{preview.displayName}</h1>
+                        {preview.genericName && (
+                            <div className={styles.meta}>
+                                Listed as <span className={styles.listedAs}>{preview.genericName}</span>
+                            </div>
+                        )}
+                        {metaLine(preview.brand, preview.size, 1) && (
+                            <div className={styles.meta}>{metaLine(preview.brand, preview.size, 1)}</div>
+                        )}
+                        <a
+                            className={styles.link}
+                            href={editPath(preview.productId)}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                navigate(editPath(preview.productId));
+                            }}
+                        >
+                            Edit details
+                        </a>
+                    </div>
+                </div>
+            ) : (
+                <div className={styles.heading} aria-busy="true" data-testid="heading-skeleton">
+                    <div className={`${styles.tile} ${styles.skeleton}`} />
+                    <div className={styles.headingText}>
+                        <span className={`${styles.skeleton} ${styles.barTitle}`} />
+                        <span className={`${styles.skeleton} ${styles.barShort}`} />
+                    </div>
+                </div>
+            )}
+
+            {children}
+
+            {preview && (
+                <AddToListButton
+                    name={preview.genericName ?? preview.displayName}
+                    productId={preview.productId}
+                />
+            )}
+
+            {preview ? (
+                preview.soonestEstimatedExpiryDate && preview.daysUntilSoonest !== null ? (
+                    <div className={`${styles.useBy} ${styles[tone(preview.daysUntilSoonest)]}`}>
+                        <div className={styles.useByLabel}>Estimated use by</div>
+                        <div className={styles.useByDate}>{longDate(preview.soonestEstimatedExpiryDate)}</div>
+                        <div className={styles.useByText}>{untilSentence(preview.daysUntilSoonest)}</div>
+                    </div>
+                ) : (
+                    <div className={`${styles.useBy} ${styles.neutral}`}>
+                        <div className={styles.useByLabel}>Estimated use by</div>
+                        <div className={styles.useByDate}>No estimate yet</div>
+                    </div>
+                )
+            ) : (
+                <div className={`${styles.useBy} ${styles.skeletonCard}`} aria-busy="true">
+                    <span className={`${styles.skeleton} ${styles.barShort}`} />
+                    <span className={`${styles.skeleton} ${styles.barDate}`} />
+                    <span className={`${styles.skeleton} ${styles.barLine}`} />
+                </div>
+            )}
+
+            {!error && (
+                <>
+                    <section className={styles.card} aria-busy="true" data-testid="units-skeleton">
+                        <span className={`${styles.skeleton} ${styles.barShort}`} />
+                        {Array.from({ length: rows }, (_, i) => (
+                            <div key={i} className={styles.skeletonUnit} data-testid="unit-skeleton">
+                                <span className={`${styles.skeleton} ${styles.barLine}`} />
+                                <span className={`${styles.skeleton} ${styles.barButton}`} />
+                            </div>
+                        ))}
+                    </section>
+                    <section className={styles.card} aria-busy="true" data-testid="estimate-skeleton">
+                        <span className={`${styles.skeleton} ${styles.barShort}`} />
+                        <span className={`${styles.skeleton} ${styles.barInput}`} />
+                    </section>
+                    {slow && <p className={styles.stillLoading}>Still loading…</p>}
+                </>
+            )}
+        </>
     );
 }
