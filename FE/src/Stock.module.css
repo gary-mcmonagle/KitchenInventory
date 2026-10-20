@@ -602,3 +602,11 @@
     font-size: 15px;
     line-height: 1.5;
 }
+
+/* The error's code in small print, so a failure on a phone can be reported. */
+.errorCode {
+    margin: 0;
+    font-size: 11px;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}

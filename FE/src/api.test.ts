@@ -3,7 +3,7 @@ import {
     InteractionRequiredAuthError,
     type IPublicClientApplication,
 } from "@azure/msal-browser";
-import { ApiClient, NoAccessError, SignInRequiredError } from "./api";
+import { ApiClient, ApiError, errorCode, NoAccessError, SignInRequiredError } from "./api";
 import type { AppConfig } from "./config";
 
 const config: AppConfig = {
@@ -134,4 +134,20 @@ test("a photo is sent as the JPEG itself, not JSON", async () => {
         headers: { Authorization: "Bearer token-123", "Content-Type": "image/jpeg" },
         body: jpeg,
     });
+});
+
+test("errorCode names the failure without any secrets", () => {
+    expect(errorCode(new BrowserAuthError("monitor_window_timeout", "x"))).toBe(
+        "BrowserAuthError: monitor_window_timeout",
+    );
+    expect(errorCode(new ApiError(500, "boom"))).toBe("ApiError: 500");
+    expect(errorCode(new TypeError("Load failed"))).toBe("TypeError: Load failed");
+});
+
+test("Sign in again starts an interactive sign-in", async () => {
+    const msal = fakeMsal();
+    await expect(new ApiClient(msal, config, vi.fn()).signInAgain()).rejects.toBeInstanceOf(
+        SignInRequiredError,
+    );
+    expect(msal.acquireTokenRedirect).toHaveBeenCalled();
 });

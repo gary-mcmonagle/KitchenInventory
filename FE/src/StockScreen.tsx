@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import {
     ApiError,
+    errorCode,
     NoAccessError,
     SignInRequiredError,
     type ApiClient,
@@ -162,6 +163,7 @@ export function StockScreen({
     const [stock, setStock] = useState<Stock | null>(null);
     const [status, setStatus] = useState<ScannerStatus | null>(null);
     const [phase, setPhase] = useState<Phase>("loading");
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [offline, setOffline] = useState(() => !navigator.onLine);
     const [pull, setPull] = useState(0);
@@ -296,6 +298,7 @@ export function StockScreen({
                 setPhase("ready");
             } catch (error) {
                 if (!live.current || error instanceof SignInRequiredError || quiet) return;
+                setLoadError(errorCode(error));
                 setPhase(error instanceof NoAccessError ? "noAccess" : "error");
             } finally {
                 if (live.current) setRefreshing(false);
@@ -540,6 +543,14 @@ export function StockScreen({
                         <button type="button" className={styles.retry} onClick={() => void load()}>
                             Retry
                         </button>
+                        <button
+                            type="button"
+                            className={styles.retry}
+                            onClick={() => void api.signInAgain().catch(() => undefined)}
+                        >
+                            Sign in again
+                        </button>
+                        {loadError && <p className={styles.errorCode}>{loadError}</p>}
                     </div>
                 )}
 

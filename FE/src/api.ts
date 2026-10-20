@@ -682,6 +682,11 @@ export class ApiClient {
         }
     }
 
+    /** "Sign in again" (the stock list's error): a fresh interactive sign-in, back to this page afterwards. */
+    signInAgain(): Promise<never> {
+        return this.reauthenticate();
+    }
+
     private async reauthenticate(): Promise<never> {
         await this.msal.acquireTokenRedirect({
             scopes: [this.config.apiScope],
@@ -702,4 +707,22 @@ export function needsSignIn(error: unknown): boolean {
     return !["no_network_connectivity", "interaction_in_progress", "redirect_in_iframe"].includes(
         error.errorCode,
     );
+}
+
+/** A short code for an error, shown in small print so a failure on a phone can be reported (e.g. "BrowserAuthError:
+ * monitor_window_timeout", "ApiError: 500", "TypeError: Load failed"). Never a token or a message body. */
+export function errorCode(error: unknown): string {
+    if (error instanceof ApiError) return `ApiError: ${error.status}`;
+    if (error && typeof error === "object") {
+        const e = error as { name?: unknown; errorCode?: unknown; message?: unknown };
+        const name = typeof e.name === "string" ? e.name : "Error";
+        const code =
+            typeof e.errorCode === "string" && e.errorCode
+                ? e.errorCode
+                : typeof e.message === "string"
+                  ? e.message
+                  : "";
+        return `${name}: ${code}`.slice(0, 120);
+    }
+    return String(error).slice(0, 120);
 }
