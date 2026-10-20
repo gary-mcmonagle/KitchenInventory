@@ -3,8 +3,11 @@ import {
     ApiError,
     SignInRequiredError,
     type ApiClient,
+    type Appliance,
+    type QuickIdea,
     type Recipe,
     type RecipeMeal,
+    type RecipeMode,
     type RecipeRequest,
     type StockProduct,
 } from "./api";
@@ -16,22 +19,57 @@ const MEALS: Array<{ id: RecipeMeal; label: string }> = [
     { id: "breakfast", label: "Breakfast" },
     { id: "lunch", label: "Lunch" },
     { id: "dinner", label: "Dinner" },
+    { id: "snack", label: "Snack" },
 ];
+
+const MODES: Array<{ id: RecipeMode; label: string; sub: string }> = [
+    { id: "cook", label: "Cook something", sub: "A proper recipe" },
+    { id: "readyNow", label: "Ready now", sub: "Toaster, microwave, kettle" },
+];
+
+/** The last mode chosen on this device (#88). Storage can be missing or throw (private mode): then "cook". */
+export const MODE_KEY = "hungry.mode";
+
+function storedMode(): RecipeMode {
+    try {
+        return localStorage.getItem(MODE_KEY) === "readyNow" ? "readyNow" : "cook";
+    } catch {
+        return "cook";
+    }
+}
+
+function rememberMode(mode: RecipeMode) {
+    try {
+        localStorage.setItem(MODE_KEY, mode);
+    } catch {
+        // Not remembered; nothing else changes.
+    }
+}
 
 export const MAX_COMMENTS = 300;
 const COUNT_FROM = 250;
 const UNAVAILABLE = "Couldn't come up with a recipe just now. Try again.";
 
-/** The meal for the time of day in the UK: before 11:00 breakfast, 11:00 to 16:00 lunch, otherwise dinner. */
+/** The meal for the time of day in the UK (#88): before 11:00 breakfast, to 14:30 lunch, to 17:00 a snack, then
+ * dinner. */
 export function defaultMeal(now: Date = new Date()): RecipeMeal {
-    const hour = Number(
-        new Intl.DateTimeFormat("en-GB", {
-            hour: "2-digit",
-            hourCycle: "h23",
-            timeZone: "Europe/London",
-        }).format(now),
-    );
-    return hour < 11 ? "breakfast" : hour < 16 ? "lunch" : "dinner";
+    const [hour, minute] = new Intl.DateTimeFormat("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+        timeZone: "Europe/London",
+    })
+        .format(now)
+        .split(":")
+        .map(Number);
+    const minutes = hour * 60 + minute;
+    return minutes < 11 * 60
+        ? "breakfast"
+        : minutes < 14 * 60 + 30
+          ? "lunch"
+          : minutes < 17 * 60
+            ? "snack"
+            : "dinner";
 }
 
 const mealLabel = (meal: RecipeMeal) => MEALS.find((m) => m.id === meal)!.label;
@@ -44,6 +82,7 @@ function badge(name: string, days: number | null, date: string | null): { text: 
 }
 
 interface Choices {
+    mode: RecipeMode;
     meal: RecipeMeal;
     prefer: boolean;
     picked: string[];
@@ -54,17 +93,19 @@ type Phase =
     | { kind: "form" }
     | { kind: "loading" }
     | { kind: "recipe"; recipe: Recipe }
+    | { kind: "ideas"; meal: RecipeMeal; ideas: QuickIdea[] }
     | { kind: "error"; message: string; retry: RecipeRequest };
 
 /**
- * Recipes (#73): "What shall we cook?" (project/Recipes.dc.html), then the recipe (project/Recipe.dc.html). Built
- * from the stock on the server; the choices, comments, recipe and titles shown live only here, so leaving the screen
- * starts again with an empty form.
+ * Hungry? (#73, #88): the form (project/Hungry.dc.html), then a recipe (project/Recipe.dc.html) or Ready now ideas
+ * (project/ReadyNow.dc.html). Built from the stock on the server; the choices, comments, results and titles shown live
+ * only here, so leaving the screen starts again with an empty form (only the mode is remembered on the device).
  */
 export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
     const [stock, setStock] = useState<StockProduct[] | null>(null);
     const [stockFailed, setStockFailed] = useState(false);
     const [choices, setChoices] = useState<Choices>(() => ({
+        mode: storedMode(),
         meal: defaultMeal(now),
         prefer: false,
         picked: [],
@@ -98,15 +139,17 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
         setPhase({ kind: "loading" });
         try {
             const answer = await api.suggestRecipe(request);
-            if (!answer.available || !answer.recipe) {
+            const titles = answer.recipe ? [answer.recipe.title] : (answer.ideas ?? []).map((i) => i.title);
+            if (!answer.available || titles.length === 0) {
                 setPhase({ kind: "error", message: answer.message ?? UNAVAILABLE, retry: request });
                 return;
             }
-            const recipe = answer.recipe;
-            setShownTitles(
-                [...request.avoidTitles, recipe.title].filter((t, i, all) => all.indexOf(t) === i),
+            setShownTitles([...request.avoidTitles, ...titles].filter((t, i, all) => all.indexOf(t) === i));
+            setPhase(
+                answer.recipe
+                    ? { kind: "recipe", recipe: answer.recipe }
+                    : { kind: "ideas", meal: answer.meal ?? request.meal, ideas: answer.ideas! },
             );
-            setPhase({ kind: "recipe", recipe });
         } catch (error) {
             if (error instanceof SignInRequiredError) return;
             const message =
@@ -122,6 +165,7 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
     };
 
     const request = (avoidTitles: string[]): RecipeRequest => ({
+        mode: choices.mode,
         meal: choices.meal,
         preferUseFirst: choices.prefer,
         includeProductIds: choices.picked,
@@ -137,12 +181,19 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                     onAnother={() => void ask(request(shownTitles))}
                     onStartAgain={() => setPhase({ kind: "form" })}
                 />
+            ) : phase.kind === "ideas" ? (
+                <IdeasView
+                    meal={phase.meal}
+                    ideas={phase.ideas}
+                    preferUseFirst={choices.prefer}
+                    onMore={() => void ask(request(shownTitles))}
+                    onStartAgain={() => setPhase({ kind: "form" })}
+                />
             ) : (
                 <>
                     <header className={styles.header}>
-                        <div className={styles.kicker}>Recipes</div>
-                        <h1 className={styles.title}>What shall we cook?</h1>
-                        <div className={styles.subtitle}>Built from what&apos;s in your cupboard.</div>
+                        <h1 className={styles.title}>Hungry?</h1>
+                        <div className={styles.subtitle}>Ideas built from what&apos;s in your cupboard.</div>
                     </header>
                     {phase.kind === "loading" ? (
                         <div className={styles.loading} role="status">
@@ -174,7 +225,13 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                                 <RecipeForm
                                     stock={stock}
                                     choices={choices}
-                                    onChange={setChoices}
+                                    onChange={(update) =>
+                                        setChoices((c) => {
+                                            const next = update(c);
+                                            if (next.mode !== c.mode) rememberMode(next.mode);
+                                            return next;
+                                        })
+                                    }
                                     onSubmit={() => {
                                         setShownTitles([]);
                                         void ask(request([]));
@@ -202,6 +259,8 @@ function RecipeForm({
 }) {
     const useFirst = (stock ?? []).filter((p) => p.useFirst);
     const empty = stock !== null && stock.length === 0;
+    const ready = choices.mode === "readyNow";
+    const things = `${useFirst.length} ${useFirst.length === 1 ? "thing" : "things"}`;
     return (
         <form
             className={styles.form}
@@ -210,6 +269,22 @@ function RecipeForm({
                 onSubmit();
             }}
         >
+            <div role="radiogroup" aria-label="What kind of food" className={styles.modes}>
+                {MODES.map((m) => (
+                    <button
+                        key={m.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={choices.mode === m.id}
+                        className={styles.mode}
+                        onClick={() => onChange((c) => ({ ...c, mode: m.id }))}
+                    >
+                        <span className={styles.modeLabel}>{m.label}</span>
+                        <span className={styles.modeSub}>{m.sub}</span>
+                    </button>
+                ))}
+            </div>
+
             <div className={styles.group}>
                 <div id="meal-label" className={styles.label}>
                     Meal
@@ -244,7 +319,9 @@ function RecipeForm({
                 <div className={styles.helper}>
                     {useFirst.length === 0
                         ? "Nothing needs using up right now"
-                        : `Builds the recipe around the ${useFirst.length} ${useFirst.length === 1 ? "thing" : "things"} to use first.`}
+                        : ready
+                          ? `Ideas using the ${things} to use first come first.`
+                          : `Builds the recipe around the ${things} to use first.`}
                 </div>
                 {useFirst.length > 0 && (
                     <div className={styles.pills}>
@@ -278,7 +355,11 @@ function RecipeForm({
                     className={styles.comments}
                     rows={3}
                     maxLength={MAX_COMMENTS}
-                    placeholder="e.g. something spicy, no oven, ready in 20 minutes"
+                    placeholder={
+                        ready
+                            ? "e.g. something sweet, no bread"
+                            : "e.g. something spicy, no oven, ready in 20 minutes"
+                    }
                     value={choices.comments}
                     onChange={(e) => {
                         const comments = e.target.value.slice(0, MAX_COMMENTS);
@@ -294,7 +375,7 @@ function RecipeForm({
 
             {empty && <p className={styles.note}>There&apos;s nothing in stock to cook with yet.</p>}
             <button type="submit" className={styles.primary} disabled={stock === null || empty}>
-                Get a recipe
+                {ready ? "Show me ideas" : "Get a recipe"}
             </button>
         </form>
     );
@@ -566,6 +647,162 @@ function RecipeView({
             <div className={styles.actions}>
                 <button type="button" className={styles.primary} onClick={onAnother}>
                     Another one
+                </button>
+                <button type="button" className={styles.secondary} onClick={onStartAgain}>
+                    Start again
+                </button>
+            </div>
+        </>
+    );
+}
+
+const APPLIANCES: Record<Appliance, { label: string; icon: React.ReactNode }> = {
+    toaster: {
+        label: "Toaster",
+        icon: (
+            <>
+                <path d="M4 10a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v8H4z" />
+                <path d="M9 6V4M15 6V4M4 14h16" />
+            </>
+        ),
+    },
+    microwave: {
+        label: "Microwave",
+        icon: (
+            <>
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <rect x="6" y="8" width="9" height="8" rx="1" />
+                <path d="M18 9v.01M18 12v.01" />
+            </>
+        ),
+    },
+    kettle: {
+        label: "Kettle",
+        icon: (
+            <>
+                <path d="M6 20h12l-1.5-9h-9z" />
+                <path d="M7.5 11 9 6h6l1.5 5M18 12.5l2-2.5" />
+            </>
+        ),
+    },
+    none: {
+        label: "No cooking",
+        icon: <path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 0-3 2-3 6h3v12" />,
+    },
+};
+
+/** Ready now (#88, project/ReadyNow.dc.html): 3 to 5 quick ideas, each with what it uses from stock. */
+function IdeasView({
+    meal,
+    ideas,
+    preferUseFirst,
+    onMore,
+    onStartAgain,
+}: {
+    meal: RecipeMeal;
+    ideas: QuickIdea[];
+    preferUseFirst: boolean;
+    onMore: () => void;
+    onStartAgain: () => void;
+}) {
+    const open = (productId: string) => (e: React.MouseEvent) => {
+        e.preventDefault();
+        navigate(itemPath(productId));
+    };
+    const usesUseFirst = ideas.some((i) => i.uses.some((u) => u.useFirst));
+    return (
+        <>
+            <div className={styles.recipe}>
+                <div className={styles.recipeHead}>
+                    <div className={styles.kicker}>Ready now · {mealLabel(meal)}</div>
+                    <h1 className={styles.recipeTitle}>
+                        {ideas.length} quick {ideas.length === 1 ? "idea" : "ideas"}
+                    </h1>
+                    <div className={styles.summary}>
+                        Toaster, microwave, kettle or no cooking, from what&apos;s in.
+                        {preferUseFirst && usesUseFirst && " Things to use first come first."}
+                    </div>
+                </div>
+
+                {ideas.map((idea) => {
+                    const expired = idea.uses.filter(
+                        (u) => u.daysUntilSoonest !== null && u.daysUntilSoonest < 0,
+                    );
+                    const appliance = APPLIANCES[idea.appliance];
+                    return (
+                        <article key={idea.title} className={styles.idea} aria-label={idea.title}>
+                            <div className={styles.ideaHead}>
+                                <h2 className={styles.ideaTitle}>{idea.title}</h2>
+                                <span className={styles.ideaMinutes}>{idea.minutes} min</span>
+                            </div>
+                            <div>
+                                <span className={styles.appliance}>
+                                    <svg
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        aria-hidden="true"
+                                    >
+                                        {appliance.icon}
+                                    </svg>
+                                    {appliance.label}
+                                </span>
+                            </div>
+                            <div className={styles.how}>{idea.how}</div>
+                            {expired.map((u) => (
+                                <div key={u.productId} className={styles.check}>
+                                    Check the {u.displayName.toLowerCase()} is still good first.
+                                </div>
+                            ))}
+                            {idea.uses.length > 0 && (
+                                <div className={styles.uses}>
+                                    <div className={styles.usesLabel}>Uses</div>
+                                    <div className={styles.useLinks}>
+                                        {idea.uses.map((u) => {
+                                            const gone =
+                                                u.daysUntilSoonest !== null && u.daysUntilSoonest < 0;
+                                            return (
+                                                <a
+                                                    key={u.productId}
+                                                    href={itemPath(u.productId)}
+                                                    className={styles.useLink}
+                                                    onClick={open(u.productId)}
+                                                >
+                                                    {(gone || u.useFirst) && (
+                                                        <span
+                                                            className={`${styles.useDot} ${gone ? styles.useDotExpired : ""}`}
+                                                            aria-hidden="true"
+                                                        />
+                                                    )}
+                                                    {u.displayName}
+                                                    {(gone || u.useFirst) && (
+                                                        <span className={styles.srOnly}>
+                                                            {gone ? " (estimated expired)" : " (use first)"}
+                                                        </span>
+                                                    )}
+                                                </a>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                            {idea.alsoNeeded && (
+                                <div className={styles.ideaAlso}>
+                                    You&apos;ll also need: {idea.alsoNeeded}
+                                </div>
+                            )}
+                        </article>
+                    );
+                })}
+            </div>
+            <div className={styles.actions}>
+                <button type="button" className={styles.primary} onClick={onMore}>
+                    More ideas
                 </button>
                 <button type="button" className={styles.secondary} onClick={onStartAgain}>
                     Start again

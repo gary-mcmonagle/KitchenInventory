@@ -4,7 +4,7 @@ import styles from "./BottomNav.module.css";
 export type NavTab = "stock" | "list" | "recipes";
 
 /**
- * The bottom nav (#87, option A on the canvas): three tabs, Stock · List · Recipes. The open tab has a light-green pill
+ * The bottom nav (#87, option A on the canvas): three tabs, Stock · List · Hungry? (Recipes until #88). The open tab has a light-green pill
  * behind its icon and a bold green label. Add and Scanners live in the stock list header. The List tab's count badge
  * shows only when there's something on the list.
  */
@@ -68,7 +68,7 @@ export function BottomNav({ current, listCount = 0 }: { current: NavTab; listCou
             {tab(
                 "recipes",
                 RECIPES_PATH,
-                "Recipes",
+                "Hungry?",
                 <>
                     <path d="M4 11h16a8 8 0 0 1-16 0z" />
                     <path d="M9 4c0 1.5 1 1.5 1 3M13 4c0 1.5 1 1.5 1 3" />

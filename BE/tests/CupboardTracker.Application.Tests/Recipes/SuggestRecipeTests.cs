@@ -19,6 +19,16 @@ internal sealed class FakeRecipeGenerator : IRecipeGenerator
         return Task.FromResult(Answer?.Invoke(request) ?? new RecipeResult.Suggested(Recipe([])));
     }
 
+    public Func<RecipeRequest, QuickIdeasResult>? Ideas { get; set; }
+
+    public List<RecipeRequest> IdeaRequests { get; } = [];
+
+    public Task<QuickIdeasResult> SuggestQuickIdeasAsync(RecipeRequest request, CancellationToken cancellationToken)
+    {
+        IdeaRequests.Add(request);
+        return Task.FromResult(Ideas?.Invoke(request) ?? new QuickIdeasResult.Suggested([]));
+    }
+
     public static Recipe Recipe(IReadOnlyList<RecipeIngredient> ingredients, IReadOnlyList<Guid>? usesUp = null, IReadOnlyList<Guid>? couldNotFitIn = null) =>
         new("Creamy penne", "A quick pasta.", RecipeMeal.Dinner, 2, 25, ingredients, ["Cook the penne."], usesUp ?? [], ["1 onion"], couldNotFitIn ?? []);
 }
@@ -65,8 +75,76 @@ public sealed class SuggestRecipeTests
 
     private static RecipeChoices Choices(
         RecipeMeal meal = RecipeMeal.Dinner, bool prefer = true, IReadOnlyList<Guid>? include = null, string? comments = null,
-        IReadOnlyList<string>? avoid = null) =>
-        new(meal, prefer, include ?? [], comments, avoid ?? []);
+        IReadOnlyList<string>? avoid = null, RecipeMode mode = RecipeMode.Cook) =>
+        new(meal, prefer, include ?? [], comments, avoid ?? [], mode);
+
+    // ---- Ready now (#88)
+
+    [Fact]
+    public async Task Ready_now_asks_for_ideas_not_a_recipe_and_returns_them_with_their_products()
+    {
+        var bread = Known("Sourdough loaf", expiresInDays: 5);
+        var cheese = Known("Mature cheddar", expiresInDays: 20);
+        generator.Ideas = _ => new QuickIdeasResult.Suggested(
+        [
+            new QuickIdea("Cheese on toast", "Toast 2 slices, add cheddar, microwave 30 s.", Appliance.Toaster, 5, [bread, cheese], null),
+        ]);
+
+        var result = await UseCase().ExecuteAsync(Choices(RecipeMeal.Snack, mode: RecipeMode.ReadyNow), Gary, CancellationToken.None);
+
+        var ideas = Assert.IsType<SuggestRecipeResult.IdeasSuggested>(result);
+        Assert.Equal(RecipeMeal.Snack, ideas.Meal);
+        var idea = Assert.Single(ideas.Ideas);
+        Assert.Equal(("Cheese on toast", Appliance.Toaster, 5), (idea.Title, idea.Appliance, idea.Minutes));
+        Assert.Equal(["Sourdough loaf", "Mature cheddar"], idea.Uses.Select(u => u.DisplayName));
+        Assert.Equal(RecipeMeal.Snack, Assert.Single(generator.IdeaRequests).Meal);
+        Assert.Empty(generator.Requests); // no recipe asked for
+        Assert.Contains(logger.Entries, e => e.Message.StartsWith("Ready now ideas suggested: meal Snack", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task With_prefer_use_first_ideas_using_use_first_items_come_first_otherwise_the_models_order()
+    {
+        var milk = Known("Semi-skimmed milk", expiresInDays: 1);
+        var oats = Known("Rolled oats", expiresInDays: 200);
+        QuickIdea Idea(string title, Guid uses) => new(title, "How.", Appliance.Microwave, 3, [uses], null);
+        generator.Ideas = _ => new QuickIdeasResult.Suggested([Idea("Porridge", oats), Idea("Hot milk", milk), Idea("Oat bar", oats)]);
+
+        var preferred = (SuggestRecipeResult.IdeasSuggested)await UseCase().ExecuteAsync(
+            Choices(RecipeMeal.Breakfast, prefer: true, mode: RecipeMode.ReadyNow), Gary, CancellationToken.None);
+        var plain = (SuggestRecipeResult.IdeasSuggested)await UseCase().ExecuteAsync(
+            Choices(RecipeMeal.Breakfast, prefer: false, mode: RecipeMode.ReadyNow), Gary, CancellationToken.None);
+
+        Assert.Equal(["Hot milk", "Porridge", "Oat bar"], preferred.Ideas.Select(i => i.Title));
+        Assert.True(preferred.Ideas[0].Uses[0].UseFirst);
+        Assert.Equal(["Porridge", "Hot milk", "Oat bar"], plain.Ideas.Select(i => i.Title));
+    }
+
+    [Fact]
+    public async Task Ready_now_unavailable_is_logged_with_the_mode_and_meal_and_no_text()
+    {
+        Known("Eggs");
+        generator.Ideas = _ => new QuickIdeasResult.Unavailable("timeout");
+
+        var result = await UseCase().ExecuteAsync(
+            Choices(RecipeMeal.Lunch, comments: "nothing with eggs please", mode: RecipeMode.ReadyNow), Gary, CancellationToken.None);
+
+        Assert.IsType<SuggestRecipeResult.Unavailable>(result);
+        var entry = Assert.Single(logger.Entries, e => e.Message.StartsWith("Recipe unavailable", StringComparison.Ordinal));
+        Assert.Contains("mode ReadyNow, meal Lunch", entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(logger.Entries, e => e.Message.Contains("eggs please", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task More_ideas_passes_up_to_20_shown_titles()
+    {
+        Known("Eggs");
+        var titles = Enumerable.Range(1, 25).Select(i => $"Idea {i}").ToList();
+
+        await UseCase().ExecuteAsync(Choices(avoid: titles, mode: RecipeMode.ReadyNow), Gary, CancellationToken.None);
+
+        Assert.Equal(titles.Skip(5), Assert.Single(generator.IdeaRequests).AvoidTitles);
+    }
 
     [Fact]
     public async Task The_stock_sent_is_built_from_cosmos_with_known_products_only()

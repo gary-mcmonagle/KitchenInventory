@@ -107,8 +107,11 @@ test.each([
     ["2026-10-18T05:00:00.000Z", "breakfast"],
     ["2026-10-18T09:59:00.000Z", "breakfast"],
     ["2026-10-18T10:00:00.000Z", "lunch"],
-    ["2026-10-18T14:59:00.000Z", "lunch"],
-    ["2026-10-18T15:00:00.000Z", "dinner"],
+    ["2026-10-18T13:29:00.000Z", "lunch"], // 14:29 BST
+    ["2026-10-18T13:30:00.000Z", "snack"], // 14:30 BST (#88)
+    ["2026-10-18T15:59:00.000Z", "snack"], // 16:59 BST
+    ["2026-10-18T16:00:00.000Z", "dinner"], // 17:00 BST
+    ["2026-12-01T14:30:00.000Z", "snack"], // 14:30 GMT
     ["2026-10-18T22:30:00.000Z", "dinner"],
 ])("the default meal follows the UK time of day (%s → %s)", (iso, meal) => {
     expect(defaultMeal(new Date(iso))).toBe(meal);
@@ -117,11 +120,11 @@ test.each([
 test("the form matches the mockup: heading, meal chips as a radio group, the default meal", async () => {
     await renderForm();
 
-    expect(screen.getByRole("heading", { level: 1, name: "What shall we cook?" })).toBeInTheDocument();
-    expect(screen.getByText("Built from what's in your cupboard.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Hungry?" })).toBeInTheDocument();
+    expect(screen.getByText("Ideas built from what's in your cupboard.")).toBeInTheDocument();
     const group = screen.getByRole("radiogroup", { name: "Meal" });
     const radios = within(group).getAllByRole("radio");
-    expect(radios.map((r) => r.textContent)).toEqual(["Breakfast", "Lunch", "Dinner"]);
+    expect(radios.map((r) => r.textContent)).toEqual(["Breakfast", "Lunch", "Dinner", "Snack"]);
     expect(within(group).getByRole("radio", { name: "Dinner" })).toHaveAttribute("aria-checked", "true");
 
     fireEvent.click(within(group).getByRole("radio", { name: "Lunch" }));
@@ -217,6 +220,7 @@ test("Get a recipe sends the choices, shows the loading state, then the recipe",
     fireEvent.click(screen.getByRole("button", { name: "Get a recipe" }));
 
     expect(suggestRecipe).toHaveBeenCalledWith({
+        mode: "cook",
         meal: "dinner",
         preferUseFirst: true,
         includeProductIds: ["cheddar"],
@@ -340,7 +344,7 @@ test("with nothing known in stock, there's a note and no button to press", async
     expect(screen.getByRole("button", { name: "Get a recipe" })).toBeDisabled();
 });
 
-test("the shell shows the Recipes screen at /recipes, with the nav", async () => {
+test("the shell shows the Hungry? screen at /recipes, with the nav", async () => {
     window.history.pushState(null, "", "/recipes");
     const { api } = fakeApi();
     const shellApi = {
@@ -350,7 +354,7 @@ test("the shell shows the Recipes screen at /recipes, with the nav", async () =>
     } as unknown as ApiClient;
     render(<Shell api={shellApi} buildSha="def5678" />);
 
-    expect(await screen.findByRole("heading", { level: 1, name: "What shall we cook?" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { level: 1, name: "Hungry?" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Hungry?" })).toHaveAttribute("aria-current", "page");
     window.history.pushState(null, "", "/");
 });

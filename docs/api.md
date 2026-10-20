@@ -486,7 +486,7 @@ Adds units to stock from the app.
 - **404** `{ "error": "No such store-label check-in." }`
 - **409** `{ "error": "That check-in has already been sorted out.", "productId": "…" }`: already assigned to a different product.
 
-## Recipe ideas (#73)
+## Hungry? recipes and Ready now ideas (#73, #88)
 
 ### `POST /api/recipes/suggest`
 
@@ -494,6 +494,7 @@ A **recipe suggestion** built from what's in stock: gpt-4o on Azure AI Foundry (
 
 ```json
 {
+  "mode": "cook",
   "meal": "dinner",
   "preferUseFirst": true,
   "includeProductIds": ["…"],
@@ -504,11 +505,12 @@ A **recipe suggestion** built from what's in stock: gpt-4o on Azure AI Foundry (
 
 | Field | Notes |
 |---|---|
-| `meal` | Required: `breakfast`, `lunch` or `dinner`. |
+| `mode` | `cook` (default: one recipe, below) or `readyNow` (3–5 quick ideas, see **Ready now**) (#88). |
+| `meal` | Required: `breakfast`, `lunch`, `dinner` or `snack` (#88). |
 | `preferUseFirst` | Build around the use-first items (default `false`). |
 | `includeProductIds` | Products that must be in it (default none, at most 20). Each must be a **known** product in stock. |
 | `comments` | One-off preferences, or `null`. Trimmed; empty means none; **at most 300 characters**. Sent to the model in their own delimited section as wishes, never instructions: they can't change the stock-only rule, the 3-item limit, food safety or the output format. |
-| `avoidTitles` | Titles already shown this visit (Another one): the model suggests something different, a little more freely. The last 10 are used, each cut to 80 characters. |
+| `avoidTitles` | Titles already shown this visit (Another one, More ideas): the model suggests something different, a little more freely. The last 20 are used, each cut to 80 characters. |
 
 The **stock is read on the server from Cosmos**, never taken from the app: every in-stock known product (items waiting for a name are left out) with its name, quantity, days to its soonest estimated expiry, the use-first flag, its aisle and how many are opened.
 
@@ -542,8 +544,41 @@ The **stock is read on the server from Cosmos**, never taken from the app: every
 | `couldNotFitIn` | Names of included products the recipe still leaves out after one retry. |
 | Limits | `title` ≤ 80 characters, `summary` ≤ 300, `steps` ≤ 15 of ≤ 300 each, `servings` 1–12, `totalMinutes` 1–600; `meal` is always the one asked for. |
 
+In cook mode the model is told simple dishes are welcome (a cheese toastie or beans on toast is fine), and a snack is small.
+
+#### Ready now (`"mode": "readyNow"`, #88)
+
+Quick things using **only a toaster, microwave or kettle, or no cooking** (never a hob, oven, grill or air fryer), ready in about 10 minutes, from the stock (basic staples allowed; butter, spreads and sauces only if in stock). Same model, identity, rate limit, comments rules and logging (the mode and meal, never text).
+
+```json
+{
+  "available": true,
+  "mode": "readyNow",
+  "meal": "snack",
+  "ideas": [
+    {
+      "title": "Hummus and toasted pitta",
+      "how": "Toast 2 pittas, slice into strips and dip.",
+      "appliance": "toaster",
+      "minutes": 4,
+      "uses": [{ "productId": "…", "displayName": "Hummus", "useFirst": true, "daysUntilSoonest": -1, "soonestEstimatedExpiryDate": "2026-10-19" }],
+      "alsoNeeded": null
+    }
+  ]
+}
+```
+
+| Field | Notes |
+|---|---|
+| `ideas` | 1–5 (the model is asked for 3–5). An idea with an empty title or how, an appliance outside the four, a repeated title or one in `avoidTitles` is dropped. None left → `available: false`. |
+| `appliance` | `toaster`, `microwave`, `kettle` or `none` (no cooking). |
+| `uses` | In-stock products it uses (made-up IDs dropped), with the product's current name, use-first flag and expiry for the app's dots and "check it's still good" line. |
+| `alsoNeeded` | At most **one** thing not in stock, or `null`. |
+| Order | With `preferUseFirst`, ideas that use a use-first product come first; otherwise the model's order. |
+| Limits | `title` ≤ 60 characters, `how` ≤ 240, `minutes` 1–30. |
+
 - **200** `{ "available": false, "message": "Couldn't come up with a recipe just now. Try again." }`: the model timed out, couldn't be reached (429 and 5xx are retried), gave an unreadable answer, or refused (its content filter, which the comments can trigger). A 200, so it doesn't fire the error alert; a misconfiguration (the model refusing the app) is logged at Error.
-- **400** `{ "error": "…" }`: bad shape or meal, comments over 300 characters, more than 20 included, or an included product that isn't a known product in stock.
+- **400** `{ "error": "…" }`: bad shape, meal or mode, comments over 300 characters, more than 20 included, or an included product that isn't a known product in stock.
 - **422** `{ "error": "There's nothing in stock to cook with." }`: no known products in stock.
 - **429** `{ "error": "That's a lot of recipes for one hour. Try again a bit later." }`: over `RECIPE_REQUESTS_PER_HOUR` (default 30) for this user in the last hour. Counted per API app instance, in memory: a cost guard, not an exact quota.
 

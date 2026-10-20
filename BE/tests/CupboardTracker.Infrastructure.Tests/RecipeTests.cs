@@ -326,4 +326,78 @@ public sealed class FoundryRecipeGeneratorTests
         Assert.Equal(5, ServiceCollectionExtensions.RecipeSettingsFromConfiguration(With("5")).RequestsPerHour);
         Assert.Throws<InvalidOperationException>(() => ServiceCollectionExtensions.RecipeSettingsFromConfiguration(With("0")));
     }
+
+    // ---- Ready now (#88)
+
+    private static string Ideas(params string[] ideas) => $$"""{"ideas":[{{string.Join(",", ideas)}}]}""";
+
+    private static string Idea(string title, string appliance = "toaster", string uses = "", string also = "", int minutes = 5) =>
+        $$"""{"title":"{{title}}","how":"Do it.","appliance":"{{appliance}}","minutes":{{minutes}},"uses":[{{uses}}],"alsoNeeded":[{{also}}]}""";
+
+    [Fact]
+    public async Task Ready_now_sends_its_own_instructions_and_strict_schema()
+    {
+        var (generator, handler, logs) = Make(Options, () => Status(200, Answer(Ideas(Idea("Cheese on toast", uses: $"\"{Cheddar}\"")))));
+
+        var result = await generator.SuggestQuickIdeasAsync(Request() with { Meal = RecipeMeal.Snack }, CancellationToken.None);
+
+        Assert.Equal("Cheese on toast", Assert.Single(Assert.IsType<QuickIdeasResult.Suggested>(result).Ideas).Title);
+        var json = JsonNode.Parse(Assert.Single(handler.Requests).Body)!;
+        Assert.Equal(FoundryRecipeGenerator.IdeasInstructions, json["messages"]![0]!["content"]!.GetValue<string>());
+        Assert.Contains("Meal: snack", json["messages"]![1]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Equal("ready_now_ideas", json["response_format"]!["json_schema"]!["name"]!.GetValue<string>());
+        Assert.True(json["response_format"]!["json_schema"]!["strict"]!.GetValue<bool>());
+        Assert.Contains("only a toaster, a microwave, a kettle, or no cooking", FoundryRecipeGenerator.IdeasInstructions, StringComparison.Ordinal);
+        Assert.Contains(logs.Entries, e => e.Message.EndsWith("outcome ideas: 1.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_ideas_schema_is_strict_with_the_four_appliances()
+    {
+        var item = FoundryRecipeGenerator.IdeasSchema["schema"]!["properties"]!["ideas"]!["items"]!;
+        Assert.False(item["additionalProperties"]!.GetValue<bool>());
+        Assert.Equal(
+            item["properties"]!.AsObject().Select(p => p.Key).Order(),
+            item["required"]!.AsArray().Select(r => r!.GetValue<string>()).Order());
+        Assert.Equal(["toaster", "microwave", "kettle", "none"], item["properties"]!["appliance"]!["enum"]!.AsArray().Select(a => a!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void Ideas_are_validated_against_the_stock_and_capped()
+    {
+        var content = Ideas(
+            Idea("Cheese on toast", uses: $"\"{Cheddar}\",\"99999999-9999-9999-9999-999999999999\",\"nonsense\""),
+            Idea("Pan-fried halloumi", appliance: "hob"),
+            Idea("Hot milk", appliance: "microwave", uses: $"\"{Milk}\"", also: "\"Cocoa\",\"Sugar\"", minutes: 90),
+            Idea("cheese on toast"),
+            Idea("Penne salad", appliance: "none", uses: $"\"{Penne}\""),
+            Idea("Omelette in a mug", appliance: "microwave"),
+            Idea("Cup of tea", appliance: "kettle"),
+            Idea("Toast", appliance: "toaster"));
+
+        var ideas = FoundryRecipeGenerator.ValidateIdeas(content, Request(avoid: ["Omelette in a mug"]));
+
+        Assert.Equal(["Cheese on toast", "Hot milk", "Penne salad", "Cup of tea", "Toast"], ideas.Select(i => i.Title)); // hob, repeat, avoided gone; at most 5
+        Assert.Equal([Cheddar], ideas[0].Uses);
+        Assert.Equal((Appliance.Microwave, 30, "Cocoa"), (ideas[1].Appliance, ideas[1].Minutes, ideas[1].AlsoNeeded));
+        Assert.Null(ideas[0].AlsoNeeded);
+        Assert.Equal(Appliance.Kettle, ideas[3].Appliance);
+    }
+
+    [Fact]
+    public async Task No_usable_ideas_or_a_failure_is_unavailable()
+    {
+        var (none, _, _) = Make(Options, () => Status(200, Answer(Ideas(Idea("Fry an egg", appliance: "hob")))));
+        Assert.IsType<QuickIdeasResult.Unavailable>(await none.SuggestQuickIdeasAsync(Request(), CancellationToken.None));
+
+        var (down, _, _) = Make(Options, () => Status(503));
+        Assert.IsType<QuickIdeasResult.Unavailable>(await down.SuggestQuickIdeasAsync(Request(), CancellationToken.None));
+    }
+
+    [Fact]
+    public void Cook_mode_welcomes_simple_dishes_and_knows_snacks()
+    {
+        Assert.Contains("Simple dishes are welcome", FoundryRecipeGenerator.Instructions, StringComparison.Ordinal);
+        Assert.Contains("snack", FoundryRecipeGenerator.Schema["schema"]!["properties"]!["meal"]!["enum"]!.AsArray().Select(m => m!.GetValue<string>()));
+    }
 }

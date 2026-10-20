@@ -252,16 +252,38 @@ export interface Added {
     items: Array<{ productId: string; displayName: string; quantity: number; createdProduct: boolean }>;
 }
 
-export type RecipeMeal = "breakfast" | "lunch" | "dinner";
+export type RecipeMeal = "breakfast" | "lunch" | "dinner" | "snack";
+
+/** Hungry? (#88): a proper recipe, or quick Ready now ideas. */
+export type RecipeMode = "cook" | "readyNow";
+
+export type Appliance = "toaster" | "microwave" | "kettle" | "none";
+
+/** A Ready now idea (#88): the in-stock products it uses, a line or two on how, and at most one extra. */
+export interface QuickIdea {
+    title: string;
+    how: string;
+    appliance: Appliance;
+    minutes: number;
+    uses: Array<{
+        productId: string;
+        displayName: string;
+        useFirst: boolean;
+        daysUntilSoonest: number | null;
+        soonestEstimatedExpiryDate: string | null;
+    }>;
+    alsoNeeded: string | null;
+}
 
 /** POST /api/recipes/suggest (#73): the household's choices. The stock itself is read on the server. */
 export interface RecipeRequest {
+    mode: RecipeMode;
     meal: RecipeMeal;
     preferUseFirst: boolean;
     includeProductIds: string[];
     /** At most 300 characters; null for none. */
     comments: string | null;
-    /** Titles already shown this visit, for Another one. */
+    /** Titles already shown this visit, for Another one and More ideas. */
     avoidTitles: string[];
 }
 
@@ -288,7 +310,11 @@ export interface Recipe {
 /** `available: false`: the model couldn't help just now; show `message` with Try again. */
 export interface RecipeSuggestion {
     available: boolean;
+    mode?: RecipeMode;
     recipe?: Recipe;
+    /** Ready now (#88). */
+    meal?: RecipeMeal;
+    ideas?: QuickIdea[];
     message?: string;
 }
 

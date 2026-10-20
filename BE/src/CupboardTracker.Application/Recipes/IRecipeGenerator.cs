@@ -5,6 +5,34 @@ public enum RecipeMeal
     Breakfast,
     Lunch,
     Dinner,
+    Snack,
+}
+
+/// <summary>Hungry? (#88): a proper recipe, or quick ideas made with a toaster, microwave or kettle, or no cooking.</summary>
+public enum RecipeMode
+{
+    Cook,
+    ReadyNow,
+}
+
+/// <summary>The only kitchen kit a Ready now idea may need.</summary>
+public enum Appliance
+{
+    Toaster,
+    Microwave,
+    Kettle,
+    None,
+}
+
+/// <summary>A Ready now idea (#88), already validated against the stock that was sent: the products it uses, a line or
+/// two on how, and at most one thing that isn't in stock.</summary>
+public sealed record QuickIdea(string Title, string How, Appliance Appliance, int Minutes, IReadOnlyList<Guid> Uses, string? AlsoNeeded);
+
+public abstract record QuickIdeasResult
+{
+    public sealed record Suggested(IReadOnlyList<QuickIdea> Ideas) : QuickIdeasResult;
+
+    public sealed record Unavailable(string Reason) : QuickIdeasResult;
 }
 
 /// <summary>One in-stock known product, as the recipe generator sees it (#73). Built on the server from Cosmos, never
@@ -51,4 +79,7 @@ public abstract record RecipeResult
 public interface IRecipeGenerator
 {
     Task<RecipeResult> SuggestAsync(RecipeRequest request, CancellationToken cancellationToken);
+
+    /// <summary>3 to 5 Ready now ideas (#88) from the same stock and choices.</summary>
+    Task<QuickIdeasResult> SuggestQuickIdeasAsync(RecipeRequest request, CancellationToken cancellationToken);
 }

@@ -8,7 +8,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace CupboardTracker.Functions.Api.Recipes;
 
-/// <summary>Recipe ideas from what's in stock (#73). Needs a signed-in user. See docs/api.md.</summary>
+/// <summary>Hungry? (#73, #88): a recipe or Ready now ideas from what's in stock. Needs a signed-in user. See docs/api.md.</summary>
 public sealed class RecipeFunctions(SuggestRecipe suggest)
 {
     private const int MaxBodyBytes = 16 * 1024;
@@ -18,7 +18,7 @@ public sealed class RecipeFunctions(SuggestRecipe suggest)
 
     public const string TooManyMessage = "That's a lot of recipes for one hour. Try again a bit later.";
 
-    /// <summary><c>POST /api/recipes/suggest</c> with <c>{ meal, preferUseFirst, includeProductIds, comments,
+    /// <summary><c>POST /api/recipes/suggest</c> with <c>{ mode, meal, preferUseFirst, includeProductIds, comments,
     /// avoidTitles }</c>. Nothing is stored.</summary>
     [Function("suggestRecipe")]
     public async Task<HttpResponseData> Suggest(
@@ -59,12 +59,27 @@ public sealed class RecipeFunctions(SuggestRecipe suggest)
                     "breakfast" => RecipeMeal.Breakfast,
                     "lunch" => RecipeMeal.Lunch,
                     "dinner" => RecipeMeal.Dinner,
+                    "snack" => RecipeMeal.Snack,
                     _ => null,
                 }
                 : null;
             if (meal is null)
             {
-                return (null, "meal must be \"breakfast\", \"lunch\" or \"dinner\".");
+                return (null, "meal must be \"breakfast\", \"lunch\", \"dinner\" or \"snack\".");
+            }
+
+            var mode = RecipeMode.Cook;
+            if (root.TryGetProperty("mode", out var md) && md.ValueKind != JsonValueKind.Null)
+            {
+                RecipeMode? parsed = md.ValueKind == JsonValueKind.String
+                    ? md.GetString() switch { "cook" => RecipeMode.Cook, "readyNow" => RecipeMode.ReadyNow, _ => null }
+                    : null;
+                if (parsed is null)
+                {
+                    return (null, "mode must be \"cook\" or \"readyNow\".");
+                }
+
+                mode = parsed.Value;
             }
 
             var prefer = false;
@@ -119,7 +134,7 @@ public sealed class RecipeFunctions(SuggestRecipe suggest)
                 avoid.AddRange(titles.EnumerateArray().Select(t => t.GetString()!));
             }
 
-            return (new RecipeChoices(meal.Value, prefer, include, comments, avoid), null);
+            return (new RecipeChoices(meal.Value, prefer, include, comments, avoid, mode), null);
         }
         catch (JsonException)
         {
@@ -129,12 +144,36 @@ public sealed class RecipeFunctions(SuggestRecipe suggest)
 
     internal static (HttpStatusCode Status, object Body) ToResponse(SuggestRecipeResult result) => result switch
     {
-        SuggestRecipeResult.Suggested s => (HttpStatusCode.OK, new { available = true, recipe = ToJson(s.Recipe) }),
+        SuggestRecipeResult.Suggested s => (HttpStatusCode.OK, new { available = true, mode = "cook", recipe = ToJson(s.Recipe) }),
+        SuggestRecipeResult.IdeasSuggested i => (HttpStatusCode.OK, new
+        {
+            available = true,
+            mode = "readyNow",
+            meal = i.Meal.ToString().ToLowerInvariant(),
+            ideas = i.Ideas.Select(ToJson),
+        }),
         SuggestRecipeResult.Unavailable => (HttpStatusCode.OK, new { available = false, message = UnavailableMessage }),
         SuggestRecipeResult.Invalid i => (HttpStatusCode.BadRequest, new { error = i.Error }),
         SuggestRecipeResult.NothingInStock => (HttpStatusCode.UnprocessableEntity, new { error = "There's nothing in stock to cook with." }),
         SuggestRecipeResult.TooManyRequests => ((HttpStatusCode)429, new { error = TooManyMessage }),
         _ => throw new ArgumentOutOfRangeException(nameof(result)),
+    };
+
+    private static object ToJson(QuickIdeaView i) => new
+    {
+        title = i.Title,
+        how = i.How,
+        appliance = i.Appliance.ToString().ToLowerInvariant(),
+        minutes = i.Minutes,
+        uses = i.Uses.Select(u => new
+        {
+            productId = u.ProductId,
+            displayName = u.DisplayName,
+            useFirst = u.UseFirst,
+            daysUntilSoonest = u.DaysUntilSoonest,
+            soonestEstimatedExpiryDate = u.SoonestEstimatedExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        }),
+        alsoNeeded = i.AlsoNeeded,
     };
 
     private static object ToJson(RecipeView r) => new

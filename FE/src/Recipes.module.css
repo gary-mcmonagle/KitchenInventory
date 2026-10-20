@@ -597,3 +597,152 @@
     clip: rect(0 0 0 0);
     white-space: nowrap;
 }
+
+/* Hungry? (#88): Cook something | Ready now, as on project/Hungry.dc.html. */
+.modes {
+    display: flex;
+    padding: 4px;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+}
+
+.mode {
+    flex: 1;
+    min-height: 48px;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: var(--radius-button);
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+}
+
+.mode[aria-checked="true"] {
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.modeLabel {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.modeSub {
+    font-size: 12px;
+    font-weight: 500;
+    opacity: 0.85;
+}
+
+/* Ready now ideas, as on project/ReadyNow.dc.html. */
+.idea {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.ideaHead {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.ideaTitle {
+    flex: 1;
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.25;
+    font-weight: 700;
+}
+
+.ideaMinutes {
+    flex: none;
+    padding-top: 2px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.appliance {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.how {
+    font-size: 15px;
+    line-height: 1.45;
+}
+
+.check {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--danger-fg);
+}
+
+.uses {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.usesLabel {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.useLinks {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.useLink {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 10px;
+    border-radius: 10px;
+    background: var(--ground);
+    color: var(--accent-dark);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.useDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--warn-border);
+}
+
+.useDotExpired {
+    background: var(--danger-fg);
+}
+
+.ideaAlso {
+    font-size: 13px;
+    color: var(--muted);
+}

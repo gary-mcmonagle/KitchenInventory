@@ -4,7 +4,7 @@ import { BottomNav } from "./BottomNav";
 import { scannerLabel, scannerStatus } from "./scannerStatus";
 import { Shell } from "./Shell";
 
-// The three-tab navigation (#87): Stock · List · Recipes, with Add and Scanners in the stock list header.
+// The three-tab navigation (#87): Stock · List · Hungry? (Recipes until #88), with Add and Scanners in the stock list header.
 
 const clear: Scanners = {
     generatedAt: "2026-10-19T20:00:00.000Z",
@@ -73,19 +73,19 @@ async function at(path: string, api = shellApi()) {
 
 afterEach(() => window.history.pushState(null, "", "/"));
 
-test("three tabs, Stock · List · Recipes, with Stock open on the stock list", async () => {
+test("three tabs, Stock · List · Hungry?, with Stock open on the stock list", async () => {
     await at("/");
     expect(tabs()).toEqual([
         ["Stock", "page"],
         ["List", null],
-        ["Recipes", null],
+        ["Hungry?", null],
     ]);
     expect(screen.queryByRole("link", { name: "Add an item" })).not.toBeInTheDocument(); // the old Add tab
 });
 
 test.each([
     ["/list", "List"],
-    ["/recipes", "Recipes"],
+    ["/recipes", "Hungry?"],
     ["/scanners", "Stock"], // reached from the stock list
 ])("on %s the %s tab is open", async (path, open) => {
     await at(path);
@@ -98,7 +98,7 @@ test("the tabs navigate", () => {
     const nav = screen.getByRole("navigation", { name: "Main" });
     fireEvent.click(within(nav).getByRole("link", { name: "List" }));
     expect(window.location.pathname).toBe("/list");
-    fireEvent.click(within(nav).getByRole("link", { name: "Recipes" }));
+    fireEvent.click(within(nav).getByRole("link", { name: "Hungry?" }));
     expect(window.location.pathname).toBe("/recipes");
     fireEvent.click(within(nav).getByRole("link", { name: "Stock" }));
     expect(window.location.pathname).toBe("/");

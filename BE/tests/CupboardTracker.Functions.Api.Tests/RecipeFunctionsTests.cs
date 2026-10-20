@@ -45,6 +45,8 @@ public sealed class RecipeFunctionsTests
     [Theory]
     [InlineData("""{}""")]
     [InlineData("""{"meal":"supper"}""")]
+    [InlineData("""{"meal":"snack","mode":"bake"}""")]
+    [InlineData("""{"meal":"snack","mode":1}""")]
     [InlineData("""{"meal":"dinner","preferUseFirst":"yes"}""")]
     [InlineData("""{"meal":"dinner","includeProductIds":["not-an-id"]}""")]
     [InlineData("""{"meal":"dinner","includeProductIds":"x"}""")]
@@ -90,5 +92,39 @@ public sealed class RecipeFunctionsTests
         Assert.Equal(JsonValueKind.Null, r.GetProperty("ingredients")[1].GetProperty("productId").ValueKind);
         Assert.Equal("2026-10-20", r.GetProperty("usesUp")[0].GetProperty("soonestEstimatedExpiryDate").GetString());
         Assert.Equal("Cheddar", r.GetProperty("couldNotFitIn")[0].GetString());
+    }
+
+    [Fact]
+    public void Mode_and_snack_are_read_and_mode_defaults_to_cook()
+    {
+        Assert.Equal((RecipeMeal.Snack, RecipeMode.ReadyNow),
+            RecipeFunctions.Parse("""{"meal":"snack","mode":"readyNow"}"""u8).Choices is { } c ? (c.Meal, c.Mode) : default);
+        Assert.Equal(RecipeMode.Cook, RecipeFunctions.Parse("""{"meal":"dinner","mode":"cook"}"""u8).Choices!.Mode);
+        Assert.Equal(RecipeMode.Cook, RecipeFunctions.Parse("""{"meal":"dinner"}"""u8).Choices!.Mode);
+    }
+
+    [Fact]
+    public void Ready_now_ideas_are_returned_in_the_documented_shape()
+    {
+        var hummus = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var ideas = new SuggestRecipeResult.IdeasSuggested(RecipeMeal.Snack,
+        [
+            new QuickIdeaView("Hummus and toasted pitta", "Toast 2 pittas and dip.", Appliance.Toaster, 4,
+                [new(hummus, "Hummus", true, -1, new DateOnly(2026, 10, 19))], null),
+            new QuickIdeaView("Hot chocolate", "Warm the milk.", Appliance.None, 3, [], "Hot chocolate powder"),
+        ]);
+
+        var (status, body) = RecipeFunctions.ToResponse(ideas);
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        var json = JsonDocument.Parse(JsonSerializer.Serialize(body, WebJson)).RootElement;
+        Assert.Equal(("readyNow", "snack"), (json.GetProperty("mode").GetString(), json.GetProperty("meal").GetString()));
+        var first = json.GetProperty("ideas")[0];
+        Assert.Equal(("toaster", 4), (first.GetProperty("appliance").GetString(), first.GetProperty("minutes").GetInt32()));
+        var use = first.GetProperty("uses")[0];
+        Assert.Equal((hummus, true, -1), (use.GetProperty("productId").GetGuid(), use.GetProperty("useFirst").GetBoolean(), use.GetProperty("daysUntilSoonest").GetInt32()));
+        Assert.Equal(JsonValueKind.Null, first.GetProperty("alsoNeeded").ValueKind);
+        Assert.Equal(("none", "Hot chocolate powder"),
+            (json.GetProperty("ideas")[1].GetProperty("appliance").GetString(), json.GetProperty("ideas")[1].GetProperty("alsoNeeded").GetString()));
     }
 }
