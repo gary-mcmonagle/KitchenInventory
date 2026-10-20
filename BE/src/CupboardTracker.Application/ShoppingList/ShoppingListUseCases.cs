@@ -436,16 +436,30 @@ public sealed partial class AssignListAisle(
             }
         }
 
-        var updated = item.Changed($"aisle:{clock.GetUtcNow().ToUnixTimeMilliseconds()}", clock.GetUtcNow()) with { Aisle = aisle, AisleSource = source };
-        if (!await list.TryReplaceAsync(current, updated, cancellationToken))
+        // The item may change while Jev thinks (a tick, or an offline phone's replay, #85): keep the answer and put it on
+        // the latest version rather than waiting for the timer.
+        for (var round = 0; round < MaxSaveRounds; round++)
         {
-            return false; // changed meanwhile: the next run (or the timer) tries again
+            if (current?.Value is not { Removed: false } latest || (latest.Aisle is not null && latest.AisleSource != ListAisleSources.Fallback))
+            {
+                return false; // removed, or given an aisle meanwhile
+            }
+
+            var updated = latest.Changed($"aisle:{clock.GetUtcNow().ToUnixTimeMilliseconds()}", clock.GetUtcNow()) with { Aisle = aisle, AisleSource = source };
+            if (await list.TryReplaceAsync(current, updated, cancellationToken))
+            {
+                LogAisle(itemId, aisle, source);
+                await notify.ChangedAsync(updated, cancellationToken);
+                return true;
+            }
+
+            current = await list.GetAsync(itemId, cancellationToken);
         }
 
-        LogAisle(itemId, aisle, source);
-        await notify.ChangedAsync(updated, cancellationToken);
-        return true;
+        return false; // still changing: the timer tries again
     }
+
+    private const int MaxSaveRounds = 5;
 
     /// <summary>The timer's retry: items still waiting, or put in Other because Jev was down.</summary>
     public async Task<int> RetryAsync(CancellationToken cancellationToken)

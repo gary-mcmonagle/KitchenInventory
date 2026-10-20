@@ -351,6 +351,24 @@ public sealed class ShoppingListTests
     }
 
     [Fact]
+    public async Task A_tick_while_jev_thinks_keeps_the_tick_and_still_saves_the_aisle()
+    {
+        var item = await Add("Kitchen foil");
+        jev.ClassifyAnswer = _ =>
+        {
+            // Someone ticks it off (or an offline phone's replay lands) while Jev is answering (#85).
+            Changer().DoneAsync(item.Id, "tick-meanwhile", Gary, CancellationToken.None).GetAwaiter().GetResult();
+            return new ClassificationResult.Classified(new Classification("other", 0.9, null, 0));
+        };
+
+        Assert.True(await Aisler().ExecuteAsync(item.Id, CancellationToken.None));
+
+        var stored = list.Items[item.Id].Value;
+        Assert.Equal(("other", ListAisleSources.Jev, ListItemStatus.Done, 3L), (stored.Aisle, stored.AisleSource, stored.Status, stored.Version));
+        Assert.Single(jev.ClassifyCalls); // Jev isn't asked again
+    }
+
+    [Fact]
     public async Task Jev_down_puts_it_in_other_for_now_and_the_timer_retries()
     {
         var item = await Add("Kitchen foil");
