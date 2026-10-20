@@ -147,6 +147,7 @@
 }
 
 .row {
+    position: relative; /* the name link stretches over the whole row (#100) */
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -410,10 +411,32 @@
     text-decoration: none;
 }
 
+/* The whole row opens it (#100): the link's ::after covers the row; the row's buttons sit above it. */
+.nameLink::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-card);
+}
+
 .nameLink:focus-visible {
+    outline: none;
+}
+
+.row:has(.nameLink:focus-visible) {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    border-radius: 4px;
+}
+
+.row:has(.nameLink:active) {
+    background: var(--ground);
+}
+
+.actions button,
+.actions a,
+.rowButtons {
+    position: relative;
+    z-index: 1;
 }
 
 /* Opened / frozen labels on a product row (#65). */

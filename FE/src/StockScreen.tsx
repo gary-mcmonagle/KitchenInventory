@@ -21,6 +21,7 @@ import {
 } from "./format";
 import { AISLES, type AisleInfo } from "./aisles";
 import { takeFlash } from "./flash";
+import { rememberItemPreview } from "./itemPreview";
 import { ProductTile } from "./ProductTile";
 import { createSeenReporter } from "./push";
 import { ADD_PATH, itemPath, namePath, navigate, SCANNERS_PATH } from "./router";
@@ -751,6 +752,7 @@ function KnownRow({
                         href={itemPath(product.productId)}
                         onClick={(e) => {
                             e.preventDefault();
+                            rememberItemPreview(product); // item detail opens with what the row knows (#100)
                             navigate(itemPath(product.productId));
                         }}
                     >
@@ -850,7 +852,16 @@ function UnnamedRow({ product }: { product: StockProduct }) {
                     ?
                 </div>
                 <div className={styles.text}>
-                    <span className={styles.name}>Unknown item</span>
+                    <a
+                        className={`${styles.name} ${styles.nameLink}`}
+                        href={namePath(product.productId)}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            navigate(namePath(product.productId));
+                        }}
+                    >
+                        Unknown item
+                    </a>
                     {meta && <span className={styles.meta}>{meta}</span>}
                 </div>
                 <span className={styles.badge}>No name yet</span>
