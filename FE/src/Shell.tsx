@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { SignInRequiredError, type ApiClient } from "./api";
 import styles from "./App.module.css";
 import { AddScreen } from "./AddScreen";
@@ -15,7 +15,9 @@ import {
     matchItemPath,
     matchNamePath,
     LIST_PATH,
+    cameFrom,
     RECIPES_PATH,
+    savedScroll,
     SCANNERS_PATH,
     usePath,
 } from "./router";
@@ -57,9 +59,34 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     const editing = matchEditPath(path);
     const item = matchItemPath(path);
     const assigning = matchAssignPath(path);
+    const onStock = path === "/" || !matchKnownPath(path);
+    // Screens reached from the stock list: the list stays mounted underneath, hidden, so going back keeps its data,
+    // scroll, open aisles, search, Use first and live updates, with no reload (#103, spike #99 option A). The same for
+    // Hungry? under item detail opened from a recipe.
+    const overStock =
+        !!(naming || editing || item || assigning) || path === ADD_PATH || path === SCANNERS_PATH;
+    const onRecipes = path === RECIPES_PATH;
+    const overRecipes = !!item && cameFrom() === RECIPES_PATH;
+    useLayoutEffect(() => {
+        window.history.scrollRestoration = "manual";
+        window.scrollTo(0, onStock ? savedScroll("/") : onRecipes ? savedScroll(RECIPES_PATH) : 0);
+    }, [onStock, onRecipes, path]);
     return (
         <ShoppingListProvider api={api}>
             <main className={styles.page}>
+                {(onStock || overStock) && (
+                    <div hidden={!onStock} className={styles.layer}>
+                        <StockScreen api={api} visible={onStock} />
+                        <footer className={styles.footer}>{footer}</footer>
+                        <BottomNav current="stock" />
+                    </div>
+                )}
+                {(onRecipes || overRecipes) && (
+                    <div hidden={!onRecipes} className={styles.layer}>
+                        <RecipesScreen api={api} />
+                        <BottomNav current="recipes" />
+                    </div>
+                )}
                 {naming ? (
                     <NameScreen key={naming} api={api} productId={naming} />
                 ) : editing ? (
@@ -75,24 +102,21 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                         <ListScreen api={api} />
                         <BottomNav current="list" />
                     </>
-                ) : path === RECIPES_PATH ? (
-                    <>
-                        <RecipesScreen api={api} />
-                        <BottomNav current="recipes" />
-                    </>
                 ) : path === SCANNERS_PATH ? (
                     <>
                         <ScannersScreen api={api} />
                         <BottomNav current="stock" />
                     </>
-                ) : (
-                    <>
-                        <StockScreen api={api} />
-                        <footer className={styles.footer}>{footer}</footer>
-                        <BottomNav current="stock" />
-                    </>
-                )}
+                ) : null}
             </main>
         </ShoppingListProvider>
+    );
+}
+
+/** Every path with its own screen; anything else shows the stock list. */
+function matchKnownPath(path: string): boolean {
+    return (
+        !!(matchNamePath(path) || matchEditPath(path) || matchItemPath(path) || matchAssignPath(path)) ||
+        [ADD_PATH, LIST_PATH, RECIPES_PATH, SCANNERS_PATH].includes(path)
     );
 }

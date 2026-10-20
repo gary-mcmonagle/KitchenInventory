@@ -156,8 +156,11 @@ export const forgetStockSearch = () => {
 export function StockScreen({
     api,
     feedConnection = signalRConnection,
+    visible = true,
 }: {
     api: ApiClient;
+    /** False while it's kept mounted under a screen reached from it (#103). */
+    visible?: boolean;
     /** The live scan feed's connection (#54); tests pass a fake. */
     feedConnection?: (api: ApiClient) => FeedConnection;
 }) {
@@ -183,9 +186,10 @@ export function StockScreen({
 
     // "Added 3 items" after adding from the app (#58).
     useEffect(() => {
+        if (!visible) return; // shown when the list is visible again, e.g. back from Add (#103)
         const message = takeFlash();
         if (message) showToast({ kind: "info", text: message });
-    }, [showToast]);
+    }, [showToast, visible]);
 
     const setBusy = (productId: string, busy: boolean) =>
         setInFlight((current) => {

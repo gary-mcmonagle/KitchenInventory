@@ -25,7 +25,7 @@ import {
     type ExpiryTone,
 } from "./format";
 import { ProductTile } from "./ProductTile";
-import { editPath, navigate } from "./router";
+import { cameFrom, editPath, goBack, navigate, RECIPES_PATH } from "./router";
 import { TOAST_MS } from "./StockScreen";
 import styles from "./Item.module.css";
 
@@ -114,7 +114,9 @@ export function ItemScreen({ api, productId }: { api: ApiClient; productId: stri
         void load();
     };
 
-    const back = () => navigate("/");
+    // ‹ goes back to wherever it was opened from: the stock list, or a recipe in Hungry? (#103).
+    const fromHungry = useMemo(() => cameFrom() === RECIPES_PATH, []);
+    const back = () => goBack("/");
 
     const checkOut = async (unit: ProductUnit) => {
         if (busy) return;
@@ -185,7 +187,12 @@ export function ItemScreen({ api, productId }: { api: ApiClient; productId: stri
     return (
         <div className={styles.screen}>
             <div className={styles.header}>
-                <button type="button" className={styles.back} aria-label="Back to stock" onClick={back}>
+                <button
+                    type="button"
+                    className={styles.back}
+                    aria-label={fromHungry ? "Back to Hungry?" : "Back to stock"}
+                    onClick={back}
+                >
                     <svg
                         width="24"
                         height="24"
@@ -200,7 +207,7 @@ export function ItemScreen({ api, productId }: { api: ApiClient; productId: stri
                         <path d="M15 5l-7 7 7 7" />
                     </svg>
                 </button>
-                <span className={styles.headerLabel}>Stock</span>
+                <span className={styles.headerLabel}>{fromHungry ? "Hungry?" : "Stock"}</span>
             </div>
 
             <div className={styles.content}>

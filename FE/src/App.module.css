@@ -112,3 +112,14 @@
         padding-top: env(safe-area-inset-top, 0px);
     }
 }
+
+/* A screen kept mounted under the screens reached from it (#103). */
+.layer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.layer[hidden] {
+    display: none;
+}

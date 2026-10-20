@@ -10,10 +10,30 @@ export function usePath(): string {
     return useSyncExternalStore(subscribe, () => window.location.pathname);
 }
 
+/** Where each screen was scrolled when we last left it (spike #99), so going back can land where you were. */
+const scrollPositions = new Map<string, number>();
+
+export const savedScroll = (path: string): number => scrollPositions.get(path) ?? 0;
+
+/** For tests: forget saved positions, as after a reload. */
+export const forgetScrollPositions = () => scrollPositions.clear();
+
 export function navigate(path: string): void {
     if (window.location.pathname === path) return;
-    window.history.pushState(null, "", path);
+    scrollPositions.set(window.location.pathname, window.scrollY);
+    // Remember where we came from (spike #99), so "‹ Stock" can go back instead of stacking a new entry.
+    window.history.pushState({ from: window.location.pathname }, "", path);
     window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+/** The screen this one was opened from, if it was opened inside the app (#103). */
+export const cameFrom = (): string | null => (window.history.state as { from?: string } | null)?.from ?? null;
+
+/** ‹: a real history step back when this screen was opened inside the app (so ‹, the browser's back and the iOS
+ * swipe agree, and history doesn't grow), otherwise to `fallback` (e.g. a deep link to item detail). */
+export function goBack(fallback: string): void {
+    if (cameFrom()) window.history.back();
+    else navigate(fallback);
 }
 
 export const SCANNERS_PATH = "/scanners";
