@@ -15,6 +15,27 @@ export function metaLine(brand: string | null, size: string | null, count: numbe
     return [brand?.trim(), size?.trim(), count > 1 ? `×${count}` : null].filter(Boolean).join(" · ");
 }
 
+const sameName = (a: string, b: string) =>
+    a.trim().replace(/\s+/g, " ").toLowerCase() === b.trim().replace(/\s+/g, " ").toLowerCase();
+
+/**
+ * A stock row's title and muted line (#92, option A): the generic name leads when it's there and differs from the
+ * display name, with the full product name and size underneath (and the count, as before); otherwise the row is as it
+ * was.
+ */
+export function stockRowText(p: {
+    displayName: string;
+    genericName?: string | null;
+    brand: string | null;
+    size: string | null;
+    count: number;
+}): { title: string; meta: string } {
+    if (p.genericName && !sameName(p.genericName, p.displayName)) {
+        return { title: p.genericName, meta: metaLine(p.displayName, p.size, p.count) };
+    }
+    return { title: p.displayName, meta: metaLine(p.brand, p.size, p.count) };
+}
+
 /** "5010 0123 4567": digits in groups of four. */
 export function groupBarcode(barcode: string): string {
     return barcode.replace(/(\d{4})(?=\d)/g, "$1 ");

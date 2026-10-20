@@ -437,3 +437,9 @@
     color: var(--muted);
     cursor: default;
 }
+
+/* "Listed as <generic name>" (#92, project/ItemRunOut.dc.html). */
+.listedAs {
+    font-weight: 700;
+    color: var(--ink-strong);
+}

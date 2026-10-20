@@ -133,17 +133,19 @@ test.each([
     expect(card).toHaveTextContent(text);
 });
 
-test("the generic name shows under the heading, once there is one (#90)", async () => {
+test('the full name stays the heading, with "Listed as <generic name>" under it (#90, #92)', async () => {
     setup([
         milk({ genericName: { id: "semi-skimmed milk", name: "Semi-skimmed milk", source: "jevMatch" } }),
     ]);
-    expect(await screen.findByText("Generic name: Semi-skimmed milk")).toBeInTheDocument();
+    const listed = await screen.findByText(/^Listed as/);
+    expect(listed).toHaveTextContent("Listed as Semi-skimmed milk");
+    expect(listed.querySelector('[class*="listedAs"]')).toHaveTextContent("Semi-skimmed milk");
 });
 
 test("no generic name yet shows nothing for it (#90)", async () => {
     setup([milk()]);
     await screen.findByRole("heading", { level: 1 });
-    expect(screen.queryByText(/Generic name/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Listed as/)).not.toBeInTheDocument();
 });
 
 test("no estimate yet is neutral", async () => {

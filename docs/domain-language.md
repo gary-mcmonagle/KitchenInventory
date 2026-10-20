@@ -160,7 +160,7 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Use first view** – the stock list's **Use first** toggle (#71): only the products that need using, grouped by aisle, every aisle open. Off by default, never remembered.
 
-**Generic name** – a product's shopping-list name (#90): what you'd say to someone going to the shop, at shopper level ("Semi-skimmed milk", "Caster sugar", "Smoked paprika"), shared by every brand and size of the same thing so they count as one item. Jev matches a product to an existing generic name first (in its aisle, then by shared words across aisles); only when none fits does Foundry write a new one. Gary can pick another, or type a new one, in Edit details.
+**Generic name** – a product's shopping-list name (#90): what you'd say to someone going to the shop, at shopper level ("Semi-skimmed milk", "Caster sugar", "Smoked paprika"), shared by every brand and size of the same thing so they count as one item. Jev matches a product to an existing generic name first (in its aisle, then by shared words across aisles); only when none fits does Foundry write a new one. Gary can pick another, or type a new one, in Edit details. On the stock list it's the row's title when it differs from the product's name, with the full name and size underneath (#92); item detail keeps the full name and says "Listed as …".
 - Not to be confused with: **Display name**, the product's full name as scanned or named ("SEMI-SKIMMED BRITISH MILK").
 - In code: `GenericName`, `ProductGenericName`, `AssignGenericNames`, `genericName` documents
 

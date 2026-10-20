@@ -13,7 +13,7 @@ import {
     expiryBadge,
     groupBarcode,
     itemsLabel,
-    metaLine,
+    stockRowText,
     scannedLabel,
     stateNote,
     todayLine,
@@ -713,7 +713,7 @@ function KnownRow({
     // Greyed out once one's open (finish it first), or when they're all in the freezer (#65).
     const alreadyOpen = product.openedCount > 0;
     const canOpen = !alreadyOpen && product.frozenCount < product.count;
-    const meta = metaLine(product.brand, product.size, product.count);
+    const { title, meta } = stockRowText(product);
     const badge =
         product.daysUntilSoonest !== null && product.soonestEstimatedExpiryDate !== null
             ? expiryBadge(product.daysUntilSoonest, product.soonestEstimatedExpiryDate)
@@ -730,7 +730,7 @@ function KnownRow({
             <div className={styles.rowMain}>
                 <ProductTile
                     className={styles.tile}
-                    name={product.displayName}
+                    name={title}
                     icon={product.icon}
                     aisleId={product.aisleId}
                 />
@@ -743,7 +743,7 @@ function KnownRow({
                             navigate(itemPath(product.productId));
                         }}
                     >
-                        {product.displayName}
+                        {title}
                     </a>
                     {meta && <span className={styles.meta}>{meta}</span>}
                     {(product.openedCount > 0 || product.frozenCount > 0) && (

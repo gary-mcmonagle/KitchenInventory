@@ -457,3 +457,92 @@ test("grouping: shop order, use first first within an aisle, unknown items apart
     expect(groups[0].products.map((p) => p.displayName)).toEqual(["Bananas", "Leeks"]);
     expect([groups[0].useFirstCount, groups[0].anyExpired]).toEqual([1, false]);
 });
+
+// ---- Generic names as the row title (#92, option A)
+
+test("a generic name leads the row with the full name and size underneath; same or none looks as before", async () => {
+    const { api } = fakeApi(
+        stockOf(
+            product({
+                displayName: "Cravendale Filtered Semi Skimmed Milk",
+                brand: "Cravendale",
+                size: "2 pint",
+                genericName: "Semi-skimmed milk",
+                aisleId: "dairyEggs",
+                icon: null,
+            }),
+            product({
+                displayName: "Asda Semi Skimmed British Milk",
+                brand: "Asda",
+                size: "2 litre",
+                count: 2,
+                genericName: "Semi-skimmed milk",
+                aisleId: "dairyEggs",
+                icon: null,
+            }),
+            product({
+                displayName: "Bananas",
+                brand: null,
+                size: null,
+                genericName: " bananas ",
+                aisleId: "fruitVeg",
+            }),
+            product({
+                displayName: "Beef Gravy",
+                brand: "Bisto",
+                size: "230g",
+                genericName: null,
+                aisleId: "saucesOils",
+            }),
+        ),
+    );
+    render(<StockScreen api={api} />);
+
+    const dairy = await screen.findByRole("region", { name: "Dairy & eggs" });
+    const rows = within(dairy).getAllByRole("listitem");
+    expect(
+        rows.map((r) => [
+            within(r).getByRole("link").textContent,
+            r.querySelector('[class*="meta"]')?.textContent,
+        ]),
+    ).toEqual([
+        ["Semi-skimmed milk", "Asda Semi Skimmed British Milk · 2 litre · ×2"],
+        ["Semi-skimmed milk", "Cravendale Filtered Semi Skimmed Milk · 2 pint"],
+    ]);
+    expect(rows[0].textContent?.startsWith("S")).toBe(true); // the tile's letter follows the title; order unchanged (by full name)
+    expect(
+        within(rows[1]).getByRole("button", { name: "Remove one Cravendale Filtered Semi Skimmed Milk" }),
+    ).toBeInTheDocument();
+
+    const bananas = within(screen.getByRole("region", { name: "Fruit & veg" })).getByRole("listitem");
+    expect(within(bananas).getByRole("link")).toHaveTextContent("Bananas");
+    expect(
+        within(screen.getByRole("region", { name: "Sauces, oils & condiments" })).getByRole("listitem")
+            .textContent,
+    ).toContain("Beef GravyBisto · 230g");
+});
+
+test("checking out a generically titled row names the exact product in the toast", async () => {
+    const milk = product({
+        displayName: "Cravendale Filtered Semi Skimmed Milk",
+        size: "2 pint",
+        genericName: "Semi-skimmed milk",
+        aisleId: "dairyEggs",
+    });
+    const { api } = fakeApi(stockOf(milk));
+    const checkOut = vi.fn(async () => ({
+        unitId: "u1",
+        productId: milk.productId,
+        displayName: milk.displayName,
+        remainingCount: 0,
+    }));
+    (api as unknown as { checkOut: typeof checkOut }).checkOut = checkOut;
+    render(<StockScreen api={api} />);
+
+    const remove = await screen.findByRole("button", {
+        name: "Remove one Cravendale Filtered Semi Skimmed Milk",
+    });
+    await act(async () => fireEvent.click(remove));
+
+    expect(screen.getByText("Checked out Cravendale Filtered Semi Skimmed Milk")).toBeInTheDocument();
+});
