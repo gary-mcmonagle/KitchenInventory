@@ -1,4 +1,8 @@
-import { InteractionRequiredAuthError, type IPublicClientApplication } from "@azure/msal-browser";
+import {
+    BrowserAuthError,
+    InteractionRequiredAuthError,
+    type IPublicClientApplication,
+} from "@azure/msal-browser";
 import type { AppConfig } from "./config";
 import type { FeedEvent } from "./scanFeed";
 
@@ -673,7 +677,7 @@ export class ApiClient {
             const result = await this.msal.acquireTokenSilent({ scopes: [this.config.apiScope], account });
             return result.accessToken;
         } catch (error) {
-            if (error instanceof InteractionRequiredAuthError) return this.reauthenticate();
+            if (needsSignIn(error)) return this.reauthenticate();
             throw error;
         }
     }
@@ -685,4 +689,17 @@ export class ApiClient {
         });
         throw new SignInRequiredError("Signing in again.");
     }
+}
+
+/**
+ * Silent renewal can't work, so sign in again: Entra says interaction is required, or (on iPhone, once the refresh
+ * token has expired after about a day) MSAL's hidden-frame renewal is blocked and times out. Not when offline, or
+ * when a sign-in is already under way.
+ */
+export function needsSignIn(error: unknown): boolean {
+    if (error instanceof InteractionRequiredAuthError) return true;
+    if (!(error instanceof BrowserAuthError)) return false;
+    return !["no_network_connectivity", "interaction_in_progress", "redirect_in_iframe"].includes(
+        error.errorCode,
+    );
 }

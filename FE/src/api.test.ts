@@ -1,4 +1,8 @@
-import { InteractionRequiredAuthError, type IPublicClientApplication } from "@azure/msal-browser";
+import {
+    BrowserAuthError,
+    InteractionRequiredAuthError,
+    type IPublicClientApplication,
+} from "@azure/msal-browser";
 import { ApiClient, NoAccessError, SignInRequiredError } from "./api";
 import type { AppConfig } from "./config";
 
@@ -74,6 +78,37 @@ test("when silent renewal can't work (about daily), the user signs in again", as
     expect(msal.acquireTokenRedirect).toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
 });
+
+test("on iPhone, a blocked hidden-frame renewal (timeout) also signs in again instead of failing", async () => {
+    const msal = fakeMsal({
+        acquireTokenSilent: vi.fn(async () => {
+            throw new BrowserAuthError(
+                "monitor_window_timeout",
+                "Token acquisition in iframe failed due to timeout.",
+            );
+        }),
+    });
+    const fetcher = vi.fn();
+    const api = new ApiClient(msal, config, fetcher);
+
+    await expect(api.stock()).rejects.toBeInstanceOf(SignInRequiredError);
+    expect(msal.acquireTokenRedirect).toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+});
+
+test.each(["no_network_connectivity", "interaction_in_progress"])(
+    "%s doesn't redirect to sign-in",
+    async (code) => {
+        const msal = fakeMsal({
+            acquireTokenSilent: vi.fn(async () => {
+                throw new BrowserAuthError(code, code);
+            }),
+        });
+
+        await expect(new ApiClient(msal, config, vi.fn()).stock()).rejects.toBeInstanceOf(BrowserAuthError);
+        expect(msal.acquireTokenRedirect).not.toHaveBeenCalled();
+    },
+);
 
 test("ping is public: no token", async () => {
     const msal = fakeMsal();
