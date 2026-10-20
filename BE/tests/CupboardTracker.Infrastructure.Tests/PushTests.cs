@@ -268,7 +268,7 @@ public sealed class StockChangePushStorageTests
         var batch = new StockChangeBatch(Guid.NewGuid(), at, at.AddSeconds(30),
         [
             new StockChange("scan:a", StockChangeKind.Added, "Milk", at),
-            new StockChange("scan:b", StockChangeKind.Removed, "Hummus", at.AddSeconds(30)),
+            new StockChange("app:b", StockChangeKind.Removed, "Hummus", at.AddSeconds(30), Guid.NewGuid(), Guid.NewGuid()),
         ]);
 
         var document = CosmosStockChangeBatchRepository.ToDocument(batch);

@@ -2,6 +2,8 @@ using CupboardTracker.Application.Adding;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Push;
 using CupboardTracker.Application.Stock;
+using CupboardTracker.Application.Users;
+using CupboardTracker.Domain.Stock;
 using CupboardTracker.Domain;
 using CupboardTracker.Domain.Products;
 
@@ -383,5 +385,151 @@ public sealed class StockChangePushTests
         lookup.Results.Enqueue(new ProductLookupResult.Found(new ProductDetails("Beef Gravy", "Bisto", "230g", null, [])));
         await Processor().ExecuteAsync(TestScans.Make("5000168001142", Role.In, at: Afternoon), CancellationToken.None);
         Assert.Equal(2, units.Units.Count);
+    }
+
+    // ---- App changes (#81)
+
+    private static readonly CurrentUser GaryUser = new(Gary, "Gary");
+    private static readonly CurrentUser SamUser = new(Sam, "Sam");
+
+    private Guid KnownProduct(string name, int inStock = 0)
+    {
+        var id = Guid.NewGuid();
+        products.Products[id] = Product.Found(id, "5000354922831", new ProductDetails(name, null, null, null, []), Afternoon, 1);
+        for (var i = 0; i < inStock; i++)
+        {
+            units.Add(Unit.AddedInApp(Guid.NewGuid(), id, Sam, Afternoon.AddDays(-1), null));
+        }
+
+        return id;
+    }
+
+    private CheckOutFromApp AppCheckOut() => new(products, units, clock, new ListLogger<CheckOutFromApp>(), Add());
+
+    private UndoCheckOut Undo() => new(units, new ListLogger<UndoCheckOut>(), products, Add(), clock);
+
+    private AddToStock Adder() =>
+        new(products, units, new ProductMatcher(products), TestSettings.Stock(), clock, new ListLogger<AddToStock>(), Add());
+
+    private async Task<Guid> Sent()
+    {
+        var batchId = batches.Open!.Value.BatchId;
+        clock.Now = batches.Open.Value.DueAt(settings);
+        await Sender().ExecuteAsync(batchId, CancellationToken.None);
+        return batchId;
+    }
+
+    [Fact]
+    public async Task An_app_check_out_pushes_everyone_but_the_person_who_did_it_on_all_their_devices()
+    {
+        Device(Gary, "gary-phone");
+        Device(Gary, "gary-laptop");
+        Device(Sam, "sam-phone");
+        var hummus = KnownProduct("Hummus", inStock: 2);
+
+        var result = await AppCheckOut().ExecuteAsync(hummus, GaryUser, CancellationToken.None);
+        await Sent();
+
+        Assert.IsType<CheckOutFromAppResult.CheckedOut>(result);
+        var (subscription, message) = Assert.Single(sender.Sent);
+        Assert.Equal(("sam-phone", "Removed Hummus"), (subscription.Id, message.Body));
+        var change = Assert.Single(batches.Closed[0].Changes);
+        Assert.Equal((Gary, hummus), (change.ActorId, change.ProductId));
+        Assert.StartsWith("app:", change.EventKey, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_check_out_undone_in_the_same_batch_nets_out_and_nobody_is_pushed()
+    {
+        Device(Sam, "sam-phone");
+        var hummus = KnownProduct("Hummus", inStock: 1);
+
+        var checkedOut = (CheckOutFromAppResult.CheckedOut)await AppCheckOut().ExecuteAsync(hummus, GaryUser, CancellationToken.None);
+        clock.Now += TimeSpan.FromSeconds(4);
+        await Undo().ExecuteAsync(checkedOut.UnitId, CancellationToken.None, GaryUser);
+        await Sent();
+
+        Assert.Equal(2, batches.Closed[0].Changes.Count);
+        Assert.Empty(sender.Sent);
+        Assert.Contains(sendLogs.Entries, e => e.Message.Contains("0 pushed, 1 saw everything", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Adding_from_the_add_tab_pushes_each_unit_once_even_when_the_request_is_retried()
+    {
+        Device(Gary, "gary-phone");
+        var bananas = KnownProduct("Bananas");
+        var requestId = Guid.NewGuid();
+        AddItem[] items = [new(bananas, null, null, null, 2, AddSource.Pick)];
+
+        await Adder().ExecuteAsync(requestId, items, SamUser, CancellationToken.None);
+        await Adder().ExecuteAsync(requestId, items, SamUser, CancellationToken.None); // a retry
+        await Sent();
+
+        Assert.Equal(2, batches.Closed[0].Changes.Count);
+        Assert.Equal("Added 2 × Bananas", Assert.Single(sender.Sent).Message.Body);
+    }
+
+    [Fact]
+    public async Task Assigning_a_store_label_pushes_it_as_added()
+    {
+        Device(Gary, "gary-phone");
+        var storeLabels = new FakeStoreLabels();
+        var feed = new FakeFeed();
+        var scan = TestScans.Make("2012345678903", Role.In, at: Afternoon);
+        await new StoreLabelCheckInScan(storeLabels, feed.Notifier(), clock, new ListLogger<StoreLabelCheckInScan>())
+            .ExecuteAsync(scan, CancellationToken.None);
+        var assign = new AssignStoreLabel(storeLabels, units, Adder(), TestSettings.Stock(), feed.Notifier(), clock,
+            new ListLogger<AssignStoreLabel>(), Add());
+
+        await assign.ExecuteAsync(scan.ScanId, new AddItem(null, "Ham hock terrine", null, null, 1, AddSource.Typed), SamUser, CancellationToken.None);
+        await assign.ExecuteAsync(scan.ScanId, new AddItem(null, "Ham hock terrine", null, null, 1, AddSource.Typed), SamUser, CancellationToken.None);
+        await Sent();
+
+        Assert.Equal("Added Ham hock terrine", Assert.Single(sender.Sent).Message.Body);
+    }
+
+    [Fact]
+    public async Task A_mixed_batch_gives_each_person_what_they_missed()
+    {
+        Device(Gary, "gary-phone");
+        Device(Sam, "sam-phone");
+        var hummus = KnownProduct("Hummus", inStock: 1);
+        var milk = Change("Milk") with { ProductId = Guid.NewGuid() };
+        await AddAt(milk, TimeSpan.Zero); // a scanner check-in
+        seen.Receipts.Add((Sam, milk.EventKey)); // Sam saw its toast
+        await AppCheckOut().ExecuteAsync(hummus, SamUser, CancellationToken.None); // and checked out the hummus herself
+
+        await Sent();
+
+        var (subscription, message) = Assert.Single(sender.Sent);
+        Assert.Equal(("gary-phone", "Added Milk · Removed Hummus"), (subscription.Id, message.Body));
+    }
+
+    [Fact]
+    public void Netting_works_per_product()
+    {
+        var milk = Guid.NewGuid();
+        StockChange C(StockChangeKind kind) => Change("Milk", kind) with { ProductId = milk };
+
+        Assert.Equal("Added Milk", SendStockChangePush.Body([C(StockChangeKind.Added), C(StockChangeKind.Added), C(StockChangeKind.Removed)]));
+        Assert.Equal("Removed 2 × Milk", SendStockChangePush.Body([C(StockChangeKind.Removed), C(StockChangeKind.Removed)]));
+        Assert.Equal("", SendStockChangePush.Body([C(StockChangeKind.Removed), C(StockChangeKind.Added)]));
+        Assert.Empty(SendStockChangePush.Net([C(StockChangeKind.Removed), C(StockChangeKind.Added)]));
+    }
+
+    [Fact]
+    public async Task An_undo_without_a_signed_in_person_or_a_push_failure_never_affects_the_action()
+    {
+        var hummus = KnownProduct("Hummus", inStock: 1);
+        var checkedOut = (CheckOutFromAppResult.CheckedOut)await AppCheckOut().ExecuteAsync(hummus, GaryUser, CancellationToken.None);
+        batches.Fail = true;
+
+        var undone = await Undo().ExecuteAsync(checkedOut.UnitId, CancellationToken.None, GaryUser);
+        var again = await AppCheckOut().ExecuteAsync(hummus, GaryUser, CancellationToken.None);
+
+        Assert.True(Assert.IsType<UndoCheckOutResult.InStock>(undone).WasRestored);
+        Assert.IsType<CheckOutFromAppResult.CheckedOut>(again);
+        Assert.Contains(addLogs.Entries, e => e.Level == Microsoft.Extensions.Logging.LogLevel.Warning);
     }
 }

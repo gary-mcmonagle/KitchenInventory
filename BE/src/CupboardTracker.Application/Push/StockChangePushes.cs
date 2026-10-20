@@ -11,15 +11,22 @@ public enum StockChangeKind
 }
 
 /// <summary>
-/// One stock change for the stock change push (#80): what was added or removed, keyed like its seen receipt
-/// (<c>scan:&lt;scanId&gt;</c> for the scanners). Other sources (app changes, a later card) join with their own keys.
+/// One stock change for the stock change push (#80): what was added or removed. Scanner changes are keyed like their
+/// seen receipt (<c>scan:&lt;scanId&gt;</c>) and have no actor. App changes (#81) carry the <see cref="ActorId"/> (the
+/// person who made them, who is never pushed about them) and keys of their own. <see cref="ProductId"/> nets a
+/// check-out against its undo.
 /// </summary>
-public sealed record StockChange(string EventKey, StockChangeKind Kind, string Name, DateTimeOffset At);
+public sealed record StockChange(
+    string EventKey, StockChangeKind Kind, string Name, DateTimeOffset At, Guid? ProductId = null, Guid? ActorId = null);
 
 /// <summary>Seen receipt keys for stock changes, the same ones the app reports (<c>markSeen</c>).</summary>
 public static class StockChangeKeys
 {
     public static string ForScan(Guid scanId) => $"scan:{scanId}";
+
+    /// <summary>An app change (#81): the unit, what happened, and when, so a later change to the same unit is a new event.</summary>
+    public static string ForApp(Guid unitId, string action, DateTimeOffset at) =>
+        $"app:{unitId}:{action}:{at.ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture)}";
 }
 
 /// <summary>
@@ -157,9 +164,10 @@ public sealed partial class AddStockChangeToPush(
 public sealed record StockPushSummary(int Changes, int People, int Pushed, int AllSeen);
 
 /// <summary>
-/// Sends a due batch (#80): closes it (so a re-delivered or stale queue message finds nothing to send), then gives each
-/// person opted in to stock changes on any device one push for the changes they have no seen receipt for, on any of
-/// their devices. Nobody pushed if they saw them all. Nothing sent if the batch falls due in quiet hours.
+/// Sends a due batch (#80, #81): closes it (so a re-delivered or stale queue message finds nothing to send), then gives
+/// each person opted in to stock changes on any device one push for what they missed: scanner changes they have no seen
+/// receipt for (on any device), and app changes someone else made. What's left is netted per product (a check-out and
+/// its undo cancel out). Nothing left → no push for them. Nothing sent if the batch falls due in quiet hours.
 /// </summary>
 public sealed partial class SendStockChangePush(
     IStockChangeBatchRepository batches, IPushSubscriptionRepository subscriptions, IPushSeenRepository seen, SendPush send,
@@ -211,7 +219,7 @@ public sealed partial class SendStockChangePush(
         var people = (await subscriptions.ListAsync(cancellationToken))
             .Where(s => s.Wants(PreferenceKey)).Select(s => s.UserId).Distinct().ToList();
         var seenBy = new Dictionary<string, IReadOnlySet<Guid>>();
-        foreach (var key in taken.Changes.Select(c => c.EventKey).Distinct())
+        foreach (var key in taken.Changes.Where(c => c.ActorId is null).Select(c => c.EventKey).Distinct())
         {
             seenBy[key] = await seen.UsersWhoSawAsync(key, cancellationToken);
         }
@@ -219,8 +227,10 @@ public sealed partial class SendStockChangePush(
         int pushed = 0, allSeen = 0;
         foreach (var person in people)
         {
-            var missed = taken.Changes.Where(c => !seenBy[c.EventKey].Contains(person)).ToList();
-            if (missed.Count == 0)
+            var missed = taken.Changes
+                .Where(c => c.ActorId is { } actor ? actor != person : !seenBy[c.EventKey].Contains(person))
+                .ToList();
+            if (Net(missed).Count == 0)
             {
                 allSeen++;
                 continue;
@@ -237,21 +247,29 @@ public sealed partial class SendStockChangePush(
     public static PushMessage Message(IReadOnlyList<StockChange> changes) =>
         new("Cupboard updated", Body(changes), "/", Topic, TimeSpan.FromHours(3));
 
-    /// <summary><c>Added Milk, Bread and 4 more · Removed Hummus</c>: up to 3 names a side, repeats as "2 × Milk",
-    /// a side with nothing left out.</summary>
+    /// <summary><c>Added Milk, Bread and 4 more · Removed Hummus</c>: netted per product, up to 3 names a side, repeats
+    /// as "2 × Milk", a side with nothing left out.</summary>
     public static string Body(IReadOnlyList<StockChange> changes)
     {
+        var net = Net(changes);
         var sides = new[] { (StockChangeKind.Added, "Added"), (StockChangeKind.Removed, "Removed") }
-            .Select(s => (Label: s.Item2, Names: Names(changes.Where(c => c.Kind == s.Item1))))
+            .Select(s => (Label: s.Item2, Names: net.Where(n => n.Kind == s.Item1)
+                .Select(n => n.Count > 1 ? $"{n.Count} × {n.Name}" : n.Name).ToList()))
             .Where(s => s.Names.Count > 0)
             .Select(s => $"{s.Label} {List(s.Names)}");
         return string.Join(" · ", sides);
     }
 
-    private static List<string> Names(IEnumerable<StockChange> changes) =>
+    /// <summary>
+    /// Netting (#81): per product (or name, when there's no product), additions minus removals, in the order each first
+    /// appeared. A check-out and its undo cancel out; "2 added, 1 removed" is "1 added".
+    /// </summary>
+    public static List<(string Name, StockChangeKind Kind, int Count)> Net(IEnumerable<StockChange> changes) =>
     [
-        .. changes.GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(g => g.Count() > 1 ? $"{g.Count()} × {g.First().Name}" : g.First().Name),
+        .. changes.GroupBy(c => c.ProductId?.ToString() ?? c.Name.ToUpperInvariant())
+            .Select(g => (Name: g.First().Name, Total: g.Sum(c => c.Kind == StockChangeKind.Added ? 1 : -1)))
+            .Where(g => g.Total != 0)
+            .Select(g => (g.Name, g.Total > 0 ? StockChangeKind.Added : StockChangeKind.Removed, Math.Abs(g.Total))),
     ];
 
     private static string List(List<string> names) => names.Count switch

@@ -1,4 +1,5 @@
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Push;
 using CupboardTracker.Application.Users;
 using CupboardTracker.Domain.Stock;
 using Microsoft.Extensions.Logging;
@@ -21,7 +22,8 @@ public abstract record CheckOutUnitResult
 /// <see cref="UndoCheckOut"/>.
 /// </summary>
 public sealed partial class CheckOutUnit(
-    IProductRepository products, IUnitRepository units, TimeProvider clock, ILogger<CheckOutUnit> logger)
+    IProductRepository products, IUnitRepository units, TimeProvider clock, ILogger<CheckOutUnit> logger,
+    AddStockChangeToPush? pushes = null)
 {
     public async Task<CheckOutUnitResult> ExecuteAsync(Guid unitId, CurrentUser user, CancellationToken cancellationToken)
     {
@@ -31,8 +33,9 @@ public sealed partial class CheckOutUnit(
             return new CheckOutUnitResult.NotFound(unitId);
         }
 
+        var now = clock.GetUtcNow();
         if (current.Value.Status != UnitStatus.InStock
-            || !await units.TryReplaceAsync(current, current.Value.CheckOutByUser(user.ObjectId, clock.GetUtcNow()), cancellationToken))
+            || !await units.TryReplaceAsync(current, current.Value.CheckOutByUser(user.ObjectId, now), cancellationToken))
         {
             return new CheckOutUnitResult.NotInStock(unitId);
         }
@@ -41,6 +44,7 @@ public sealed partial class CheckOutUnit(
         var remaining = (await units.GetInStockAsync(productId, cancellationToken)).Count;
         var name = (await products.GetAsync(productId, cancellationToken))?.DisplayName ?? "Unknown item";
         LogCheckedOut(unitId, productId, user.ObjectId);
+        await CheckOutFromApp.PushAsync(pushes, unitId, productId, name, user, now, cancellationToken);
         return new CheckOutUnitResult.CheckedOut(unitId, productId, name, remaining);
     }
 

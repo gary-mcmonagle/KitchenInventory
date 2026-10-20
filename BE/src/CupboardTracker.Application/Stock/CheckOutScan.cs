@@ -71,7 +71,7 @@ public sealed partial class CheckOutScan(
                     if (pushes is not null)
                     {
                         await pushes.ExecuteAsync(
-                            new StockChange(StockChangeKeys.ForScan(scan.ScanId), StockChangeKind.Removed, name, clock.GetUtcNow()),
+                            new StockChange(StockChangeKeys.ForScan(scan.ScanId), StockChangeKind.Removed, name, clock.GetUtcNow(), productId.Value),
                             cancellationToken);
                     }
 

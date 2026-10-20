@@ -81,6 +81,8 @@ public sealed class CosmosStockChangeBatchRepository(CosmosContainers containers
             ["kind"] = c.Kind == StockChangeKind.Added ? "added" : "removed",
             ["name"] = c.Name,
             ["at"] = CosmosJson.Timestamp(c.At),
+            ["productId"] = c.ProductId?.ToString(),
+            ["actorId"] = c.ActorId?.ToString(),
         })]),
         ["ttl"] = (int)Ttl.TotalSeconds,
     };
@@ -93,5 +95,7 @@ public sealed class CosmosStockChangeBatchRepository(CosmosContainers containers
             CosmosJson.Text(c["eventKey"])!,
             CosmosJson.Text(c["kind"]) == "removed" ? StockChangeKind.Removed : StockChangeKind.Added,
             CosmosJson.Text(c["name"]) ?? "",
-            CosmosJson.ParseTimestamp(c["at"]) ?? DateTimeOffset.MinValue))]);
+            CosmosJson.ParseTimestamp(c["at"]) ?? DateTimeOffset.MinValue,
+            Guid.TryParse(CosmosJson.Text(c["productId"]), out var productId) ? productId : null,
+            Guid.TryParse(CosmosJson.Text(c["actorId"]), out var actorId) ? actorId : null))]);
 }

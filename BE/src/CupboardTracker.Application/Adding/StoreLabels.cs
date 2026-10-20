@@ -1,3 +1,4 @@
+using CupboardTracker.Application.Push;
 using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Application.Stock;
 using CupboardTracker.Application.Users;
@@ -72,7 +73,8 @@ public sealed partial class AssignStoreLabel(
     StockSettings settings,
     ScanFeedNotifier feed,
     TimeProvider clock,
-    ILogger<AssignStoreLabel> logger)
+    ILogger<AssignStoreLabel> logger,
+    AddStockChangeToPush? pushes = null)
 {
     public async Task<AssignStoreLabelResult> ExecuteAsync(Guid scanId, AddItem item, CurrentUser user, CancellationToken cancellationToken)
     {
@@ -106,7 +108,14 @@ public sealed partial class AssignStoreLabel(
             : (DateOnly?)null;
         var unit = new Unit(scanId, product.ProductId, label.Barcode, UnitStatus.InStock, scanId, label.DeviceId, label.ScannedAt,
             null, null, null, expiry, null, expiry is null ? null : ExpirySource.ShelfLife, user.ObjectId);
-        await units.CreateIfNotExistsAsync(unit, cancellationToken);
+        if (await units.CreateIfNotExistsAsync(unit, cancellationToken) && pushes is not null)
+        {
+            // The unit appears in stock now (#81); the person who picked it isn't told.
+            await pushes.ExecuteAsync(
+                new StockChange(StockChangeKeys.ForApp(scanId, "added", now), StockChangeKind.Added, product.DisplayName, now,
+                    product.ProductId, user.ObjectId),
+                cancellationToken);
+        }
 
         if (!label.IsResolved)
         {

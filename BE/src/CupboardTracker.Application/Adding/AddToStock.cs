@@ -1,3 +1,4 @@
+using CupboardTracker.Application.Push;
 using System.Security.Cryptography;
 using System.Text;
 using CupboardTracker.Application.Products;
@@ -45,7 +46,8 @@ public sealed partial class AddToStock(
     ProductMatcher matcher,
     StockSettings settings,
     TimeProvider clock,
-    ILogger<AddToStock> logger)
+    ILogger<AddToStock> logger,
+    AddStockChangeToPush? pushes = null)
 {
     public const int MaxItems = 20;
     public const int MaxQuantity = 20;
@@ -75,9 +77,16 @@ public sealed partial class AddToStock(
                 var expiry = product.ShelfLife is { } shelfLife
                     ? EstimatedExpiry.For(now, shelfLife.Days, settings.HomeTimeZone)
                     : (DateOnly?)null;
-                await units.CreateIfNotExistsAsync(
-                    Unit.AddedInApp(DeterministicId(requestId, $"unit:{row}:{n}"), product.ProductId, user.ObjectId, now, expiry),
-                    cancellationToken);
+                var unitId = DeterministicId(requestId, $"unit:{row}:{n}");
+                if (await units.CreateIfNotExistsAsync(
+                        Unit.AddedInApp(unitId, product.ProductId, user.ObjectId, now, expiry), cancellationToken)
+                    && pushes is not null) // not on a retry: it joined the push the first time (#81)
+                {
+                    await pushes.ExecuteAsync(
+                        new StockChange(StockChangeKeys.ForApp(unitId, "added", now), StockChangeKind.Added, product.DisplayName, now,
+                            product.ProductId, user.ObjectId),
+                        cancellationToken);
+                }
             }
 
             await TouchAsync(product.ProductId, now, cancellationToken);

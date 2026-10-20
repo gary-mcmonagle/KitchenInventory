@@ -1,4 +1,5 @@
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Push;
 using CupboardTracker.Application.Users;
 using CupboardTracker.Domain.Stock;
 using Microsoft.Extensions.Logging;
@@ -21,7 +22,8 @@ public sealed partial class CheckOutFromApp(
     IProductRepository products,
     IUnitRepository units,
     TimeProvider clock,
-    ILogger<CheckOutFromApp> logger)
+    ILogger<CheckOutFromApp> logger,
+    AddStockChangeToPush? pushes = null)
 {
     private const int MaxRounds = 5;
 
@@ -44,6 +46,7 @@ public sealed partial class CheckOutFromApp(
                     var product = await products.GetAsync(productId, cancellationToken);
                     var name = product?.DisplayName ?? "Unknown item";
                     LogCheckedOut(candidate.UnitId, productId, user.ObjectId);
+                    await PushAsync(pushes, candidate.UnitId, productId, name, user, checkedOut.CheckedOutAt ?? clock.GetUtcNow(), cancellationToken);
                     return new CheckOutFromAppResult.CheckedOut(candidate.UnitId, productId, name, inStock.Count - 1);
                 }
 
@@ -52,6 +55,18 @@ public sealed partial class CheckOutFromApp(
         }
 
         throw new InvalidOperationException($"Couldn't check out a unit of {productId} after {MaxRounds} rounds of conflicts.");
+    }
+
+    /// <summary>An app check-out joins the stock change push (#81); the person who did it isn't told.</summary>
+    internal static async Task PushAsync(
+        AddStockChangeToPush? pushes, Guid unitId, Guid productId, string name, CurrentUser user, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        if (pushes is not null)
+        {
+            await pushes.ExecuteAsync(
+                new StockChange(StockChangeKeys.ForApp(unitId, "out", at), StockChangeKind.Removed, name, at, productId, user.ObjectId),
+                cancellationToken);
+        }
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Checked out unit {UnitId} of product {ProductId} from the app (user {UserId}).")]

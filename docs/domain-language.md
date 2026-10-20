@@ -243,6 +243,12 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Stock change push** – one "Cupboard updated" push saying what was added or removed (#80), sent to each person who didn't see those changes' green toasts in the app. Turned on or off per device ("Stock changes" on the "This phone" card).
 - In code: `SendStockChangePush`, `AddStockChangeToPush`, `StockChange`, preference `stockChanges`
 
+**App stock change** – a stock change made in the app rather than at a scanner (#81): a check-out, an add from the Add tab, a store label picked, or an undone check-out. It joins the same batch, and everyone but the person who made it hears about it.
+- In code: `StockChange.ActorId`, `StockChangeKeys.ForApp`
+
+**Netting** – before a stock change push is written, each person's changes are summed per product: a check-out and its undo cancel out, so a mistake fixed straight away isn't pushed (#81).
+- In code: `SendStockChangePush.Net`
+
 **Batch (stock change batch)** – the household's stock changes waiting to be pushed together, so a big shop is one push: sent a minute after the last change, at most five minutes after the first.
 - In code: `StockChangeBatch`, `IStockChangeBatchRepository`, the `stock-push` queue
 

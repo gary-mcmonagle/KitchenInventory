@@ -31,9 +31,10 @@ public sealed class CheckOutFunctions(
     public async Task<HttpResponseData> Undo(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "units/{unitId:guid}/undo-check-out")] HttpRequestData request,
         Guid unitId,
+        FunctionContext context,
         CancellationToken cancellationToken)
     {
-        var (status, body) = ToResponse(await undo.ExecuteAsync(unitId, cancellationToken));
+        var (status, body) = ToResponse(await undo.ExecuteAsync(unitId, cancellationToken, context.GetCurrentUser()));
         return await JsonAsync(request, status, body);
     }
 

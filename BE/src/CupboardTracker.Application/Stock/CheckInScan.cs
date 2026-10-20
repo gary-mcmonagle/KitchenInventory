@@ -54,7 +54,7 @@ public sealed partial class CheckInScan(
         if (created && !product.IsUnnamed && pushes is not null)
         {
             await pushes.ExecuteAsync(
-                new StockChange(StockChangeKeys.ForScan(scan.ScanId), StockChangeKind.Added, product.DisplayName, clock.GetUtcNow()),
+                new StockChange(StockChangeKeys.ForScan(scan.ScanId), StockChangeKind.Added, product.DisplayName, clock.GetUtcNow(), product.ProductId),
                 cancellationToken);
         }
     }

@@ -1,3 +1,6 @@
+using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Push;
+using CupboardTracker.Application.Users;
 using CupboardTracker.Domain.Stock;
 using Microsoft.Extensions.Logging;
 
@@ -13,13 +16,16 @@ public abstract record UndoCheckOutResult
 
 /// <summary>
 /// Undo a check-out (#50): the unit goes back to <c>inStock</c> with its check-out fields cleared. Undoing a unit that's
-/// already in stock changes nothing. ETag-guarded like check-out.
+/// already in stock changes nothing. ETag-guarded like check-out. A restore by a signed-in person joins the stock change
+/// push as "added back" (#81), so a check-out undone straight away nets out.
 /// </summary>
-public sealed partial class UndoCheckOut(IUnitRepository units, ILogger<UndoCheckOut> logger)
+public sealed partial class UndoCheckOut(
+    IUnitRepository units, ILogger<UndoCheckOut> logger, IProductRepository? products = null, AddStockChangeToPush? pushes = null,
+    TimeProvider? clock = null)
 {
     private const int MaxAttempts = 5;
 
-    public async Task<UndoCheckOutResult> ExecuteAsync(Guid unitId, CancellationToken cancellationToken)
+    public async Task<UndoCheckOutResult> ExecuteAsync(Guid unitId, CancellationToken cancellationToken, CurrentUser? user = null)
     {
         for (var attempt = 0; attempt < MaxAttempts; attempt++)
         {
@@ -38,6 +44,15 @@ public sealed partial class UndoCheckOut(IUnitRepository units, ILogger<UndoChec
             if (await units.TryReplaceAsync(current, unit.UndoCheckOut(), cancellationToken))
             {
                 LogRestored(unitId, unit.ProductId, unit.CheckOutSource);
+                if (pushes is not null && user is not null)
+                {
+                    var at = (clock ?? TimeProvider.System).GetUtcNow();
+                    var name = (products is null ? null : await products.GetAsync(unit.ProductId, cancellationToken))?.DisplayName ?? "Unknown item";
+                    await pushes.ExecuteAsync(
+                        new StockChange(StockChangeKeys.ForApp(unitId, "undo", at), StockChangeKind.Added, name, at, unit.ProductId, user.ObjectId),
+                        cancellationToken);
+                }
+
                 return new UndoCheckOutResult.InStock(unitId, unit.ProductId, await CountAsync(unit.ProductId, cancellationToken), true);
             }
         }
