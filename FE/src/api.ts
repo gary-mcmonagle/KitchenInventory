@@ -320,6 +320,40 @@ export interface RecipeSuggestion {
     message?: string;
 }
 
+/** One thing on the household's shopping list (#84). The app keeps the copy with the higher `version`. */
+export interface ShoppingListItem {
+    id: string;
+    name: string;
+    note: string | null;
+    productId: string | null;
+    aisleId: string | null;
+    aisleName: string | null;
+    /** Waiting for Jev's aisle: the row shows a spinner. */
+    findingAisle: boolean;
+    source: string;
+    status: "open" | "done";
+    addedByName: string;
+    addedAt: string;
+    doneByName: string | null;
+    doneAt: string | null;
+    updatedAt: string;
+    version: number;
+    /** A tombstone: it was removed (only in `since` answers). */
+    removed: boolean;
+}
+
+export interface ShoppingListAnswer {
+    /** Pass back as `since` to catch up. */
+    asOf: string;
+    items: ShoppingListItem[];
+}
+
+export interface ListSuggestion {
+    name: string;
+    inStock: number;
+    productId: string | null;
+}
+
 /** This device's push subscription as the API stores it (#77). */
 export interface PushDevice {
     id: string;
@@ -545,6 +579,47 @@ export class ApiClient {
     /** Sends a test notification to this person's own devices (a few an hour). */
     pushTest(): Promise<{ targeted: number; delivered: number; removed: number; failed: number }> {
         return this.send("POST", "/api/push/test");
+    }
+
+    /** The shared shopping list (#84); with `since`, only what changed (removed items as tombstones). */
+    shoppingList(since?: string): Promise<ShoppingListAnswer> {
+        return this.get(
+            since ? `/api/shopping-list?since=${encodeURIComponent(since)}` : "/api/shopping-list",
+        );
+    }
+
+    /** Adds to the list (idempotent by `id` and `changeId`). `merged`: that name was already open. */
+    addToList(
+        id: string,
+        add: {
+            changeId: string;
+            name?: string;
+            note?: string | null;
+            productId?: string | null;
+            source: string;
+        },
+    ): Promise<{ item: ShoppingListItem; merged: boolean }> {
+        return this.send("PUT", `/api/shopping-list/items/${encodeURIComponent(id)}`, add);
+    }
+
+    tickListItem(id: string, done: boolean, changeId: string): Promise<{ item: ShoppingListItem }> {
+        return this.send(
+            "POST",
+            `/api/shopping-list/items/${encodeURIComponent(id)}/${done ? "done" : "undone"}`,
+            { changeId },
+        );
+    }
+
+    removeListItem(id: string, changeId: string): Promise<{ item: ShoppingListItem }> {
+        return this.send("DELETE", `/api/shopping-list/items/${encodeURIComponent(id)}`, { changeId });
+    }
+
+    clearTicked(): Promise<{ cleared: string[] }> {
+        return this.send("POST", "/api/shopping-list/clear-done");
+    }
+
+    listSuggestions(q: string): Promise<{ suggestions: ListSuggestion[] }> {
+        return this.get(`/api/shopping-list/suggestions?q=${encodeURIComponent(q)}`);
     }
 
     /** Public: no token needed. */

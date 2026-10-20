@@ -1,5 +1,6 @@
 import { LIST_PATH, navigate, RECIPES_PATH } from "./router";
 import styles from "./BottomNav.module.css";
+import { useOpenCount } from "./useShoppingList";
 
 export type NavTab = "stock" | "list" | "recipes";
 
@@ -8,7 +9,9 @@ export type NavTab = "stock" | "list" | "recipes";
  * behind its icon and a bold green label. Add and Scanners live in the stock list header. The List tab's count badge
  * shows only when there's something on the list.
  */
-export function BottomNav({ current, listCount = 0 }: { current: NavTab; listCount?: number }) {
+export function BottomNav({ current, listCount }: { current: NavTab; listCount?: number }) {
+    const openCount = useOpenCount();
+    const badge = listCount ?? openCount; // the shopping list's open items (#84)
     const go = (path: string) => (e: React.MouseEvent) => {
         e.preventDefault();
         navigate(path);
@@ -63,7 +66,7 @@ export function BottomNav({ current, listCount = 0 }: { current: NavTab; listCou
                     <path d="M9 6h11M9 12h11M9 18h11" />
                     <path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2" />
                 </>,
-                listCount,
+                badge,
             )}
             {tab(
                 "recipes",

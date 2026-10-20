@@ -24,6 +24,9 @@ var containers = [
   // which Cosmos deletes itself (each document sets its own ttl; the default is a day).
   { name: 'pushSubscriptions', partitionKey: '/userId' }
   { name: 'pushSeen', partitionKey: '/eventKey', defaultTtl: 86400 }
+  // The household's shopping list (#84): items, their tombstones and list memory, one partition (listId "household").
+  // defaultTtl -1 turns on per-document ttl (tombstones expire) without expiring anything else.
+  { name: 'shoppingList', partitionKey: '/listId', defaultTtl: -1 }
 ]
 
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {

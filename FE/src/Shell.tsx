@@ -21,6 +21,7 @@ import {
 } from "./router";
 import { ScannersScreen } from "./ScannersScreen";
 import { StockScreen } from "./StockScreen";
+import { ShoppingListProvider } from "./useShoppingList";
 
 /** The signed-in app: the stock list (with a muted footer for verification), item detail, naming or editing a
  * product, adding items, saying what a store label was, or recipe ideas (#73). */
@@ -57,39 +58,41 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     const item = matchItemPath(path);
     const assigning = matchAssignPath(path);
     return (
-        <main className={styles.page}>
-            {naming ? (
-                <NameScreen key={naming} api={api} productId={naming} />
-            ) : editing ? (
-                <NameScreen key={`edit-${editing}`} api={api} productId={editing} mode="edit" />
-            ) : item ? (
-                <ItemScreen key={item} api={api} productId={item} />
-            ) : path === ADD_PATH ? (
-                <AddScreen api={api} />
-            ) : assigning ? (
-                <AddScreen key={assigning} api={api} assignScanId={assigning} />
-            ) : path === LIST_PATH ? (
-                <>
-                    <ListScreen />
-                    <BottomNav current="list" />
-                </>
-            ) : path === RECIPES_PATH ? (
-                <>
-                    <RecipesScreen api={api} />
-                    <BottomNav current="recipes" />
-                </>
-            ) : path === SCANNERS_PATH ? (
-                <>
-                    <ScannersScreen api={api} />
-                    <BottomNav current="stock" />
-                </>
-            ) : (
-                <>
-                    <StockScreen api={api} />
-                    <footer className={styles.footer}>{footer}</footer>
-                    <BottomNav current="stock" />
-                </>
-            )}
-        </main>
+        <ShoppingListProvider api={api}>
+            <main className={styles.page}>
+                {naming ? (
+                    <NameScreen key={naming} api={api} productId={naming} />
+                ) : editing ? (
+                    <NameScreen key={`edit-${editing}`} api={api} productId={editing} mode="edit" />
+                ) : item ? (
+                    <ItemScreen key={item} api={api} productId={item} />
+                ) : path === ADD_PATH ? (
+                    <AddScreen api={api} />
+                ) : assigning ? (
+                    <AddScreen key={assigning} api={api} assignScanId={assigning} />
+                ) : path === LIST_PATH ? (
+                    <>
+                        <ListScreen api={api} />
+                        <BottomNav current="list" />
+                    </>
+                ) : path === RECIPES_PATH ? (
+                    <>
+                        <RecipesScreen api={api} />
+                        <BottomNav current="recipes" />
+                    </>
+                ) : path === SCANNERS_PATH ? (
+                    <>
+                        <ScannersScreen api={api} />
+                        <BottomNav current="stock" />
+                    </>
+                ) : (
+                    <>
+                        <StockScreen api={api} />
+                        <footer className={styles.footer}>{footer}</footer>
+                        <BottomNav current="stock" />
+                    </>
+                )}
+            </main>
+        </ShoppingListProvider>
     );
 }

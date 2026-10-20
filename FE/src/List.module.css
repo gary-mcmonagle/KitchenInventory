@@ -1,4 +1,4 @@
-/* The List tab (#87): the header from project/List.dc.html, and a calm placeholder line. */
+/* The shared shopping list (#84), as drawn on project/List.dc.html. */
 .screen {
     flex: 1;
     display: flex;
@@ -26,9 +26,403 @@
     letter-spacing: -0.01em;
 }
 
-.soon {
+.summary {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.addArea {
+    padding: 8px var(--page-x) 4px;
+    position: relative;
+}
+
+.addRow {
+    display: flex;
+    gap: 8px;
+}
+
+.addBox {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 48px;
+    box-sizing: border-box;
+    padding: 0 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    color: var(--muted);
+}
+
+.addInput {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.addInput::placeholder {
+    color: var(--muted);
+}
+
+.addButton {
+    flex: none;
+    min-width: 64px;
+    height: 48px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: var(--radius-input);
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.addButton:active {
+    background: var(--accent-dark);
+}
+
+.suggestions {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 4px 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    box-shadow: 0 8px 24px rgba(28, 42, 36, 0.1);
+}
+
+.suggestion {
+    display: flex;
+}
+
+.suggestionButton {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 15px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.suggestionName {
+    flex: 1;
+    font-weight: 600;
+}
+
+.inStock,
+.noneInStock {
+    flex: none;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.noneInStock {
+    color: var(--warn-fg);
+}
+
+.content {
+    flex: 1;
+    padding: 12px var(--page-x) 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.problem {
     margin: 0;
-    padding: 12px var(--page-x);
+    padding: 12px 14px;
+    border-radius: var(--radius-input);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 14px;
+}
+
+.linkButton {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sectionTitle {
+    margin: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.sectionCount {
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
+}
+
+.aisleToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--touch);
+    padding: 0 16px;
+    border-radius: var(--radius-chip);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.aisleToggle[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.empty {
+    padding: 20px 0;
+    text-align: center;
+    color: var(--muted);
+    font-size: 15px;
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.groupTitle {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 4px 2px 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent-dark);
+}
+
+.groupCount {
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+}
+
+.row,
+.doneRow {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 60px;
+    padding: 0 4px 0 6px;
+    border-bottom: 1px solid var(--off-bg);
+}
+
+.doneRow {
+    min-height: 52px;
+    padding: 0 12px 0 6px;
+}
+
+.row:last-child,
+.doneRow:last-child {
+    border-bottom: 0;
+}
+
+.tick {
+    flex: none;
+    width: 48px;
+    height: 48px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tickCircle {
+    width: 24px;
+    height: 24px;
+    box-sizing: border-box;
+    border-radius: 12px;
+    border: 2px solid var(--feed-spinner);
+}
+
+.ticked {
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    background: var(--accent);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rowText {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 0;
+}
+
+.rowTop {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rowName {
+    font-size: 16px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.note {
+    flex: none;
+    font-size: 14px;
+    color: var(--ink-strong);
+}
+
+.spinner {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    border-radius: 7px;
+    border: 2px solid var(--feed-loading-border);
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.meta {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.remove {
+    flex: none;
+    width: var(--touch);
+    height: var(--touch);
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.doneToggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--touch);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.doneToggleLabel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.chevronOpen {
+    transform: rotate(90deg);
+}
+
+.doneName {
+    flex: 1;
     font-size: 15px;
     color: var(--muted);
+    text-decoration: line-through;
+}
+
+.doneMeta {
+    flex: none;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.clear {
+    align-self: flex-start;
+    min-height: var(--touch);
+    padding: 0 4px;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
 }

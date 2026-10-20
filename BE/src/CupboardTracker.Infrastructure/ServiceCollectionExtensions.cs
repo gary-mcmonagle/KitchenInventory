@@ -1,3 +1,5 @@
+using CupboardTracker.Application.ShoppingList;
+using CupboardTracker.Infrastructure.ShoppingList;
 using Azure.Communication.Email;
 using Azure.Identity;
 using CupboardTracker.Application.Adding;
@@ -57,6 +59,18 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(sp => SignalROptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddSingleton<SignalRScanFeed>();
         services.AddSingleton<IScanFeedPublisher>(sp => sp.GetRequiredService<SignalRScanFeed>());
+
+        // The shopping list (#84): the shoppingList container, the same SignalR hub, and a queue for typed items' aisles.
+        services.AddSingleton<IShoppingListRepository, CosmosShoppingListRepository>();
+        services.AddSingleton<IShoppingListPublisher>(sp => sp.GetRequiredService<SignalRScanFeed>());
+        services.AddSingleton<IListAisleScheduler, StorageQueueListAisleScheduler>();
+        services.AddTransient<ShoppingListNotifier>();
+        services.AddTransient<AddToShoppingList>();
+        services.AddTransient<ChangeShoppingListItem>();
+        services.AddTransient<ClearDoneShoppingListItems>();
+        services.AddTransient<GetShoppingList>();
+        services.AddTransient<SuggestListItems>();
+        services.AddTransient<AssignListAisle>();
         services.AddTransient<ScanFeedNotifier>();
         services.AddSingleton<IScanFeedQueries, CosmosScanFeedQueries>();
         services.AddTransient<GetScanFeed>();

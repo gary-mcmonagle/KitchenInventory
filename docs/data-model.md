@@ -525,6 +525,14 @@ One document per **device** that has push notifications turned on, partitioned b
 - **`preferences`**: one boolean per notification type, named by the features (letters and digits). A type that isn't set counts as off.
   - **`stockChanges`** (#80): stock change pushes. Set to `true` when the device turns notifications on ("This phone" on the Scanners screen); the toggle there changes it.
 
+## Container: `shoppingList` (#84)
+
+The household's one shopping list, in **one partition**: `listId` is always `"household"` (a few hundred documents at most). `defaultTtl: -1`, so only documents that set a `ttl` expire.
+
+- **Items** (`type: "item"`, `id` = the app's item id): `name`, `normalizedName` (lower case, trimmed, single spaces), `note`, `productId`, `aisle` (aisle id, null while Jev works it out), `aisleSource` (`product` | `jev` | `fallback`), `source` (`typed` | `suggestion` | `itemDetail`; later cards add more), `status` (`open` | `done`), `addedBy`, `addedByName`, `addedAt`, `doneBy`, `doneByName`, `doneAt`, `updatedAt`, `version` (+1 on every change), `changeId` (the last change applied) and `removed`. Every write is ETag-checked.
+- **Tombstones:** removing an item (or Clear ticked, or the daily clean-up of items ticked off over 24 hours ago) sets `removed: true` and `ttl: 604800`, so apps catching up with `since` learn it's gone; then Cosmos deletes it.
+- **List memory** (`type: "memory"`, `id` `memory:<hash of the normalized name>`): `name`, `aisle` (Jev's answer, reused for the same name), `timesAdded` and `lastAddedAt` (for suggestions).
+
 ## Container: `pushSeen` (#77)
 
 Short-lived documents, partitioned by **`/eventKey`**, each with its own **`ttl`** (the container's default is a day), so Cosmos deletes them itself.

@@ -22,22 +22,69 @@ export interface FeedConnection {
     readonly state: HubConnectionState | string;
 }
 
+interface SharedHub {
+    connection: HubConnection;
+    users: number;
+    starting: Promise<void> | null;
+    reconnected: Set<() => void>;
+}
+
+const hubs = new WeakMap<ApiClient, SharedHub>();
+
+/**
+ * One SignalR connection per signed-in app (#84), shared by the scan feed and the shopping list, so a phone counts
+ * once against the Free tier's 20 connections. Each caller gets its own handle: `start` joins (connecting if needed),
+ * `stop` leaves and removes that handle's handlers; the connection closes when the last one leaves.
+ */
 export function signalRConnection(api: ApiClient): FeedConnection {
-    const connection: HubConnection = new HubConnectionBuilder()
-        .withUrl(api.feedUrl, {
-            accessTokenFactory: () => api.accessToken(),
-            withCredentials: false, // bearer token only: no cookies, no credentialed CORS
-        })
-        .withAutomaticReconnect([0, 2000, 10000, 30000])
-        .configureLogging(LogLevel.Warning)
-        .build();
+    let hub = hubs.get(api);
+    if (!hub) {
+        const connection: HubConnection = new HubConnectionBuilder()
+            .withUrl(api.feedUrl, {
+                accessTokenFactory: () => api.accessToken(),
+                withCredentials: false, // bearer token only: no cookies, no credentialed CORS
+            })
+            .withAutomaticReconnect([0, 2000, 10000, 30000])
+            .configureLogging(LogLevel.Warning)
+            .build();
+        const created: SharedHub = { connection, users: 0, starting: null, reconnected: new Set() };
+        connection.onreconnected(() => created.reconnected.forEach((h) => h()));
+        hubs.set(api, created);
+        hub = created;
+    }
+    const shared = hub;
+    const handlers: Array<[string, (payload: unknown) => void]> = [];
+    const reconnected: Array<() => void> = [];
+    let joined = false;
     return {
-        on: (event, handler) => connection.on(event, handler),
-        onreconnected: (handler) => connection.onreconnected(() => handler()),
-        start: () => connection.start(),
-        stop: () => connection.stop(),
+        on: (event, handler) => {
+            handlers.push([event, handler]);
+            shared.connection.on(event, handler);
+        },
+        onreconnected: (handler) => {
+            reconnected.push(handler);
+            shared.reconnected.add(handler);
+        },
+        start: async () => {
+            if (!joined) {
+                joined = true;
+                shared.users++;
+            }
+            if (shared.connection.state !== HubConnectionState.Disconnected)
+                return shared.starting ?? undefined;
+            shared.starting = shared.connection.start().finally(() => (shared.starting = null));
+            return shared.starting;
+        },
+        stop: async () => {
+            handlers.forEach(([event, handler]) => shared.connection.off(event, handler));
+            reconnected.forEach((h) => shared.reconnected.delete(h));
+            if (!joined) return;
+            joined = false;
+            shared.users--;
+            if (shared.users === 0) await shared.connection.stop();
+        },
         get state() {
-            return connection.state;
+            return shared.connection.state;
         },
     };
 }
@@ -99,12 +146,16 @@ export function useScanFeed(
         connection.onreconnected(() => void catchUp());
 
         const start = async () => {
-            if (connection.state !== HubConnectionState.Disconnected) return;
-            try {
-                await connection.start();
-            } catch (error) {
-                if (!(error instanceof SignInRequiredError))
-                    console.warn("Scan feed couldn't connect", error);
+            if (
+                connection.state === HubConnectionState.Disconnected ||
+                connection.state === HubConnectionState.Connecting
+            ) {
+                try {
+                    await connection.start();
+                } catch (error) {
+                    if (!(error instanceof SignInRequiredError))
+                        console.warn("Scan feed couldn't connect", error);
+                }
             }
             if (live) await catchUp(); // fill gaps whether or not the connection came up
         };

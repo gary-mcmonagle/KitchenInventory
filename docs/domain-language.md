@@ -240,6 +240,12 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Push subscription** – one device's permission and address for push notifications, stored per person and device, with which notification types it wants (preferences). Removed when the device turns notifications off, when the push service says it's gone, or after 30 days without the app being opened.
 - In code: `PushSubscription`, `pushSubscriptions` container
 
+**Shopping list** – the household's one shared list of things to buy (#84), on the List tab. Items are added by **generic name**; anyone can tick them off, and every open phone sees changes within a couple of seconds.
+- In code: `ShoppingListItem`, `AddToShoppingList`, `ListScreen`, `useShoppingList`, `shoppingList` container
+
+**List aisle** – the aisle a shopping list item is grouped under with **Sort by aisle**: its product's aisle, or Jev's answer for a typed item (shown as "Finding its aisle…" until it arrives), remembered for that name.
+- In code: `ShoppingListItem.Aisle`, `AssignListAisle`, `ListMemory`
+
 **Seen receipt** – a note from the app that a person saw an event (e.g. a scan's toast) on a visible screen, so a push about it leaves them out. Kept for about a day. For stock changes, a green check-in or check-out toast counts once it's shown on a visible page; nothing else does.
 - In code: `RecordPushSeen`, `markSeen`, `pushSeen` container
 

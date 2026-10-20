@@ -8,6 +8,7 @@ import {
     type ProductUnit,
     type UnitState,
 } from "./api";
+import { useOptionalShoppingList } from "./useShoppingList";
 import {
     boughtDate,
     groupBarcode,
@@ -271,6 +272,11 @@ function Detail({
                     </a>
                 </div>
             </div>
+
+            <AddToListButton
+                name={product.genericName?.name ?? product.displayName}
+                productId={product.productId}
+            />
 
             <UseByCard product={product} unit={soonest} />
 
@@ -734,5 +740,34 @@ function FixEstimate({
                 you buy from now on.
             </div>
         </section>
+    );
+}
+
+/** "Add to list" (#84): puts the product's generic name on the shared shopping list. */
+function AddToListButton({ name, productId }: { name: string; productId: string }) {
+    const list = useOptionalShoppingList();
+    if (!list) return null;
+    const onList = list.open.some((i) => i.name.trim().toLowerCase() === name.trim().toLowerCase());
+    return (
+        <button
+            type="button"
+            className={styles.addToList}
+            disabled={onList}
+            onClick={() => list.add(name, productId, "itemDetail")}
+        >
+            <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                aria-hidden="true"
+            >
+                {onList ? <path d="M5 12.5l4.5 4.5L19 7.5" /> : <path d="M12 5v14M5 12h14" />}
+            </svg>
+            {onList ? `${name} is on the list` : `Add ${name} to the list`}
+        </button>
     );
 }

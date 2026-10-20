@@ -583,6 +583,57 @@ Quick things using **only a toaster, microwave or kettle, or no cooking** (never
 - **422** `{ "error": "There's nothing in stock to cook with." }`: no known products in stock.
 - **429** `{ "error": "That's a lot of recipes for one hour. Try again a bit later." }`: over `RECIPE_REQUESTS_PER_HOUR` (default 30) for this user in the last hour. Counted per API app instance, in memory: a cost guard, not an exact quota.
 
+## Shopping list (#84)
+
+One list for the household. Every endpoint needs a signed-in user (**401** without a token). Item ids and change ids come from the app (UUIDs), so a write sent twice is applied once (ready for offline use). People are shown by name, never by object ID.
+
+**Item:**
+
+```json
+{
+  "id": "…", "name": "Semi-skimmed milk", "note": "2", "productId": "…" | null,
+  "aisleId": "dairyEggs" | null, "aisleName": "Dairy & eggs" | null, "findingAisle": false,
+  "source": "typed" | "suggestion" | "itemDetail", "status": "open" | "done",
+  "addedByName": "Gary", "addedAt": "…", "doneByName": null, "doneAt": null,
+  "updatedAt": "…", "version": 3, "removed": false
+}
+```
+
+`version` goes up on every change: **apps keep the higher one**, so a late or repeated event never undoes a newer change. `findingAisle` is true while Jev works out a typed item's aisle (the row shows a spinner).
+
+### `GET /api/shopping-list[?since=<asOf>]`
+
+**200** `{ "asOf": "…", "items": [...] }`: open items (oldest first) and items ticked off in the last 24 hours. With `since` (an earlier `asOf`): every item changed since then (looking back 5 s more, for clock differences), removed ones as tombstones (`removed: true`, kept a week). Apps call it after every SignalR (re)connect and when they come back to the foreground. **400** for a bad `since`.
+
+### `PUT /api/shopping-list/items/{id}`
+
+`{ "changeId": "…", "name": "Kitchen foil", "note": "the big roll", "productId": null, "source": "typed" }` adds the item at once. **200** `{ "item": {…}, "merged": false }`.
+
+- **Idempotent:** an id that exists returns the item as it is.
+- **No duplicates:** a name already open (lower case, trimmed, single spaces) returns that item with `merged: true`, adding the note if one was given.
+- **Aisle:** with `productId`, the product's aisle (and, when `name` is left out, its generic name or display name). A typed item reuses the aisle that name had before, or is queued for Jev (the aisles feature's choice question) on the API app's `list-aisles` queue; until then `aisleId` is null. Jev unreachable → `other` for now, retried by a timer every 15 minutes.
+- **400** for a missing id or changeId, a name of 0 or over 80 characters, a note over 60, or an unknown product.
+
+### `POST /api/shopping-list/items/{id}/done`, `/undone` and `DELETE /api/shopping-list/items/{id}`
+
+Body `{ "changeId": "…" }`. Tick off, put back, or remove (a tombstone). The same `changeId` again changes nothing. **200** `{ "item": {…} }`; **404** for an unknown id.
+
+### `POST /api/shopping-list/clear-done`
+
+"Clear ticked": every ticked item becomes a tombstone. **200** `{ "cleared": ["…"] }`. A timer does the same for items ticked off more than a day ago.
+
+### `GET /api/shopping-list/suggestions?q=`
+
+**200** `{ "suggestions": [{ "name": "Semi-skimmed milk", "inStock": 3, "productId": "…" | null }] }`, at most 8: names containing `q` from products' **generic names** (display names when they have none) and past list items. Ranked by names starting with `q`, then generic names, then how often and how recently they were used. `inStock` sums units across **every product with that generic name**. Names already open are left out.
+
+### Live updates (SignalR)
+
+On the scan feed's hub (one connection per open app carries both), sent after each successful write; **best-effort** (a failure is a warning; apps catch up with `since`):
+
+- `shoppingListItemChanged`: the full item (adds, ticks, put-backs, note merges, **an aisle arriving**).
+- `shoppingListItemRemoved`: `{ "id": "…", "version": 4 }`.
+- `shoppingListCleared`: `{ "ids": ["…"] }`.
+
 ## Push notifications (#77)
 
 The plumbing for push notifications ([Task] Web Push plumbing, spike #75). Every endpoint needs a signed-in user (**401** without a token) and only touches the **caller's own** subscriptions. The features decide what to send and when; nothing here sends a push except the test.

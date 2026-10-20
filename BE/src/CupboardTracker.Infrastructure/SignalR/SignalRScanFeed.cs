@@ -1,5 +1,7 @@
 using Azure.Identity;
 using CupboardTracker.Application.ScanFeed;
+using CupboardTracker.Application.ShoppingList;
+using CupboardTracker.Infrastructure.ShoppingList;
 using Microsoft.Azure.SignalR;
 using Microsoft.Azure.SignalR.Management;
 using Microsoft.Extensions.Configuration;
@@ -33,7 +35,8 @@ public sealed record ScanFeedConnection(string Url, string AccessToken);
 /// every connection (all signed-in household members), and negotiates client connections for the API app.
 /// Singleton: the hub context is created once and reused.
 /// </summary>
-public sealed class SignalRScanFeed(SignalROptions options) : IScanFeedPublisher, IAsyncDisposable
+/// The shopping list (#84) uses the same hub, so one connection per open app carries both.
+public sealed class SignalRScanFeed(SignalROptions options) : IScanFeedPublisher, IShoppingListPublisher, IAsyncDisposable
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private ServiceHubContext? hub;
@@ -47,6 +50,26 @@ public sealed class SignalRScanFeed(SignalROptions options) : IScanFeedPublisher
 
         var context = await HubAsync(cancellationToken);
         await context.Clients.All.SendCoreAsync(feedEvent.Name, [ScanFeedWire.Payload(feedEvent)], cancellationToken);
+    }
+
+    public Task ItemChangedAsync(ShoppingListItem item, CancellationToken cancellationToken) =>
+        SendAsync("shoppingListItemChanged", ShoppingListWire.Item(item), cancellationToken);
+
+    public Task ItemRemovedAsync(Guid id, long version, CancellationToken cancellationToken) =>
+        SendAsync("shoppingListItemRemoved", new Dictionary<string, object?> { ["id"] = id.ToString("D"), ["version"] = version }, cancellationToken);
+
+    public Task ClearedAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken) =>
+        SendAsync("shoppingListCleared", new Dictionary<string, object?> { ["ids"] = ids.Select(i => i.ToString("D")).ToArray() }, cancellationToken);
+
+    private async Task SendAsync(string name, object payload, CancellationToken cancellationToken)
+    {
+        if (!options.IsConfigured)
+        {
+            return; // not set up: apps catch up from the API
+        }
+
+        var context = await HubAsync(cancellationToken);
+        await context.Clients.All.SendCoreAsync(name, [payload], cancellationToken);
     }
 
     public async Task<ScanFeedConnection> NegotiateAsync(Guid userId, CancellationToken cancellationToken)

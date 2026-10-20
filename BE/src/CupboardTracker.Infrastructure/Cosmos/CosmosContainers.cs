@@ -20,4 +20,6 @@ public sealed class CosmosContainers(CosmosClient client, string databaseName)
     public Container PushSubscriptions { get; } = client.GetContainer(databaseName, "pushSubscriptions");
 
     public Container PushSeen { get; } = client.GetContainer(databaseName, "pushSeen");
+
+    public Container ShoppingList { get; } = client.GetContainer(databaseName, "shoppingList");
 }

@@ -484,3 +484,57 @@ test("Change 'once opened' shelf life saves the chosen days", async () => {
     expect(await screen.findByText("Saved. It applies to ones you open from now on.")).toBeInTheDocument();
     expect(setOpenedShelfLife).toHaveBeenCalledWith("p-milk", 14);
 });
+
+test("Add to list puts the product's generic name on the shopping list (#84)", async () => {
+    const { ShoppingListProvider } = await import("./useShoppingList");
+    const product = milk({
+        genericName: { id: "semi-skimmed milk", name: "Semi-skimmed milk", source: "jevMatch" },
+    });
+    const addToList = vi.fn(async (id: string, add: { name: string; productId: string; source: string }) => ({
+        item: {
+            id,
+            name: add.name,
+            note: null,
+            productId: add.productId,
+            aisleId: "dairyEggs",
+            aisleName: "Dairy & eggs",
+            findingAisle: false,
+            source: add.source,
+            status: "open",
+            addedByName: "Gary",
+            addedAt: "2026-10-18T09:00:00.000Z",
+            doneByName: null,
+            doneAt: null,
+            updatedAt: "2026-10-18T09:00:00.000Z",
+            version: 1,
+            removed: false,
+        },
+        merged: false,
+    }));
+    const api = {
+        product: vi.fn(async () => product),
+        shoppingList: vi.fn(async () => ({ asOf: "2026-10-18T09:00:00.000Z", items: [] })),
+        addToList,
+    };
+    const connect = () => ({
+        on() {},
+        onreconnected() {},
+        start: async () => {},
+        stop: async () => {},
+        state: "Connected",
+    });
+    render(
+        <ShoppingListProvider api={api as unknown as ApiClient} connect={connect}>
+            <ItemScreen api={api as unknown as ApiClient} productId="p-milk" />
+        </ShoppingListProvider>,
+    );
+
+    const add = await screen.findByRole("button", { name: "Add Semi-skimmed milk to the list" });
+    await act(async () => fireEvent.click(add));
+
+    expect(addToList).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ name: "Semi-skimmed milk", productId: "p-milk", source: "itemDetail" }),
+    );
+    expect(screen.getByRole("button", { name: "Semi-skimmed milk is on the list" })).toBeDisabled();
+});

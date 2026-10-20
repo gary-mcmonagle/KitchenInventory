@@ -413,3 +413,27 @@
     font-weight: 700;
     cursor: pointer;
 }
+
+/* "Add to list" (#84), styled like Check out. */
+.addToList {
+    align-self: flex-start;
+    min-height: var(--touch);
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: var(--radius-button);
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.addToList:disabled {
+    border-color: var(--border);
+    color: var(--muted);
+    cursor: default;
+}

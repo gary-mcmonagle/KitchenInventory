@@ -111,10 +111,10 @@ test("the List count badge shows only when there's something on the list", () =>
     expect(screen.getByRole("link", { name: "List, 5 items" })).toHaveTextContent("5List");
 });
 
-test("the List tab opens the placeholder", async () => {
+test("the List tab opens the shopping list", async () => {
     await at("/list");
     expect(screen.getByRole("heading", { level: 1, name: "Shopping list" })).toBeInTheDocument();
-    expect(screen.getByText("The shared shopping list is coming soon.")).toBeInTheDocument();
+    expect(screen.getByText("Shared with everyone at home")).toBeInTheDocument();
 });
 
 test("the stock list header has the Scanners button and + Add, and both navigate", async () => {
