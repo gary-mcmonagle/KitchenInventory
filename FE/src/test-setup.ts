@@ -22,6 +22,7 @@ vi.mock("@microsoft/signalr", async (importOriginal) => {
             return {
                 state: actual.HubConnectionState.Disconnected,
                 on() {},
+                off() {},
                 onreconnected() {},
                 start: () => Promise.reject(new Error("no SignalR in tests")),
                 stop: () => Promise.resolve(),
@@ -31,10 +32,17 @@ vi.mock("@microsoft/signalr", async (importOriginal) => {
     return { ...actual, HubConnectionBuilder: FakeBuilder };
 });
 
-// Screens' fake APIs mostly have no scan feed: its "couldn't connect / catch up" warnings are expected noise there.
+// Screens' fake APIs mostly have no scan feed or shopping list (#84): their "couldn't connect / load" warnings are
+// expected noise there.
 const warn = console.warn.bind(console);
 console.warn = (...args: unknown[]) => {
-    if (typeof args[0] === "string" && args[0].startsWith("Scan feed")) return;
+    if (
+        typeof args[0] === "string" &&
+        (args[0].startsWith("Scan feed") ||
+            args[0].startsWith("The shopping list couldn't connect") ||
+            args[0].startsWith("Couldn't load the shopping list"))
+    )
+        return;
     warn(...args);
 };
 
