@@ -140,10 +140,11 @@ public sealed class FoundryRecipeGeneratorTests
 
         Assert.Contains("Meal: dinner", prompt, StringComparison.Ordinal);
         Assert.Contains("Prefer use first: yes", prompt, StringComparison.Ordinal);
-        Assert.Contains($"Must include (use every one):\n- {Penne} Wholewheat penne", prompt.ReplaceLineEndings("\n"), StringComparison.Ordinal);
+        Assert.Contains("Must include (use every one):\n- p2 Wholewheat penne", prompt.ReplaceLineEndings("\n"), StringComparison.Ordinal);
         Assert.Contains("Already suggested (suggest something different):\n- Omelette", prompt.ReplaceLineEndings("\n"), StringComparison.Ordinal);
-        Assert.Contains($"{Milk} | Semi-skimmed milk | 2 | passed 1 day ago | use first | Dairy & eggs | 1 opened", prompt, StringComparison.Ordinal);
-        Assert.Contains($"{Cheddar} | Mature cheddar | 1 | no estimate | - | Dairy & eggs | -", prompt, StringComparison.Ordinal);
+        Assert.Contains("p1 | Semi-skimmed milk | 2 | passed 1 day ago | use first | Dairy & eggs | 1 opened", prompt, StringComparison.Ordinal);
+        Assert.Contains("p3 | Mature cheddar | 1 | no estimate | - | Dairy & eggs | -", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain(Milk.ToString(), prompt, StringComparison.Ordinal); // short refs, not 36-character IDs (#88)
         Assert.DoesNotContain("<preferences>", prompt, StringComparison.Ordinal);
     }
 
@@ -228,7 +229,7 @@ public sealed class FoundryRecipeGeneratorTests
         var retry = JsonNode.Parse(handler.Requests[1].Body)!["messages"]!.AsArray();
         Assert.Equal(4, retry.Count);
         Assert.Equal("assistant", retry[2]!["role"]!.GetValue<string>());
-        Assert.Contains($"{Cheddar} Mature cheddar", retry[3]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("p3 Mature cheddar", retry[3]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -399,5 +400,19 @@ public sealed class FoundryRecipeGeneratorTests
     {
         Assert.Contains("Simple dishes are welcome", FoundryRecipeGenerator.Instructions, StringComparison.Ordinal);
         Assert.Contains("snack", FoundryRecipeGenerator.Schema["schema"]!["properties"]!["meal"]!["enum"]!.AsArray().Select(m => m!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void Refs_in_answers_map_back_to_products_and_unknown_ones_are_dropped()
+    {
+        Assert.Equal(Milk, FoundryRecipeGenerator.Resolve("p1", Request()));
+        Assert.Equal(Cheddar, FoundryRecipeGenerator.Resolve(" P3 ", Request()));
+        Assert.Equal(Penne, FoundryRecipeGenerator.Resolve(Penne.ToString(), Request())); // a full ID still works
+        Assert.Null(FoundryRecipeGenerator.Resolve("p4", Request()));
+        Assert.Null(FoundryRecipeGenerator.Resolve("p0", Request()));
+        Assert.Null(FoundryRecipeGenerator.Resolve("99999999-9999-9999-9999-999999999999", Request()));
+
+        var ideas = FoundryRecipeGenerator.ValidateIdeas(Ideas(Idea("Cheese on toast", uses: "\"p3\",\"p9\"")), Request());
+        Assert.Equal([Cheddar], Assert.Single(ideas).Uses);
     }
 }
