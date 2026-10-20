@@ -40,6 +40,25 @@ public sealed class CosmosGenericNameRepository(CosmosContainers containers) : I
         return name;
     }
 
+    public async Task<GenericName?> SetAddWhenOutAsync(string id, bool enabled, Guid by, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        var key = Prefix + id;
+        var operations = new[]
+        {
+            PatchOperation.Set("/addWhenOut", enabled),
+            PatchOperation.Set("/addWhenOutBy", by.ToString()),
+            PatchOperation.Set("/addWhenOutAt", CosmosJson.Timestamp(at)),
+        };
+        using var response = await containers.Products.PatchItemStreamAsync(key, new PartitionKey(key), operations, cancellationToken: cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await CosmosJson.ReadAsync(response, cancellationToken) is { } document ? FromDocument(document) : null;
+    }
+
     internal static JsonObject ToDocument(GenericName name) => new()
     {
         ["id"] = Prefix + name.Id,
@@ -48,11 +67,17 @@ public sealed class CosmosGenericNameRepository(CosmosContainers containers) : I
         ["aisle"] = name.AisleId,
         ["createdAt"] = CosmosJson.Timestamp(name.CreatedAt),
         ["createdBy"] = name.CreatedBy,
+        ["addWhenOut"] = name.AddWhenOut,
+        ["addWhenOutBy"] = name.AddWhenOutBy?.ToString(),
+        ["addWhenOutAt"] = name.AddWhenOutAt is { } at ? CosmosJson.Timestamp(at) : null,
     };
 
     internal static GenericName? FromDocument(JsonObject d) =>
         CosmosJson.Text(d["id"]) is { } key && key.StartsWith(Prefix, StringComparison.Ordinal) && CosmosJson.Text(d["name"]) is { } name
             ? new GenericName(key[Prefix.Length..], name, CosmosJson.Text(d["aisle"]) ?? Aisles.Other.Id,
-                CosmosJson.ParseTimestamp(d["createdAt"]) ?? DateTimeOffset.MinValue, CosmosJson.Text(d["createdBy"]) ?? GenericName.FoundrySource)
+                CosmosJson.ParseTimestamp(d["createdAt"]) ?? DateTimeOffset.MinValue, CosmosJson.Text(d["createdBy"]) ?? GenericName.FoundrySource,
+                d["addWhenOut"] is JsonValue v && v.TryGetValue<bool>(out var on) && on,
+                Guid.TryParse(CosmosJson.Text(d["addWhenOutBy"]), out var by) ? by : null,
+                CosmosJson.ParseTimestamp(d["addWhenOutAt"]))
             : null;
 }

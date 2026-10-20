@@ -268,7 +268,7 @@ public sealed class StockChangePushStorageTests
         var batch = new StockChangeBatch(Guid.NewGuid(), at, at.AddSeconds(30),
         [
             new StockChange("scan:a", StockChangeKind.Added, "Milk", at),
-            new StockChange("app:b", StockChangeKind.Removed, "Hummus", at.AddSeconds(30), Guid.NewGuid(), Guid.NewGuid()),
+            new StockChange("app:b", StockChangeKind.Removed, "Hummus", at.AddSeconds(30), Guid.NewGuid(), Guid.NewGuid(), "Sam"),
         ]);
 
         var document = CosmosStockChangeBatchRepository.ToDocument(batch);
@@ -278,6 +278,15 @@ public sealed class StockChangePushStorageTests
         var back = CosmosStockChangeBatchRepository.FromDocument(JsonNode.Parse(document.ToJsonString())!.AsObject());
         Assert.Equal((batch.BatchId, batch.FirstAt, batch.LastAt), (back.BatchId, back.FirstAt, back.LastAt));
         Assert.Equal(batch.Changes, back.Changes);
+    }
+
+    [Fact]
+    public void A_sent_batch_is_kept_under_its_own_key_for_three_days()
+    {
+        var id = Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e");
+
+        Assert.Equal("batchSent:0f8fad5b-d9cb-469f-a165-70867728950e", CosmosStockChangeBatchRepository.SentKey(id));
+        Assert.Equal(TimeSpan.FromDays(3), CosmosStockChangeBatchRepository.SentTtl);
     }
 
     [Fact]

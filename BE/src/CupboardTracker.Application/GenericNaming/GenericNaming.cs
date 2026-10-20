@@ -13,6 +13,9 @@ public interface IGenericNameRepository
     /// <summary>Creates the record unless one with that id exists, and returns the one that's stored either way (so
     /// two products never create two records with the same id).</summary>
     Task<GenericName> GetOrCreateAsync(GenericName name, CancellationToken cancellationToken);
+
+    /// <summary>Turns "add when we run out" (#89) on or off. Null if there's no such record.</summary>
+    Task<GenericName?> SetAddWhenOutAsync(string id, bool enabled, Guid by, DateTimeOffset at, CancellationToken cancellationToken);
 }
 
 public abstract record GenericMatchResult

@@ -1,5 +1,6 @@
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Push;
+using CupboardTracker.Application.RunOut;
 using CupboardTracker.Application.Users;
 using CupboardTracker.Domain.Stock;
 using Microsoft.Extensions.Logging;
@@ -23,7 +24,7 @@ public abstract record CheckOutUnitResult
 /// </summary>
 public sealed partial class CheckOutUnit(
     IProductRepository products, IUnitRepository units, TimeProvider clock, ILogger<CheckOutUnit> logger,
-    AddStockChangeToPush? pushes = null)
+    AddStockChangeToPush? pushes = null, AddWhenRunOut? runOut = null)
 {
     public async Task<CheckOutUnitResult> ExecuteAsync(Guid unitId, CurrentUser user, CancellationToken cancellationToken)
     {
@@ -45,6 +46,7 @@ public sealed partial class CheckOutUnit(
         var name = (await products.GetAsync(productId, cancellationToken))?.DisplayName ?? "Unknown item";
         LogCheckedOut(unitId, productId, user.ObjectId);
         await CheckOutFromApp.PushAsync(pushes, unitId, productId, name, user, now, cancellationToken);
+        await CheckOutFromApp.RunOutAsync(runOut, unitId, productId, now, cancellationToken);
         return new CheckOutUnitResult.CheckedOut(unitId, productId, name, remaining);
     }
 

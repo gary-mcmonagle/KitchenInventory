@@ -1,5 +1,6 @@
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Push;
+using CupboardTracker.Application.RunOut;
 using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Domain;
 using CupboardTracker.Domain.Products;
@@ -20,7 +21,8 @@ public sealed partial class CheckOutScan(
     ScanFeedNotifier feed,
     TimeProvider clock,
     ILogger<CheckOutScan> logger,
-    AddStockChangeToPush? pushes = null)
+    AddStockChangeToPush? pushes = null,
+    AddWhenRunOut? runOut = null)
 {
     public const string Source = "scanner";
     private const int MaxRounds = 5;
@@ -75,6 +77,7 @@ public sealed partial class CheckOutScan(
                             cancellationToken);
                     }
 
+                    await CheckOutFromApp.RunOutAsync(runOut, candidate.UnitId, productId.Value, scan.ScannedAt, cancellationToken);
                     return;
                 }
 

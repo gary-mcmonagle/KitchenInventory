@@ -6,8 +6,11 @@ namespace CupboardTracker.Domain.Products;
 /// <summary>
 /// A generic name (#90): what you'd say to someone going to the shop ("Semi-skimmed milk"), shared by every product
 /// of that kind whatever the brand. One record per name, in the aisle of the product that created it.
+/// <see cref="AddWhenOut"/> (#89): put it on the shopping list when the house runs out of every product with this name.
 /// </summary>
-public sealed record GenericName(string Id, string Name, string AisleId, DateTimeOffset CreatedAt, string CreatedBy)
+public sealed record GenericName(
+    string Id, string Name, string AisleId, DateTimeOffset CreatedAt, string CreatedBy,
+    bool AddWhenOut = false, Guid? AddWhenOutBy = null, DateTimeOffset? AddWhenOutAt = null)
 {
     public const string FoundrySource = "foundry";
 

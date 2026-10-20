@@ -17,7 +17,8 @@ public enum StockChangeKind
 /// check-out against its undo.
 /// </summary>
 public sealed record StockChange(
-    string EventKey, StockChangeKind Kind, string Name, DateTimeOffset At, Guid? ProductId = null, Guid? ActorId = null);
+    string EventKey, StockChangeKind Kind, string Name, DateTimeOffset At, Guid? ProductId = null, Guid? ActorId = null,
+    string? ActorName = null);
 
 /// <summary>Seen receipt keys for stock changes, the same ones the app reports (<c>markSeen</c>).</summary>
 public static class StockChangeKeys
@@ -65,6 +66,12 @@ public interface IStockChangeBatchRepository
 
     /// <summary>Closes the batch. False if it changed (or closed) since it was read.</summary>
     Task<bool> TryCloseAsync(Versioned<StockChangeBatch> current, CancellationToken cancellationToken);
+
+    /// <summary>Keeps a sent batch for a few days (#89), so tapping its push can show what was removed.</summary>
+    Task SaveSentAsync(StockChangeBatch batch, CancellationToken cancellationToken);
+
+    /// <summary>A sent batch, or null once it has expired (or if it never existed).</summary>
+    Task<StockChangeBatch?> GetSentAsync(Guid batchId, CancellationToken cancellationToken);
 }
 
 /// <summary>Runs <see cref="SendStockChangePush"/> for a batch after a delay (a Storage queue message in Infrastructure).</summary>
@@ -224,6 +231,7 @@ public sealed partial class SendStockChangePush(
             seenBy[key] = await seen.UsersWhoSawAsync(key, cancellationToken);
         }
 
+        await batches.SaveSentAsync(taken, cancellationToken);
         int pushed = 0, allSeen = 0;
         foreach (var person in people)
         {
@@ -236,7 +244,7 @@ public sealed partial class SendStockChangePush(
                 continue;
             }
 
-            await send.ExecuteAsync(Message(missed), new PushAudience { OnlyUsers = [person], OptedInTo = PreferenceKey }, cancellationToken);
+            await send.ExecuteAsync(Message(missed, taken.BatchId), new PushAudience { OnlyUsers = [person], OptedInTo = PreferenceKey }, cancellationToken);
             pushed++;
         }
 
@@ -244,8 +252,13 @@ public sealed partial class SendStockChangePush(
         return new StockPushSummary(taken.Changes.Count, people.Count, pushed, allSeen);
     }
 
-    public static PushMessage Message(IReadOnlyList<StockChange> changes) =>
-        new("Cupboard updated", Body(changes), "/", Topic, TimeSpan.FromHours(3));
+    /// <summary>The push. Tapping it opens the stock list, or (#89) the "add to the list?" sheet for the batch when
+    /// something was removed.</summary>
+    public static PushMessage Message(IReadOnlyList<StockChange> changes, Guid? batchId = null) =>
+        new("Cupboard updated", Body(changes), TapUrl(changes, batchId), Topic, TimeSpan.FromHours(3));
+
+    public static string TapUrl(IReadOnlyList<StockChange> changes, Guid? batchId) =>
+        batchId is { } id && Net(changes).Any(n => n.Kind == StockChangeKind.Removed) ? $"/?removed={id:D}" : "/";
 
     /// <summary><c>Added Milk, Bread and 4 more · Removed Hummus</c>: netted per product, up to 3 names a side, repeats
     /// as "2 × Milk", a side with nothing left out.</summary>

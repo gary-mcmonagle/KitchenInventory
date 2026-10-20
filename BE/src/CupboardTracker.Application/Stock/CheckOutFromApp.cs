@@ -1,5 +1,6 @@
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Push;
+using CupboardTracker.Application.RunOut;
 using CupboardTracker.Application.Users;
 using CupboardTracker.Domain.Stock;
 using Microsoft.Extensions.Logging;
@@ -23,7 +24,8 @@ public sealed partial class CheckOutFromApp(
     IUnitRepository units,
     TimeProvider clock,
     ILogger<CheckOutFromApp> logger,
-    AddStockChangeToPush? pushes = null)
+    AddStockChangeToPush? pushes = null,
+    AddWhenRunOut? runOut = null)
 {
     private const int MaxRounds = 5;
 
@@ -46,7 +48,9 @@ public sealed partial class CheckOutFromApp(
                     var product = await products.GetAsync(productId, cancellationToken);
                     var name = product?.DisplayName ?? "Unknown item";
                     LogCheckedOut(candidate.UnitId, productId, user.ObjectId);
-                    await PushAsync(pushes, candidate.UnitId, productId, name, user, checkedOut.CheckedOutAt ?? clock.GetUtcNow(), cancellationToken);
+                    var at = checkedOut.CheckedOutAt ?? clock.GetUtcNow();
+                    await PushAsync(pushes, candidate.UnitId, productId, name, user, at, cancellationToken);
+                    await RunOutAsync(runOut, candidate.UnitId, productId, at, cancellationToken);
                     return new CheckOutFromAppResult.CheckedOut(candidate.UnitId, productId, name, inStock.Count - 1);
                 }
 
@@ -64,10 +68,14 @@ public sealed partial class CheckOutFromApp(
         if (pushes is not null)
         {
             await pushes.ExecuteAsync(
-                new StockChange(StockChangeKeys.ForApp(unitId, "out", at), StockChangeKind.Removed, name, at, productId, user.ObjectId),
+                new StockChange(StockChangeKeys.ForApp(unitId, "out", at), StockChangeKind.Removed, name, at, productId, user.ObjectId, user.DisplayName),
                 cancellationToken);
         }
     }
+
+    /// <summary>Every check-out may put the generic name on the shopping list (#89).</summary>
+    internal static Task RunOutAsync(AddWhenRunOut? runOut, Guid unitId, Guid productId, DateTimeOffset at, CancellationToken cancellationToken) =>
+        runOut?.CheckedOutAsync(unitId, productId, at, cancellationToken) ?? Task.CompletedTask;
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Checked out unit {UnitId} of product {ProductId} from the app (user {UserId}).")]
     private partial void LogCheckedOut(Guid unitId, Guid productId, Guid userId);

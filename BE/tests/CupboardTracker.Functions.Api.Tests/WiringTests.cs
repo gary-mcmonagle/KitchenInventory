@@ -24,6 +24,7 @@ public sealed class WiringTests
     [InlineData(typeof(RecipeFunctions))]
     [InlineData(typeof(PushFunctions))]
     [InlineData(typeof(GenericNameFunctions))]
+    [InlineData(typeof(RunOutFunctions))]
     [InlineData(typeof(EstimateShelfLivesTimer))]
     [InlineData(typeof(PushJobFunction))]
     [InlineData(typeof(PushExpiryTimer))]

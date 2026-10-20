@@ -15,7 +15,13 @@ public static class ListItemSources
     public const string Suggestion = "suggestion";
     public const string ItemDetail = "itemDetail";
 
-    public static readonly IReadOnlySet<string> FromTheApp = new HashSet<string>(StringComparer.Ordinal) { Typed, Suggestion, ItemDetail };
+    /// <summary>"Add to the shopping list?" after a check-out (#89).</summary>
+    public const string CheckOutPrompt = "checkOutPrompt";
+
+    /// <summary>Added by itself when the house ran out (#89). Only the server adds these.</summary>
+    public const string AutoRunOut = "autoRunOut";
+
+    public static readonly IReadOnlySet<string> FromTheApp = new HashSet<string>(StringComparer.Ordinal) { Typed, Suggestion, ItemDetail, CheckOutPrompt };
 }
 
 /// <summary>How a list item got its aisle: from its product, from Jev (or a remembered Jev answer), or Other because

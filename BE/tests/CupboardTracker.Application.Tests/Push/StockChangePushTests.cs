@@ -22,6 +22,17 @@ internal sealed class FakeBatches : IStockChangeBatchRepository
     /// <summary>Runs before the next write, e.g. to simulate a concurrent change.</summary>
     public Action? BeforeWrite { get; set; }
 
+    public Dictionary<Guid, StockChangeBatch> Sent { get; } = [];
+
+    public Task SaveSentAsync(StockChangeBatch batch, CancellationToken cancellationToken)
+    {
+        Sent[batch.BatchId] = batch;
+        return Task.CompletedTask;
+    }
+
+    public Task<StockChangeBatch?> GetSentAsync(Guid batchId, CancellationToken cancellationToken) =>
+        Task.FromResult(Sent.GetValueOrDefault(batchId));
+
     public Task<Versioned<StockChangeBatch>?> GetOpenAsync(CancellationToken cancellationToken) =>
         Fail ? throw new InvalidOperationException("Cosmos is down") : Task.FromResult(Open);
 
@@ -230,8 +241,21 @@ public sealed class StockChangePushTests
         Assert.Equal(new StockPushSummary(3, 2, 2, 0), summary);
         Assert.Equal(["gary-laptop", "gary-phone", "sam-phone"], sender.Sent.Select(s => s.Subscription.Id).Order());
         var message = sender.Sent[0].Message;
-        Assert.Equal(("Cupboard updated", "Added Milk and Bread · Removed Hummus", "/", "stock"), (message.Title, message.Body, message.Path, message.Topic));
+        // Something was removed, so tapping it opens the "add to the list?" sheet for this batch (#89).
+        Assert.Equal(("Cupboard updated", "Added Milk and Bread · Removed Hummus", $"/?removed={batchId:D}", "stock"), (message.Title, message.Body, message.Path, message.Topic));
         Assert.Null(batches.Open); // closed
+        Assert.Equal(3, batches.Sent[batchId].Changes.Count); // kept for the sheet
+    }
+
+    [Fact]
+    public async Task A_push_with_nothing_removed_just_opens_the_stock_list()
+    {
+        Device(Gary, "gary-phone");
+        var batchId = await BatchOf(Change("Milk"));
+
+        await Sender().ExecuteAsync(batchId, CancellationToken.None);
+
+        Assert.Equal("/", sender.Sent[0].Message.Path);
     }
 
     [Fact]

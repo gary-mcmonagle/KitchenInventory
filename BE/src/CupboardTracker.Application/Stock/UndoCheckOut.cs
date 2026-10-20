@@ -1,5 +1,6 @@
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Push;
+using CupboardTracker.Application.RunOut;
 using CupboardTracker.Application.Users;
 using CupboardTracker.Domain.Stock;
 using Microsoft.Extensions.Logging;
@@ -21,7 +22,7 @@ public abstract record UndoCheckOutResult
 /// </summary>
 public sealed partial class UndoCheckOut(
     IUnitRepository units, ILogger<UndoCheckOut> logger, IProductRepository? products = null, AddStockChangeToPush? pushes = null,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null, AddWhenRunOut? runOut = null)
 {
     private const int MaxAttempts = 5;
 
@@ -44,12 +45,17 @@ public sealed partial class UndoCheckOut(
             if (await units.TryReplaceAsync(current, unit.UndoCheckOut(), cancellationToken))
             {
                 LogRestored(unitId, unit.ProductId, unit.CheckOutSource);
+                if (runOut is not null && unit.CheckedOutAt is { } checkedOutAt)
+                {
+                    await runOut.UndoneAsync(unitId, checkedOutAt, cancellationToken); // an automatic add for it comes off the list (#89)
+                }
+
                 if (pushes is not null && user is not null)
                 {
                     var at = (clock ?? TimeProvider.System).GetUtcNow();
                     var name = (products is null ? null : await products.GetAsync(unit.ProductId, cancellationToken))?.DisplayName ?? "Unknown item";
                     await pushes.ExecuteAsync(
-                        new StockChange(StockChangeKeys.ForApp(unitId, "undo", at), StockChangeKind.Added, name, at, unit.ProductId, user.ObjectId),
+                        new StockChange(StockChangeKeys.ForApp(unitId, "undo", at), StockChangeKind.Added, name, at, unit.ProductId, user.ObjectId, user.DisplayName),
                         cancellationToken);
                 }
 

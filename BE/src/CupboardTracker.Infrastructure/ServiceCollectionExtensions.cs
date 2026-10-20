@@ -10,6 +10,7 @@ using CupboardTracker.Application.Ping;
 using CupboardTracker.Application.GenericNaming;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Push;
+using CupboardTracker.Application.RunOut;
 using CupboardTracker.Application.Recipes;
 using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Application.Scanners;
@@ -67,6 +68,11 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ShoppingListNotifier>();
         services.AddTransient<AddToShoppingList>();
         services.AddTransient<ChangeShoppingListItem>();
+        services.AddTransient<RunOutGroups>(); // #89
+        services.AddTransient<AddWhenRunOut>();
+        services.AddTransient<SetAddWhenOut>();
+        services.AddTransient<GetRunOutStatus>();
+        services.AddTransient<GetRunOutChoices>();
         services.AddTransient<ClearDoneShoppingListItems>();
         services.AddTransient<GetShoppingList>();
         services.AddTransient<SuggestListItems>();

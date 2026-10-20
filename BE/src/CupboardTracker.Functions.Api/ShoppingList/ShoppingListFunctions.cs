@@ -60,8 +60,14 @@ public sealed class ShoppingListFunctions(
             productId = parsed;
         }
 
+        var source = Text(root, "source") ?? ListItemSources.Typed;
+        if (source == ListItemSources.AutoRunOut)
+        {
+            return await JsonAsync(request, HttpStatusCode.BadRequest, new { error = "Only the server adds autoRunOut items." });
+        }
+
         var result = await add.ExecuteAsync(
-            new AddListItem(id, Text(root, "changeId") ?? "", Text(root, "name"), Text(root, "note"), productId, Text(root, "source") ?? ListItemSources.Typed),
+            new AddListItem(id, Text(root, "changeId") ?? "", Text(root, "name"), Text(root, "note"), productId, source),
             context.GetCurrentUser(), cancellationToken);
         return await RespondAsync(request, result);
     }

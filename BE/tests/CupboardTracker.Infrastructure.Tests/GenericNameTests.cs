@@ -166,4 +166,18 @@ public sealed class GenericNameTests
         Assert.Equal(name, CosmosGenericNameRepository.FromDocument(JsonNode.Parse(document.ToJsonString())!.AsObject()));
         Assert.Null(CosmosGenericNameRepository.FromDocument(new JsonObject { ["id"] = "barcode:123", ["type"] = "barcodeLookup" }));
     }
+
+    [Fact]
+    public void The_add_when_out_setting_round_trips_and_older_records_without_it_read_as_off()
+    {
+        var at = new DateTimeOffset(2026, 10, 20, 21, 0, 0, TimeSpan.Zero);
+        var on = GenericName.Create("Semi-skimmed milk", "dairyEggs", at, "foundry") with { AddWhenOut = true, AddWhenOutBy = Guid.NewGuid(), AddWhenOutAt = at };
+
+        var document = CosmosGenericNameRepository.ToDocument(on);
+
+        Assert.True(document["addWhenOut"]!.GetValue<bool>());
+        Assert.Equal(on, CosmosGenericNameRepository.FromDocument(JsonNode.Parse(document.ToJsonString())!.AsObject()));
+        var older = new JsonObject { ["id"] = "generic:milk", ["type"] = "genericName", ["name"] = "Milk", ["aisle"] = "dairyEggs" };
+        Assert.False(CosmosGenericNameRepository.FromDocument(older)!.AddWhenOut);
+    }
 }

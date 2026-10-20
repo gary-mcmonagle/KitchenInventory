@@ -67,11 +67,34 @@ public sealed class CosmosStockChangeBatchRepository(CosmosContainers containers
         return true;
     }
 
-    internal static JsonObject ToDocument(StockChangeBatch batch) => new()
+    /// <summary>A sent batch is kept as <c>batchSent:&lt;batchId&gt;</c> for <see cref="SentTtl"/> (#89).</summary>
+    public static readonly TimeSpan SentTtl = TimeSpan.FromDays(3);
+
+    public static string SentKey(Guid batchId) => $"batchSent:{batchId:D}";
+
+    public async Task SaveSentAsync(StockChangeBatch batch, CancellationToken cancellationToken)
     {
-        ["id"] = Key,
-        ["eventKey"] = Key,
-        ["type"] = "stockChangeBatch",
+        var key = SentKey(batch.BatchId);
+        var document = ToDocument(batch, key, "stockChangeBatchSent", SentTtl);
+        using var stream = CosmosJson.ToStream(document);
+        using var response = await PushSeen.UpsertItemStreamAsync(stream, new PartitionKey(key), cancellationToken: cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<StockChangeBatch?> GetSentAsync(Guid batchId, CancellationToken cancellationToken)
+    {
+        var key = SentKey(batchId);
+        using var response = await PushSeen.ReadItemStreamAsync(key, new PartitionKey(key), cancellationToken: cancellationToken);
+        return await CosmosJson.ReadAsync(response, cancellationToken) is { } document ? FromDocument(document) : null;
+    }
+
+    internal static JsonObject ToDocument(StockChangeBatch batch) => ToDocument(batch, Key, "stockChangeBatch", Ttl);
+
+    private static JsonObject ToDocument(StockChangeBatch batch, string key, string type, TimeSpan ttl) => new()
+    {
+        ["id"] = key,
+        ["eventKey"] = key,
+        ["type"] = type,
         ["batchId"] = batch.BatchId.ToString(),
         ["firstAt"] = CosmosJson.Timestamp(batch.FirstAt),
         ["lastAt"] = CosmosJson.Timestamp(batch.LastAt),
@@ -83,8 +106,9 @@ public sealed class CosmosStockChangeBatchRepository(CosmosContainers containers
             ["at"] = CosmosJson.Timestamp(c.At),
             ["productId"] = c.ProductId?.ToString(),
             ["actorId"] = c.ActorId?.ToString(),
+            ["actorName"] = c.ActorName,
         })]),
-        ["ttl"] = (int)Ttl.TotalSeconds,
+        ["ttl"] = (int)ttl.TotalSeconds,
     };
 
     internal static StockChangeBatch FromDocument(JsonObject document) => new(
@@ -97,5 +121,6 @@ public sealed class CosmosStockChangeBatchRepository(CosmosContainers containers
             CosmosJson.Text(c["name"]) ?? "",
             CosmosJson.ParseTimestamp(c["at"]) ?? DateTimeOffset.MinValue,
             Guid.TryParse(CosmosJson.Text(c["productId"]), out var productId) ? productId : null,
-            Guid.TryParse(CosmosJson.Text(c["actorId"]), out var actorId) ? actorId : null))]);
+            Guid.TryParse(CosmosJson.Text(c["actorId"]), out var actorId) ? actorId : null,
+            CosmosJson.Text(c["actorName"])))]);
 }

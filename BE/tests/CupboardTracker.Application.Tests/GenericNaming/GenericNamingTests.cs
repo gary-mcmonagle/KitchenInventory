@@ -14,7 +14,10 @@ internal sealed class FakeGenericNames : IGenericNameRepository
     public Task<IReadOnlyList<GenericName>> ListAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<GenericName>>([.. Items.Values]);
 
-    public Task<GenericName?> GetAsync(string id, CancellationToken cancellationToken) => Task.FromResult(Items.GetValueOrDefault(id));
+    public bool Fail { get; set; }
+
+    public Task<GenericName?> GetAsync(string id, CancellationToken cancellationToken) =>
+        Fail ? throw new InvalidOperationException("Cosmos is down") : Task.FromResult(Items.GetValueOrDefault(id));
 
     public Task<GenericName> GetOrCreateAsync(GenericName name, CancellationToken cancellationToken)
     {
@@ -24,6 +27,17 @@ internal sealed class FakeGenericNames : IGenericNameRepository
         }
 
         return Task.FromResult(existing);
+    }
+
+    public Task<GenericName?> SetAddWhenOutAsync(string id, bool enabled, Guid by, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        if (!Items.TryGetValue(id, out var name))
+        {
+            return Task.FromResult<GenericName?>(null);
+        }
+
+        Items[id] = name = name with { AddWhenOut = enabled, AddWhenOutBy = by, AddWhenOutAt = at };
+        return Task.FromResult<GenericName?>(name);
     }
 }
 
