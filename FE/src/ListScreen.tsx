@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SignInRequiredError, type ApiClient, type ListSuggestion, type ShoppingListItem } from "./api";
 import { groupByAisle, listWhen, type ListGroup } from "./shoppingList";
-import { useShoppingList } from "./useShoppingList";
+import { useShoppingList, type ShoppingList } from "./useShoppingList";
 import styles from "./List.module.css";
 
 /** Sort by aisle, remembered on this device. Storage can be missing or throw: then off. */
@@ -25,6 +25,9 @@ function rememberByAisle(on: boolean) {
 
 const SUGGEST_DELAY_MS = 200;
 
+/** A suggestion as shown: offline ones (#85) have no stock count. */
+type Suggestion = Omit<ListSuggestion, "inStock"> & { inStock: number | null };
+
 /**
  * The shared shopping list (#84, project/List.dc.html): add with suggestions, tick off, remove, Sort by aisle, Recently
  * ticked off and Clear ticked. Live through SignalR (no polling); see useShoppingList.
@@ -37,9 +40,10 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
     const [doneOpen, setDoneOpen] = useState(true);
     const asked = useRef(0);
 
+    const offline = list.offline;
     useEffect(() => {
         const q = query.trim();
-        if (!q) {
+        if (!q || offline) {
             setSuggestions([]);
             return;
         }
@@ -53,7 +57,7 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
                 });
         }, SUGGEST_DELAY_MS);
         return () => clearTimeout(timer);
-    }, [api, query]);
+    }, [api, query, offline]);
 
     const add = (name: string, productId: string | null = null) => {
         list.add(name, productId, productId ? "suggestion" : "typed");
@@ -63,13 +67,15 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
     };
 
     const openNames = new Set(list.open.map((i) => i.name.trim().toLowerCase()));
-    const shown = suggestions.filter((s) => !openNames.has(s.name.trim().toLowerCase()));
+    const known: Suggestion[] = offline ? offlineSuggestions(list.knownNames, query) : suggestions;
+    const shown = known.filter((s) => !openNames.has(s.name.trim().toLowerCase()));
     const groups: ListGroup[] = byAisle ? groupByAisle(list.open) : [{ title: null, items: list.open }];
     const count = list.open.length;
     const at = now ?? new Date();
 
     return (
         <div className={styles.screen}>
+            <SyncBanner list={list} api={api} />
             <header className={styles.header}>
                 <div className={styles.kicker}>Shared with everyone at home</div>
                 <h1 className={styles.title}>Shopping list</h1>
@@ -137,9 +143,11 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
                                     onClick={() => add(s.name, s.productId)}
                                 >
                                     <span className={styles.suggestionName}>{s.name}</span>
-                                    <span className={s.inStock > 0 ? styles.inStock : styles.noneInStock}>
-                                        {s.inStock > 0 ? `${s.inStock} in stock` : "None in stock"}
-                                    </span>
+                                    {s.inStock !== null && (
+                                        <span className={s.inStock > 0 ? styles.inStock : styles.noneInStock}>
+                                            {s.inStock > 0 ? `${s.inStock} in stock` : "None in stock"}
+                                        </span>
+                                    )}
                                 </button>
                             </li>
                         ))}
@@ -206,6 +214,10 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
                                             key={item.id}
                                             item={item}
                                             now={at}
+                                            pending={
+                                                (list.offline || list.needsSignIn) &&
+                                                list.pending.has(item.id)
+                                            }
                                             onTick={() => list.tick(item, true)}
                                             onRemove={() => list.remove(item)}
                                         />
@@ -290,14 +302,85 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
     );
 }
 
+/** Suggestions with no connection (#85): names seen on the list before, from this phone's copy. No stock counts. */
+export function offlineSuggestions(names: readonly string[], query: string): Suggestion[] {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return names
+        .filter((n) => n.toLowerCase().includes(q))
+        .slice(0, 8)
+        .map((name) => ({ name, productId: null, inStock: null }));
+}
+
+const changes = (n: number) => (n === 1 ? "1 change waiting to sync" : `${n} changes waiting to sync`);
+
+/** Offline, Syncing…, Synced, or Sign in to sync (#85; the Shopping list artboard's `offline` banner). */
+function SyncBanner({ list, api }: { list: ShoppingList; api: ApiClient }) {
+    if (list.needsSignIn)
+        return (
+            <div role="status" className={styles.banner}>
+                <span className={styles.bannerText}>Sign in to sync your changes</span>
+                <button type="button" className={styles.bannerButton} onClick={() => void api.signInAgain()}>
+                    Sign in
+                </button>
+            </div>
+        );
+    if (list.offline)
+        return (
+            <div role="status" className={styles.banner}>
+                <OfflineIcon />
+                <span className={styles.bannerText}>
+                    Offline{list.waiting > 0 ? ` · ${changes(list.waiting)}` : ""}
+                </span>
+            </div>
+        );
+    if (list.sync === "syncing" && list.waiting > 0)
+        return (
+            <div role="status" className={styles.bannerCalm}>
+                <span className={styles.bannerText}>
+                    Syncing {changes(list.waiting).replace(" waiting to sync", "")}…
+                </span>
+            </div>
+        );
+    if (list.sync === "synced")
+        return (
+            <div role="status" className={styles.bannerCalm}>
+                <span className={styles.bannerText}>Synced</span>
+            </div>
+        );
+    return null;
+}
+
+function OfflineIcon() {
+    return (
+        <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+        >
+            <path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0" />
+            <path d="M12 19h.01" />
+            <path d="M3 3l18 18" />
+        </svg>
+    );
+}
+
 function OpenRow({
     item,
     now,
+    pending,
     onTick,
     onRemove,
 }: {
     item: ShoppingListItem;
     now: Date;
+    pending: boolean;
     onTick: () => void;
     onRemove: () => void;
 }) {
@@ -320,6 +403,7 @@ function OpenRow({
                     {item.findingAisle && (
                         <span role="status" aria-label="Finding its aisle" className={styles.spinner} />
                     )}
+                    {pending && <span className={styles.notSynced}>Not synced</span>}
                 </div>
                 <div className={styles.meta}>
                     {item.findingAisle

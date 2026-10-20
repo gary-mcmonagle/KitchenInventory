@@ -606,11 +606,17 @@ export class ApiClient {
         return this.send("PUT", `/api/shopping-list/items/${encodeURIComponent(id)}`, add);
     }
 
-    tickListItem(id: string, done: boolean, changeId: string): Promise<{ item: ShoppingListItem }> {
+    /** `at`: when it was ticked or unticked on this phone, so a late (offline) change can't undo a newer one (#85). */
+    tickListItem(
+        id: string,
+        done: boolean,
+        changeId: string,
+        at?: string,
+    ): Promise<{ item: ShoppingListItem }> {
         return this.send(
             "POST",
             `/api/shopping-list/items/${encodeURIComponent(id)}/${done ? "done" : "undone"}`,
-            { changeId },
+            { changeId, at },
         );
     }
 
@@ -701,12 +707,20 @@ export class ApiClient {
  * token has expired after about a day) MSAL's hidden-frame renewal is blocked and times out. Not when offline, or
  * when a sign-in is already under way.
  */
-export function needsSignIn(error: unknown): boolean {
+export function needsSignIn(
+    error: unknown,
+    online: boolean = typeof navigator === "undefined" || navigator.onLine,
+): boolean {
+    // Never send anyone to Microsoft while offline (#85): the changes wait in the outbox instead.
+    if (!online) return false;
     if (error instanceof InteractionRequiredAuthError) return true;
     if (!(error instanceof BrowserAuthError)) return false;
-    return !["no_network_connectivity", "interaction_in_progress", "redirect_in_iframe"].includes(
-        error.errorCode,
-    );
+    return ![
+        "no_network_connectivity",
+        "post_request_failed", // how MSAL reports some offline failures (spike #83)
+        "interaction_in_progress",
+        "redirect_in_iframe",
+    ].includes(error.errorCode);
 }
 
 /** A short code for an error, shown in small print so a failure on a phone can be reported (e.g. "BrowserAuthError:

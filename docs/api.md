@@ -618,6 +618,8 @@ One list for the household. Every endpoint needs a signed-in user (**401** witho
 
 Body `{ "changeId": "…" }`. Tick off, put back, or remove (a tombstone). The same `changeId` again changes nothing. **200** `{ "item": {…} }`; **404** for an unknown id.
 
+`/done` and `/undone` also take an optional **`at`** (ISO 8601 with offset; **400** if it isn't one): when the change was really made on the phone, for changes sent late from the **outbox** (#85). A tick or put-back made **at or before** the item's last tick or put-back changes nothing (200 with the item as it is), so a late offline change never undoes a newer one. A time in the future counts as now. Without `at`, the change counts as made now. The item stores it as `statusChangedAt`.
+
 ### `POST /api/shopping-list/clear-done`
 
 "Clear ticked": every ticked item becomes a tombstone. **200** `{ "cleared": ["…"] }`. A timer does the same for items ticked off more than a day ago.

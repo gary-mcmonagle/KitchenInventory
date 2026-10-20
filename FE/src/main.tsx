@@ -6,6 +6,11 @@ import { App } from "./App";
 import { createMsal } from "./auth";
 import { readConfig } from "./config";
 import { registerServiceWorker } from "./pwa";
+// Figtree, self-hosted so the installed app has it offline (#85, spike #83): latin, the weights the mockups use.
+import "@fontsource/figtree/latin-400.css";
+import "@fontsource/figtree/latin-500.css";
+import "@fontsource/figtree/latin-600.css";
+import "@fontsource/figtree/latin-700.css";
 import "./tokens.css";
 
 const config = readConfig();

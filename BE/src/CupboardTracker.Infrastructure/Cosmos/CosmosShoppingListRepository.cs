@@ -115,6 +115,7 @@ public sealed class CosmosShoppingListRepository(CosmosContainers containers) : 
             ["version"] = item.Version,
             ["changeId"] = item.ChangeId,
             ["removed"] = item.Removed,
+            ["statusChangedAt"] = CosmosJson.Timestamp(item.StatusChangedAt),
         };
         if (item.Removed)
         {
@@ -143,7 +144,8 @@ public sealed class CosmosShoppingListRepository(CosmosContainers containers) : 
         CosmosJson.ParseTimestamp(d["updatedAt"]) ?? DateTimeOffset.MinValue,
         d["version"] is JsonValue v && v.TryGetValue<long>(out var version) ? version : 1,
         CosmosJson.Text(d["changeId"]) ?? "",
-        d["removed"] is JsonValue r && r.TryGetValue<bool>(out var removed) && removed);
+        d["removed"] is JsonValue r && r.TryGetValue<bool>(out var removed) && removed,
+        CosmosJson.ParseTimestamp(d["statusChangedAt"]));
 
     private static Versioned<ShoppingListItem> Versioned(JsonObject d) => new(FromDocument(d), CosmosJson.Text(d["_etag"])!);
 

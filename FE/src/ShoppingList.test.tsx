@@ -267,13 +267,13 @@ test("tick off, put back, remove and Clear ticked", async () => {
     await flush();
 
     await act(async () => fireEvent.click(screen.getByRole("checkbox", { name: "Tick off Bread" })));
-    expect(api.tickListItem).toHaveBeenCalledWith("1", true, expect.any(String));
+    expect(api.tickListItem).toHaveBeenCalledWith("1", true, expect.any(String), expect.any(String));
     expect(rows("Recently ticked off")[0]).toHaveTextContent("Bread");
 
     await act(async () =>
         fireEvent.click(screen.getByRole("checkbox", { name: "Put Bread back on the list" })),
     );
-    expect(api.tickListItem).toHaveBeenLastCalledWith("1", false, expect.any(String));
+    expect(api.tickListItem).toHaveBeenLastCalledWith("1", false, expect.any(String), expect.any(String));
 
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Remove Milk" })));
     expect(api.removeListItem).toHaveBeenCalledWith("2", expect.any(String));

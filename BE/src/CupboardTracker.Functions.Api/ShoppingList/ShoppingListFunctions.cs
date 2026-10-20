@@ -79,9 +79,20 @@ public sealed class ShoppingListFunctions(
         }
 
         var changeId = Text(root, "changeId") ?? "";
+        DateTimeOffset? at = null;
+        if (Text(root, "at") is { } atText)
+        {
+            if (!DateTimeOffset.TryParse(atText, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+            {
+                return await JsonAsync(request, HttpStatusCode.BadRequest, new { error = "at must be a timestamp." });
+            }
+
+            at = parsed;
+        }
+
         var result = state == "done"
-            ? await change.DoneAsync(id, changeId, context.GetCurrentUser(), cancellationToken)
-            : await change.UndoneAsync(id, changeId, cancellationToken);
+            ? await change.DoneAsync(id, changeId, context.GetCurrentUser(), cancellationToken, at)
+            : await change.UndoneAsync(id, changeId, cancellationToken, at);
         return await RespondAsync(request, result);
     }
 

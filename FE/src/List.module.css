@@ -426,3 +426,51 @@
     font-weight: 700;
     cursor: pointer;
 }
+
+/* Offline and sync states (#85; the artboard's `offline` banner and "Not synced" tag). */
+.banner,
+.bannerCalm {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px var(--page-x);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.banner {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.bannerCalm {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.bannerText {
+    flex: 1;
+}
+
+.bannerButton {
+    flex: none;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--warn-fg);
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.notSynced {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 12px;
+    font-weight: 700;
+}

@@ -243,6 +243,15 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Shopping list** – the household's one shared list of things to buy (#84), on the List tab. Items are added by **generic name**; anyone can tick them off, and every open phone sees changes within a couple of seconds.
 - In code: `ShoppingListItem`, `AddToShoppingList`, `ListScreen`, `useShoppingList`, `shoppingList` container
 
+**Outbox** – the changes to the shopping list made on a phone but not yet sent (#85): each add, tick, put-back, removal and Clear ticked, with its own change ID and the time it was made, kept in order on the phone (IndexedDB, with the list's last copy). Rows with a change waiting show **Not synced** while offline.
+- In code: `OutboxEntry`, `listStore.ts`, `ShoppingList.waiting`
+
+**Sync** – sending the outbox, oldest first, through the list's normal idempotent endpoints, then catching up with `since`. Happens on open, when the connection comes back, on returning to the app, after each change, and every 30 s while something waits. Shown as **Offline · n changes waiting to sync**, then **Syncing…**, then a brief **Synced**; **Sign in to sync your changes** if the sign-in has expired (the outbox is kept).
+- In code: `ShoppingListProvider` (`flush`), `SyncBanner`
+
+**App shell** – the app's own files (the page, scripts, styles, fonts, icons) that the service worker keeps so the installed app opens with no signal (#85). One cache per deploy (`cupboard-shell-<version>`).
+- In code: `FE/public/sw.js`, `FE/sw-shell.mjs`
+
 **List aisle** – the aisle a shopping list item is grouped under with **Sort by aisle**: its product's aisle, or Jev's answer for a typed item (shown as "Finding its aisle…" until it arrives), remembered for that name.
 - In code: `ShoppingListItem.Aisle`, `AssignListAisle`, `ListMemory`
 

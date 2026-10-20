@@ -171,15 +171,33 @@ public sealed partial class ChangeShoppingListItem(
 {
     private const int MaxRounds = 5;
 
-    public Task<ListChangeResult> DoneAsync(Guid id, string changeId, CurrentUser user, CancellationToken cancellationToken) =>
-        ChangeAsync(id, changeId, (i, now) => i.Status == ListItemStatus.Done ? null
-            : i.Changed(changeId, now) with { Status = ListItemStatus.Done, DoneBy = user.ObjectId, DoneByName = user.DisplayName, DoneAt = now },
-            cancellationToken);
+    /// <summary>Tick off. <paramref name="at"/> is when it was ticked on the phone (offline changes arrive late, #85):
+    /// it applies only if newer than the item's last tick or untick. A time in the future counts as now.</summary>
+    public Task<ListChangeResult> DoneAsync(Guid id, string changeId, CurrentUser user, CancellationToken cancellationToken, DateTimeOffset? at = null) =>
+        ChangeAsync(id, changeId, (i, now) =>
+        {
+            var when = Clamp(at, now);
+            return i.Status == ListItemStatus.Done || (at is not null && Stale(i, when)) ? null
+                : i.Changed(changeId, now) with
+                {
+                    Status = ListItemStatus.Done, DoneBy = user.ObjectId, DoneByName = user.DisplayName, DoneAt = when, StatusChangedAt = when,
+                };
+        }, cancellationToken);
 
-    public Task<ListChangeResult> UndoneAsync(Guid id, string changeId, CancellationToken cancellationToken) =>
-        ChangeAsync(id, changeId, (i, now) => i.Status == ListItemStatus.Open ? null
-            : i.Changed(changeId, now) with { Status = ListItemStatus.Open, DoneBy = null, DoneByName = null, DoneAt = null },
-            cancellationToken);
+    /// <summary>Put back on the list; the same "newer wins" rule as <see cref="DoneAsync"/>.</summary>
+    public Task<ListChangeResult> UndoneAsync(Guid id, string changeId, CancellationToken cancellationToken, DateTimeOffset? at = null) =>
+        ChangeAsync(id, changeId, (i, now) =>
+        {
+            var when = Clamp(at, now);
+            return i.Status == ListItemStatus.Open || (at is not null && Stale(i, when)) ? null
+                : i.Changed(changeId, now) with { Status = ListItemStatus.Open, DoneBy = null, DoneByName = null, DoneAt = null, StatusChangedAt = when };
+        }, cancellationToken);
+
+    private static DateTimeOffset Clamp(DateTimeOffset? at, DateTimeOffset now) => at is { } a && a < now ? a : now;
+
+    /// <summary>A change that says when it was made (the outbox always does) loses to a newer or equal tick or untick;
+    /// one that doesn't applies in arrival order.</summary>
+    private static bool Stale(ShoppingListItem item, DateTimeOffset when) => item.StatusChangedAt is { } last && when <= last; // a replay of the same change is stale too
 
     public Task<ListChangeResult> RemoveAsync(Guid id, string changeId, CancellationToken cancellationToken) =>
         ChangeAsync(id, changeId, (i, now) => i.Changed(changeId, now) with { Removed = true }, cancellationToken);

@@ -3,7 +3,7 @@ import {
     InteractionRequiredAuthError,
     type IPublicClientApplication,
 } from "@azure/msal-browser";
-import { ApiClient, ApiError, errorCode, NoAccessError, SignInRequiredError } from "./api";
+import { ApiClient, ApiError, errorCode, needsSignIn, NoAccessError, SignInRequiredError } from "./api";
 import type { AppConfig } from "./config";
 
 const config: AppConfig = {
@@ -150,4 +150,11 @@ test("Sign in again starts an interactive sign-in", async () => {
         SignInRequiredError,
     );
     expect(msal.acquireTokenRedirect).toHaveBeenCalled();
+});
+
+test("offline, a failed renewal never redirects to sign-in (the outbox waits instead)", () => {
+    expect(needsSignIn(new InteractionRequiredAuthError("interaction_required", "x"), false)).toBe(false);
+    expect(needsSignIn(new BrowserAuthError("monitor_window_timeout", "x"), false)).toBe(false);
+    expect(needsSignIn(new BrowserAuthError("post_request_failed", "x"), true)).toBe(false);
+    expect(needsSignIn(new BrowserAuthError("monitor_window_timeout", "x"), true)).toBe(true);
 });

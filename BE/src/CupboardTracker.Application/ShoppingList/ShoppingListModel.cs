@@ -31,7 +31,8 @@ public static class ListAisleSources
 /// One thing on the household's shopping list (#84). <see cref="Id"/> and every change's <see cref="ChangeId"/> come from
 /// the app, so a retried write (or one sent again after being offline) is applied once. <see cref="Version"/> goes up on
 /// every change; apps keep the higher one. A removed item stays a while as a tombstone (<see cref="Removed"/>), so apps
-/// catching up learn it's gone.
+/// catching up learn it's gone. <see cref="StatusChangedAt"/> is when the last tick or untick was made (on the phone,
+/// #85), so a change sent late from an offline phone can't undo a newer one.
 /// </summary>
 public sealed record ShoppingListItem(
     Guid Id,
@@ -52,7 +53,8 @@ public sealed record ShoppingListItem(
     DateTimeOffset UpdatedAt,
     long Version,
     string ChangeId,
-    bool Removed = false)
+    bool Removed = false,
+    DateTimeOffset? StatusChangedAt = null)
 {
     /// <summary>Waiting for Jev to say which aisle (the app shows a spinner).</summary>
     public bool FindingAisle => Aisle is null && !Removed;

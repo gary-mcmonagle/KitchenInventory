@@ -82,13 +82,123 @@ describe("index.html", () => {
 describe("the service worker", () => {
     const sw = swText;
 
-    test("takes over after a deploy, and never intercepts requests (no fetch handler, so API calls go straight out)", () => {
+    test("takes over after a deploy", () => {
         expect(sw).toContain('addEventListener("install"');
         expect(sw).toContain("skipWaiting()");
         expect(sw).toContain("clients.claim()");
-        expect(sw).not.toMatch(/addEventListener\(\s*["']fetch["']/);
-        expect(sw).not.toMatch(/onfetch/);
-        expect(sw).not.toMatch(/caches\./);
+    });
+
+    /** Runs sw.js as the build leaves it (#85), with fake caches and fetch. */
+    function built(online: boolean) {
+        const files = ["/index.html", "/assets/index-abc.js", "/icons/icon-192.png"];
+        const text = sw
+            .replace('"__SHELL_VERSION__"', '"v2"')
+            .replace("/* __SHELL_FILES__ */ []", JSON.stringify(files));
+        const stores = new Map<string, Map<string, Response>>([["cupboard-shell-v1", new Map()]]);
+        const open = async (name: string) => {
+            if (!stores.has(name)) stores.set(name, new Map());
+            const store = stores.get(name)!;
+            return {
+                addAll: async (urls: string[]) =>
+                    urls.forEach((u) => store.set(u, new Response(`cached ${u}`))),
+                put: async (url: string, response: Response) => void store.set(url, response),
+                match: async (url: string) => store.get(url),
+            };
+        };
+        const caches = {
+            open,
+            keys: async () => [...stores.keys()],
+            delete: async (name: string) => stores.delete(name),
+            match: async (url: string) => {
+                for (const store of stores.values()) if (store.has(url)) return store.get(url);
+                return undefined;
+            },
+        };
+        const fetched: string[] = [];
+        const fetch = vi.fn(async (request: Request | string) => {
+            const url = typeof request === "string" ? request : request.url;
+            fetched.push(url);
+            if (!online) throw new TypeError("Failed to fetch");
+            return new Response(`network ${url}`);
+        });
+        const listeners: Record<string, (event: unknown) => void> = {};
+        const self = {
+            addEventListener: (type: string, fn: (event: unknown) => void) => (listeners[type] = fn),
+            skipWaiting: () => undefined,
+            clients: { claim: async () => undefined },
+            location: { origin: "https://kitchen.garymcmonagle.com" },
+        };
+        new Function("self", "caches", "fetch", text)(self, caches, fetch);
+        const lifecycle = async (type: string) => {
+            let work: Promise<unknown> = Promise.resolve();
+            listeners[type]({ waitUntil: (p: Promise<unknown>) => (work = p) });
+            await work;
+        };
+        const request = async (url: string, init: { method?: string; mode?: string } = {}) => {
+            let answer: Promise<Response> | undefined;
+            listeners.fetch({
+                request: { url, method: init.method ?? "GET", mode: init.mode ?? "cors" },
+                respondWith: (p: Promise<Response>) => (answer = p),
+            });
+            return answer ? (await answer).text() : undefined;
+        };
+        return { stores, fetched, lifecycle, request };
+    }
+
+    test("caches the shell on install and drops the last deploy's cache when it takes over", async () => {
+        const worker = built(true);
+        await worker.lifecycle("install");
+        await worker.lifecycle("activate");
+        expect([...worker.stores.keys()]).toEqual(["cupboard-shell-v2"]);
+        expect([...worker.stores.get("cupboard-shell-v2")!.keys()]).toContain("/assets/index-abc.js");
+    });
+
+    test("the shell comes from the cache; the API, sign-in, version.json and writes are never touched", async () => {
+        const worker = built(true);
+        await worker.lifecycle("install");
+        expect(await worker.request("https://kitchen.garymcmonagle.com/assets/index-abc.js")).toBe(
+            "cached /assets/index-abc.js",
+        );
+        expect(
+            await worker.request("https://func-cupboard-api-x.azurewebsites.net/api/stock"),
+        ).toBeUndefined();
+        expect(
+            await worker.request("https://login.microsoftonline.com/tenant/oauth2/v2.0/token"),
+        ).toBeUndefined();
+        expect(await worker.request("https://kitchen.garymcmonagle.com/version.json")).toBeUndefined();
+        expect(
+            await worker.request("https://kitchen.garymcmonagle.com/assets/index-abc.js", { method: "POST" }),
+        ).toBeUndefined();
+    });
+
+    test("pages come from the network when online, and from the cached app page offline", async () => {
+        const online = built(true);
+        await online.lifecycle("install");
+        expect(await online.request("https://kitchen.garymcmonagle.com/list", { mode: "navigate" })).toBe(
+            "network https://kitchen.garymcmonagle.com/list",
+        );
+
+        const offline = built(false);
+        await offline.lifecycle("install");
+        expect(await offline.request("https://kitchen.garymcmonagle.com/list", { mode: "navigate" })).toBe(
+            "cached /index.html",
+        );
+    });
+
+    test("unbuilt (the dev server), it caches nothing and answers nothing", async () => {
+        const listeners: Record<string, (event: unknown) => void> = {};
+        const self = {
+            addEventListener: (type: string, fn: (event: unknown) => void) => (listeners[type] = fn),
+            skipWaiting: () => undefined,
+            location: { origin: "http://localhost:5173" },
+        };
+        new Function("self", sw)(self);
+        const respondWith = vi.fn();
+        listeners.fetch({
+            request: { url: "http://localhost:5173/list", method: "GET", mode: "navigate" },
+            respondWith,
+        });
+        expect(respondWith).not.toHaveBeenCalled();
     });
 });
 

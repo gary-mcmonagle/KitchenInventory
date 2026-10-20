@@ -9,7 +9,15 @@ import {
     type ReactNode,
 } from "react";
 import { HubConnectionState } from "@microsoft/signalr";
-import { SignInRequiredError, type ApiClient, type ShoppingListItem } from "./api";
+import { ApiError, SignInRequiredError, type ApiClient, type ShoppingListItem } from "./api";
+import {
+    askToPersist,
+    indexedDbPersistence,
+    send,
+    type ListPersistence,
+    type ListSnapshot,
+    type OutboxEntry,
+} from "./listStore";
 import {
     applyItem,
     applyRemoved,
@@ -22,11 +30,25 @@ import {
 } from "./shoppingList";
 import { signalRConnection, type FeedConnection } from "./useScanFeed";
 
+/** "Syncing…" while the outbox is being sent, then "Synced" for a moment (#85). */
+export type SyncState = "idle" | "syncing" | "synced";
+
 export interface ShoppingList {
     loaded: boolean;
     failed: boolean;
     open: ShoppingListItem[];
     done: ShoppingListItem[];
+    /** No connection (#85): changes go into the outbox and wait. */
+    offline: boolean;
+    /** Changes made on this phone not yet sent. */
+    waiting: number;
+    /** Item ids with a change waiting to be sent ("Not synced"). */
+    pending: ReadonlySet<string>;
+    sync: SyncState;
+    /** Online, but the sign-in can't be renewed: the outbox is kept until the person signs in again. */
+    needsSignIn: boolean;
+    /** Every name seen on the list, for suggestions while offline. */
+    knownNames: readonly string[];
     /** Adds at once (the row appears straight away); the API's answer and live events fill in the rest. */
     add(name: string, productId?: string | null, source?: string): void;
     tick(item: ShoppingListItem, done: boolean): void;
@@ -54,27 +76,68 @@ export function useOpenCount(): number {
     return useContext(Context)?.open.length ?? 0;
 }
 
+export const SYNC_EVERY_MS = 30_000;
+export const SYNCED_FOR_MS = 3_000;
+
+const isOnline = () => typeof navigator === "undefined" || navigator.onLine !== false;
+
+/** A failure that means "no connection right now" rather than "this change is wrong". */
+function isNetworkFailure(error: unknown): boolean {
+    if (!isOnline()) return true;
+    if (error instanceof TypeError) return true; // fetch couldn't reach the server
+    return !!error && typeof error === "object" && (error as { name?: unknown }).name === "BrowserAuthError";
+}
+
 /**
- * The shared shopping list (#84) for the signed-in app: loads it, applies live SignalR events by version, and catches
- * up with `since` after every (re)connect and when the app comes back to the foreground. No polling. Writes are
- * optimistic and carry ids the app made, so a retry is applied once.
+ * The shared shopping list (#84), working offline too (#85, spike #83). The copy on this phone (IndexedDB) shows at
+ * once, online or not. Every change is applied locally and queued in an **outbox**, which is sent in order through the
+ * list's idempotent endpoints when there's a connection: on open, `online`, coming back to the foreground, after each
+ * change, and every 30 s while visible with something waiting. Live SignalR events and `since` catch-ups keep it up to
+ * date, without overwriting items that still have a change waiting. Offline, nobody is sent to sign-in; if the
+ * sign-in can't be renewed once online, the outbox is kept and the screen says so.
  */
 export function ShoppingListProvider({
     api,
     children,
     connect = signalRConnection,
+    persistence,
 }: {
     api: ApiClient;
     children: ReactNode;
     connect?: (api: ApiClient) => FeedConnection;
+    persistence?: ListPersistence;
 }) {
+    const store = useMemo(() => persistence ?? indexedDbPersistence(), [persistence]);
     const [state, setState] = useState<ListState>(EMPTY_LIST);
+    const [outbox, setOutbox] = useState<OutboxEntry[]>([]);
+    const [names, setNames] = useState<string[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [failed, setFailed] = useState(false);
+    const [offline, setOffline] = useState(() => !isOnline());
+    const [sync, setSync] = useState<SyncState>("idle");
+    const [needsSignIn, setNeedsSignIn] = useState(false);
     const asOf = useRef<string | undefined>(undefined);
+    const restored = useRef(false);
+    const ready = useRef<Promise<void>>(Promise.resolve());
+    const sending = useRef(false);
+    const outboxRef = useRef<OutboxEntry[]>([]);
     const connectRef = useRef(connect);
+    outboxRef.current = outbox;
 
-    const apply = useCallback((item: ShoppingListItem) => setState((s) => applyItem(s, item)), []);
+    const pendingIds = (entries: OutboxEntry[]) =>
+        new Set(entries.flatMap((e) => ("itemId" in e ? [e.itemId] : [])));
+
+    /** Server news, except for items with a change still waiting here: this phone's view wins until it's sent. */
+    const fromServer = useCallback((items: ShoppingListItem[], replace: boolean) => {
+        const waiting = pendingIds(outboxRef.current);
+        setState((s) => {
+            const keep = items.filter((i) => !waiting.has(i.id));
+            return replace
+                ? replaceAll({ ...s, items: new Map([...s.items].filter(([id]) => waiting.has(id))) }, keep)
+                : keep.reduce(applyItem, s);
+        });
+        setNames((current) => mergeNames(current, items));
+    }, []);
 
     const fail = useCallback((error: unknown, what: string) => {
         if (error instanceof SignInRequiredError) return;
@@ -82,23 +145,139 @@ export function ShoppingListProvider({
     }, []);
 
     const catchUp = useCallback(async () => {
+        if (!isOnline()) {
+            setOffline(true);
+            return;
+        }
         try {
             const since = asOf.current;
             const answer = await api.shoppingList(since);
             asOf.current = answer.asOf;
-            setState((s) => (since ? answer.items.reduce(applyItem, s) : replaceAll(s, answer.items)));
+            fromServer(answer.items, !since);
             setLoaded(true);
             setFailed(false);
+            setOffline(false);
         } catch (error) {
-            fail(error, "Couldn't load the shopping list");
-            if (!asOf.current) setFailed(true);
+            if (isNetworkFailure(error)) setOffline(true);
+            else fail(error, "Couldn't load the shopping list");
+            if (!asOf.current && !restored.current) setFailed(true);
         }
-    }, [api, fail]);
+    }, [api, fail, fromServer]);
 
+    /** Sends the outbox in order. Stops at the first connection problem and keeps the rest for later. */
+    const flush = useCallback(async () => {
+        if (sending.current || outboxRef.current.length === 0) return;
+        if (!isOnline()) {
+            setOffline(true);
+            return;
+        }
+        sending.current = true;
+        setSync("syncing");
+        let sentAll = true;
+        try {
+            while (outboxRef.current.length > 0) {
+                const entry = outboxRef.current[0];
+                try {
+                    const items = await send(api, entry);
+                    const rest = outboxRef.current.filter((e) => e.changeId !== entry.changeId);
+                    outboxRef.current = rest;
+                    setOutbox(rest);
+                    const stillWaiting = pendingIds(rest);
+                    for (const item of items) {
+                        if (!stillWaiting.has(item.id)) setState((s) => applyItem(s, item));
+                    }
+                    setOffline(false);
+                    setNeedsSignIn(false);
+                } catch (error) {
+                    if (error instanceof SignInRequiredError) {
+                        setNeedsSignIn(true); // a sign-in redirect is under way; the outbox is saved on the phone
+                        sentAll = false;
+                        break;
+                    }
+                    if (isNetworkFailure(error)) {
+                        setOffline(true);
+                        sentAll = false;
+                        break;
+                    }
+                    if (
+                        error instanceof ApiError &&
+                        error.status >= 400 &&
+                        error.status < 500 &&
+                        error.status !== 429
+                    ) {
+                        // The server refused this change (e.g. the item no longer exists): drop it, carry on.
+                        console.warn("A shopping list change was refused and dropped", error);
+                        const rest = outboxRef.current.filter((e) => e.changeId !== entry.changeId);
+                        outboxRef.current = rest;
+                        setOutbox(rest);
+                        continue;
+                    }
+                    fail(error, "Couldn't sync the shopping list");
+                    sentAll = false;
+                    break;
+                }
+            }
+        } finally {
+            sending.current = false;
+        }
+        if (sentAll) {
+            setSync("synced");
+            await catchUp();
+        } else {
+            setSync("idle");
+        }
+    }, [api, catchUp, fail]);
+
+    // Restore this phone's copy first (instant, even offline); the network waits for it (below).
+    useEffect(() => {
+        let live = true;
+        askToPersist();
+        ready.current = store
+            .load()
+            .then((snapshot) => {
+                if (!live || !snapshot) return;
+                restored.current = true;
+                asOf.current = snapshot.asOf;
+                outboxRef.current = [...snapshot.outbox, ...outboxRef.current];
+                setOutbox(outboxRef.current);
+                setNames(snapshot.names);
+                setState((s) => replaceAll(s, snapshot.items));
+                setLoaded(true);
+            })
+            .catch((error: unknown) => console.warn("Couldn't read the list saved on this phone", error));
+        return () => {
+            live = false;
+        };
+    }, [store]);
+
+    // Save the copy whenever it changes (one record: the list and the outbox together).
+    useEffect(() => {
+        if (!loaded && outbox.length === 0) return;
+        const snapshot: ListSnapshot = {
+            items: [...state.items.values()],
+            asOf: asOf.current,
+            outbox,
+            names,
+        };
+        store
+            .save(snapshot)
+            .catch((error: unknown) => console.warn("Couldn't save the list on this phone", error));
+    }, [store, state, outbox, names, loaded]);
+
+    // "Synced" shows briefly.
+    useEffect(() => {
+        if (sync !== "synced") return;
+        const timer = setTimeout(() => setSync("idle"), SYNCED_FOR_MS);
+        return () => clearTimeout(timer);
+    }, [sync]);
+
+    // Live updates (SignalR) and the triggers.
     useEffect(() => {
         let live = true;
         const connection = connectRef.current(api);
-        connection.on("shoppingListItemChanged", (payload) => apply(payload as ShoppingListItem));
+        connection.on("shoppingListItemChanged", (payload) =>
+            fromServer([payload as ShoppingListItem], false),
+        );
         connection.on("shoppingListItemRemoved", (payload) => {
             const { id, version } = payload as { id: string; version: number };
             setState((s) => applyRemoved(s, id, version));
@@ -107,9 +286,10 @@ export function ShoppingListProvider({
             const { ids } = payload as { ids: string[] };
             setState((s) => ids.reduce((acc, id) => applyRemoved(acc, id, Number.MAX_SAFE_INTEGER), s));
         });
-        connection.onreconnected(() => void catchUp());
+        connection.onreconnected(() => void flush().then(() => catchUp()));
 
         const start = async () => {
+            await ready.current;
             if (
                 connection.state === HubConnectionState.Disconnected ||
                 connection.state === HubConnectionState.Connecting
@@ -117,37 +297,48 @@ export function ShoppingListProvider({
                 try {
                     await connection.start();
                 } catch (error) {
-                    fail(error, "The shopping list couldn't connect for live updates");
+                    if (!isNetworkFailure(error))
+                        fail(error, "The shopping list couldn't connect for live updates");
                 }
             }
-            if (live) await catchUp();
+            if (live) {
+                await flush();
+                await catchUp();
+            }
         };
         void start();
 
         const onVisible = () => {
             if (document.visibilityState === "visible") void start();
         };
+        const onOnline = () => {
+            setOffline(false);
+            void start();
+        };
+        const onOffline = () => setOffline(true);
+        const every = setInterval(() => {
+            if (document.visibilityState === "visible" && outboxRef.current.length > 0) void flush();
+        }, SYNC_EVERY_MS);
         document.addEventListener("visibilitychange", onVisible);
-        window.addEventListener("online", onVisible);
+        window.addEventListener("online", onOnline);
+        window.addEventListener("offline", onOffline);
         return () => {
             live = false;
+            clearInterval(every);
             document.removeEventListener("visibilitychange", onVisible);
-            window.removeEventListener("online", onVisible);
+            window.removeEventListener("online", onOnline);
+            window.removeEventListener("offline", onOffline);
             void connection.stop();
         };
-    }, [api, apply, catchUp, fail]);
+    }, [api, catchUp, fail, flush, fromServer]);
 
-    const write = useCallback(
-        (request: Promise<{ item: ShoppingListItem }>, what: string) => {
-            request
-                .then(({ item }) => apply(item))
-                .catch((error: unknown) => {
-                    fail(error, what);
-                    asOf.current = undefined; // put the list back as the server has it
-                    void catchUp();
-                });
+    const queue = useCallback(
+        (entry: OutboxEntry) => {
+            outboxRef.current = [...outboxRef.current, entry];
+            setOutbox(outboxRef.current);
+            void flush();
         },
-        [apply, catchUp, fail],
+        [flush],
     );
 
     const value = useMemo<ShoppingList>(() => {
@@ -157,6 +348,12 @@ export function ShoppingListProvider({
             failed,
             open,
             done: doneItems(state),
+            offline,
+            waiting: outbox.length,
+            pending: pendingIds(outbox),
+            sync,
+            needsSignIn,
+            knownNames: names,
             add: (name, productId = null, source = productId ? "suggestion" : "typed") => {
                 const trimmed = name.trim();
                 if (!trimmed) return;
@@ -164,28 +361,36 @@ export function ShoppingListProvider({
                 if (existing) return; // already on the list (the server checks too)
                 const id = newId();
                 const now = new Date().toISOString();
-                apply({
-                    id,
-                    name: trimmed,
-                    note: null,
-                    productId,
-                    aisleId: null,
-                    aisleName: null,
-                    findingAisle: !productId,
-                    source,
-                    status: "open",
-                    addedByName: "You",
-                    addedAt: now,
-                    doneByName: null,
-                    doneAt: null,
-                    updatedAt: now,
-                    version: 0,
-                    removed: false,
-                });
-                write(
-                    api.addToList(id, { changeId: newId(), name: trimmed, productId, source }),
-                    "Couldn't add to the list",
+                setState((s) =>
+                    applyItem(s, {
+                        id,
+                        name: trimmed,
+                        note: null,
+                        productId,
+                        aisleId: null,
+                        aisleName: null,
+                        findingAisle: !productId && isOnline(), // offline it waits as "Not synced" instead
+                        source,
+                        status: "open",
+                        addedByName: "You",
+                        addedAt: now,
+                        doneByName: null,
+                        doneAt: null,
+                        updatedAt: now,
+                        version: 0,
+                        removed: false,
+                    }),
                 );
+                setNames((current) => mergeNames(current, [{ name: trimmed }]));
+                queue({
+                    op: "add",
+                    changeId: newId(),
+                    itemId: id,
+                    name: trimmed,
+                    productId,
+                    source,
+                    at: now,
+                });
             },
             tick: (item, done) => {
                 const now = new Date().toISOString();
@@ -199,26 +404,35 @@ export function ShoppingListProvider({
                     });
                     return { ...s, items };
                 });
-                write(api.tickListItem(item.id, done, newId()), "Couldn't tick that off");
+                queue({ op: done ? "tick" : "untick", changeId: newId(), itemId: item.id, at: now });
             },
             remove: (item) => {
                 setState((s) => applyRemoved(s, item.id, item.version));
-                write(api.removeListItem(item.id, newId()), "Couldn't remove that");
+                queue({ op: "remove", changeId: newId(), itemId: item.id, at: new Date().toISOString() });
             },
             clearTicked: () => {
                 setState((s) => doneItems(s).reduce((acc, i) => applyRemoved(acc, i.id, i.version), s));
-                api.clearTicked().catch((error: unknown) => {
-                    fail(error, "Couldn't clear the ticked items");
-                    asOf.current = undefined;
-                    void catchUp();
-                });
+                queue({ op: "clear", changeId: newId(), at: new Date().toISOString() });
             },
             reload: () => {
                 asOf.current = undefined;
                 void catchUp();
             },
         };
-    }, [state, loaded, failed, api, apply, write, fail, catchUp]);
+    }, [state, outbox, names, loaded, failed, offline, sync, needsSignIn, queue, catchUp]);
 
     return <Context.Provider value={value}>{children}</Context.Provider>;
+}
+
+/** Names seen on the list, newest first, without repeats (for suggestions offline). */
+function mergeNames(current: string[], items: Array<{ name: string }>): string[] {
+    const seen = new Set<string>();
+    return [...items.map((i) => i.name.trim()), ...current]
+        .filter((n) => {
+            const key = n.toLowerCase();
+            if (!n || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        })
+        .slice(0, 500);
 }

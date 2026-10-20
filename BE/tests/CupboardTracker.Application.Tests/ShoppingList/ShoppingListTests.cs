@@ -377,4 +377,47 @@ public sealed class ShoppingListTests
         Assert.Equal(ListItemStatus.Done, list.Items[item.Id].Value.Status);
         Assert.Equal(2, notifyLogs.Entries.Count(e => e.Level == LogLevel.Warning));
     }
+
+    // ---- Offline changes arriving late (#85)
+
+    [Fact]
+    public async Task A_late_tick_from_an_offline_phone_cant_undo_a_newer_untick()
+    {
+        var eggs = await Add("Eggs");
+        clock.Now = Now.AddMinutes(20);
+        await Changer().DoneAsync(eggs.Id, "online-tick", Sam, CancellationToken.None, Now.AddMinutes(1)); // Sam ticks at 10:01
+        await Changer().UndoneAsync(eggs.Id, "online-untick", CancellationToken.None, Now.AddMinutes(5)); // and unticks at 10:05
+
+        // Gary ticked at 10:00 while offline; it arrives at 10:20.
+        var late = Assert.IsType<ListChangeResult.Changed>(await Changer().DoneAsync(eggs.Id, "offline-tick", Gary, CancellationToken.None, Now));
+
+        Assert.Equal(ListItemStatus.Open, late.Item.Status);
+        Assert.Equal(Now.AddMinutes(5), list.Items[eggs.Id].Value.StatusChangedAt);
+    }
+
+    [Fact]
+    public async Task A_newer_offline_tick_applies_with_its_own_time_and_a_future_time_counts_as_now()
+    {
+        var milk = await Add("Milk");
+        clock.Now = Now.AddMinutes(30);
+
+        var ticked = Assert.IsType<ListChangeResult.Changed>(await Changer().DoneAsync(milk.Id, "t", Gary, CancellationToken.None, Now.AddMinutes(10))).Item;
+        Assert.Equal((ListItemStatus.Done, Now.AddMinutes(10)), (ticked.Status, ticked.DoneAt));
+
+        var back = Assert.IsType<ListChangeResult.Changed>(await Changer().UndoneAsync(milk.Id, "u", CancellationToken.None, Now.AddDays(1))).Item;
+        Assert.Equal((ListItemStatus.Open, Now.AddMinutes(30)), (back.Status, back.StatusChangedAt));
+    }
+
+    [Fact]
+    public async Task Replaying_an_older_tick_after_a_newer_change_does_nothing()
+    {
+        var bread = await Add("Bread");
+        clock.Now = Now.AddMinutes(10);
+        await Changer().DoneAsync(bread.Id, "t1", Gary, CancellationToken.None, Now.AddMinutes(1));
+        await Changer().UndoneAsync(bread.Id, "u1", CancellationToken.None, Now.AddMinutes(2));
+
+        await Changer().DoneAsync(bread.Id, "t1", Gary, CancellationToken.None, Now.AddMinutes(1)); // the outbox resends t1
+
+        Assert.Equal(ListItemStatus.Open, list.Items[bread.Id].Value.Status);
+    }
 }
