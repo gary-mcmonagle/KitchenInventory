@@ -474,3 +474,14 @@
     font-size: 12px;
     font-weight: 700;
 }
+
+/* Added by itself when the house ran out (#89; the artboard's Auto tag). */
+.auto {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 12px;
+    font-weight: 700;
+}

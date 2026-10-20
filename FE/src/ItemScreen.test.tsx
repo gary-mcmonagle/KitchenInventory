@@ -1,5 +1,12 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { ApiError, type ApiClient, type CheckedOut, type Product, type ProductUnit } from "./api";
+import {
+    ApiError,
+    type ApiClient,
+    type CheckedOut,
+    type Product,
+    type ProductUnit,
+    type RunOutStatus,
+} from "./api";
 import { ItemScreen, unitLine } from "./ItemScreen";
 import { NameScreen } from "./NameScreen";
 import { StockScreen } from "./StockScreen";
@@ -69,6 +76,15 @@ const milk = (overrides: Partial<Product> = {}): Product => ({
     ...overrides,
 });
 
+/** A product with no generic name yet: the run-out card (#89) stays hidden. */
+const NO_RUN_OUT: RunOutStatus = {
+    genericNameId: "milk",
+    name: "Milk",
+    addWhenOut: false,
+    inStock: 2,
+    canSet: false,
+};
+
 function setup(products: Product[], overrides: Partial<Record<keyof ApiClient, unknown>> = {}) {
     const queue = [...products];
     const api = {
@@ -88,6 +104,12 @@ function setup(products: Product[], overrides: Partial<Record<keyof ApiClient, u
         setUnitExpiry: vi.fn(async (unitId: string, date: string) => ({ unitId, estimatedExpiryDate: date })),
         setShelfLife: vi.fn(async (productId: string, days: number) => ({ productId, shelfLifeDays: days })),
         editDetails: vi.fn(async (productId: string) => ({ productId, displayName: "x" })),
+        runOutStatus: vi.fn(async (): Promise<RunOutStatus> => NO_RUN_OUT),
+        setAddWhenOut: vi.fn(async (id: string, on: boolean) => ({
+            genericNameId: id,
+            name: "Semi-skimmed milk",
+            addWhenOut: on,
+        })),
         ...overrides,
     };
     window.history.pushState(null, "", "/products/p-milk");

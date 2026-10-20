@@ -403,12 +403,15 @@ function OpenRow({
                     {item.findingAisle && (
                         <span role="status" aria-label="Finding its aisle" className={styles.spinner} />
                     )}
+                    {item.source === "autoRunOut" && <span className={styles.auto}>Auto</span>}
                     {pending && <span className={styles.notSynced}>Not synced</span>}
                 </div>
                 <div className={styles.meta}>
                     {item.findingAisle
                         ? "Finding its aisle…"
-                        : `Added by ${item.addedByName} · ${listWhen(item.addedAt, now)}`}
+                        : item.source === "autoRunOut"
+                          ? `Added when the last one was used · ${listWhen(item.addedAt, now)}`
+                          : `Added by ${item.addedByName} · ${listWhen(item.addedAt, now)}`}
                 </div>
             </div>
             <button

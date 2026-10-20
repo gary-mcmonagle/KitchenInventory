@@ -258,6 +258,15 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Seen receipt** – a note from the app that a person saw an event (e.g. a scan's toast) on a visible screen, so a push about it leaves them out. Kept for about a day. For stock changes, a green check-in or check-out toast counts once it's shown on a visible page; nothing else does.
 - In code: `RecordPushSeen`, `markSeen`, `pushSeen` container
 
+**Run out** – the house has none of something left (#89): no in-stock units across **every product with the same generic name** (the Asda and the Tesco semi-skimmed milk count together). A product without a generic name yet counts by its display name. Any check-out can cause it, including a stock-check one.
+- In code: `RunOutGroups`, `RunOutGroup`
+
+**Add when we run out** – the setting on a generic name (#89) that puts it on the shopping list, with the **Auto** tag ("Added when the last one was used"), when the house runs out. Opt-in, household-wide, and it belongs to the name, so it covers every brand. Turned on in item detail, or with **Yes, always** on the "Add to the shopping list?" sheet. If a product's generic name is changed by hand, it follows the setting of its new name. Undoing the check-out takes the automatic item off again, unless someone has ticked it or added a note.
+- In code: `GenericName.AddWhenOut`, `AddWhenRunOut`, `SetAddWhenOut`, `RunOutCard`, `source: "autoRunOut"`
+
+**"Add to the shopping list?" sheet** – the bottom sheet after a check-out (#89), opened by tapping a stock change push that says something was removed, or a green "Checked out" toast. One row per removed generic name with how many are left, **Add** or "On the list", then the offer to do it automatically.
+- In code: `RunOutSheet`, `GetRunOutChoices`, `/?removed=<batchId>`
+
 **Stock change push** – one "Cupboard updated" push saying what was added or removed (#80), sent to each person who didn't see those changes' green toasts in the app. Turned on or off per device ("Stock changes" on the "This phone" card).
 - In code: `SendStockChangePush`, `AddStockChangeToPush`, `StockChange`, preference `stockChanges`
 

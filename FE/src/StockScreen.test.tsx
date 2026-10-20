@@ -548,3 +548,31 @@ test("checking out a generically titled row names the exact product in the toast
 
     expect(screen.getByText("Checked out Cravendale Filtered Semi Skimmed Milk")).toBeInTheDocument();
 });
+
+test("a tapped stock change push (/?removed=<batch>) opens “Add to the shopping list?” once (#89)", async () => {
+    const batch = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    window.history.replaceState(null, "", `/?removed=${batch}`);
+    const runOutForBatch = vi.fn(async () => ({
+        checkedOutBy: "Sam",
+        at: null,
+        items: [
+            {
+                productId: "p",
+                genericNameId: "milk",
+                name: "Milk",
+                left: 0,
+                onList: false,
+                addWhenOut: false,
+                canSet: true,
+            },
+        ],
+    }));
+    const api = { stock: vi.fn(async () => stockOf(product({}))), runOutForBatch } as unknown as ApiClient;
+    render(<StockScreen api={api} />);
+
+    expect(await screen.findByRole("dialog", { name: "Add to the shopping list?" })).toBeInTheDocument();
+    expect(runOutForBatch).toHaveBeenCalledWith(batch);
+    expect(window.location.search).toBe(""); // a reload or Back doesn't open it again
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});

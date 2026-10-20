@@ -1,0 +1,251 @@
+/* "Add to the shopping list when we run out" (#89): project/ItemRunOut.dc.html and project/RunOutSheet.dc.html. */
+
+/* Item detail: the setting card */
+.setting {
+    display: flex;
+    gap: 12px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+    cursor: pointer;
+}
+
+.settingOn {
+    border-color: var(--on-border);
+}
+
+.checkWrap {
+    flex: none;
+    width: 22px;
+    min-height: var(--touch);
+    display: flex;
+    align-items: flex-start;
+    padding-top: 1px;
+}
+
+.check {
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    accent-color: var(--accent);
+}
+
+.settingText {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.settingTitle {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.settingHelp {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+/* The sheet */
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+}
+
+.scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+}
+
+.sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: var(--design-width);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 10px var(--page-x) calc(28px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 24px rgba(28, 42, 36, 0.18);
+    max-height: 85vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.handle {
+    align-self: center;
+    width: 40px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border);
+}
+
+.titleBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kicker {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.title {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 700;
+}
+
+.rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 60px;
+    border-bottom: 1px solid var(--off-bg);
+}
+
+.rowText {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.rowName {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.left {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.noneLeft {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--warn-fg);
+}
+
+.add {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: var(--radius-button);
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.add:active {
+    background: var(--accent-dark);
+}
+
+.onList {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--touch);
+    padding: 0 4px;
+    color: var(--accent-dark);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.note {
+    font-size: 13px;
+    color: var(--accent-dark);
+    font-weight: 600;
+}
+
+.close {
+    min-height: 48px;
+    border-radius: var(--radius-button);
+    border: 1px solid var(--input-border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.added {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--accent-dark);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.askTitle {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.25;
+    font-weight: 700;
+}
+
+.askHelp {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.45;
+}
+
+.askButtons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.primary,
+.secondary {
+    min-height: 52px;
+    border-radius: var(--radius-input);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.primary {
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.secondary {
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+}

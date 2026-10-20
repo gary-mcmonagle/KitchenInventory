@@ -29,6 +29,7 @@ import { scannerLabel, scannerStatus, type ScannerStatus } from "./scannerStatus
 import { matchesSearch, searchWords } from "./stockSearch";
 import styles from "./Stock.module.css";
 import { ScanFeedView } from "./ScanFeedView";
+import { RunOutSheet, type RunOutSource } from "./RunOut";
 import { signalRConnection, useScanFeed, type FeedConnection } from "./useScanFeed";
 
 const PULL_TO_REFRESH = 70; // px
@@ -183,6 +184,20 @@ export function StockScreen({
         toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
     }, []);
     useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+    // "Add to the shopping list?" (#89): from a tapped stock change push (/?removed=<batch>) or a tapped green
+    // "Checked out" toast. The query is removed straight away so a reload or Back doesn't open it again.
+    const [sheet, setSheet] = useState<RunOutSource | null>(null);
+    useEffect(() => {
+        if (!visible) return;
+        const batchId = removedBatchFromUrl();
+        if (batchId) {
+            setSheet({ batchId });
+            const url = new URL(window.location.href);
+            url.searchParams.delete("removed");
+            window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+        }
+    }, [visible]);
 
     // "Added 3 items" after adding from the app (#58).
     useEffect(() => {
@@ -517,6 +532,7 @@ export function StockScreen({
                     feed={scanFeed.feed}
                     now={scanFeed.now}
                     onDismiss={(t) => void scanFeed.dismiss(t)}
+                    onCheckedOut={(productId) => setSheet({ productId })}
                 />
             </header>
 
@@ -639,8 +655,15 @@ export function StockScreen({
                     )}
                 </div>
             )}
+            {sheet && visible && <RunOutSheet api={api} source={sheet} onClose={() => setSheet(null)} />}
         </div>
     );
+}
+
+/** The batch in a tapped stock change push's link (#89), if it's a well-formed id. */
+export function removedBatchFromUrl(search: string = window.location.search): string | null {
+    const id = new URLSearchParams(search).get("removed");
+    return id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : null;
 }
 
 /** A collapsible aisle (#71): a full-width header button with the name, the count, an amber (or red) "n to use first"

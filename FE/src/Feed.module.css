@@ -125,3 +125,11 @@
     text-decoration: underline;
     text-underline-offset: 2px;
 }
+
+/* A green "Checked out" toast opens "Add to the shopping list?" (#89). */
+.tappable {
+    width: 100%;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}

@@ -27,6 +27,7 @@ import {
 import { ProductTile } from "./ProductTile";
 import { cameFrom, editPath, goBack, navigate, RECIPES_PATH } from "./router";
 import { TOAST_MS } from "./StockScreen";
+import { RunOutCard } from "./RunOut";
 import styles from "./Item.module.css";
 
 /** The shelf lives offered under "Change shelf life", in days (#53). */
@@ -305,6 +306,13 @@ function Detail({
                     </a>
                 </div>
             </div>
+
+            <RunOutCard
+                api={api}
+                productId={product.productId}
+                inStockCount={product.units.length}
+                onSaved={onSaved}
+            />
 
             <AddToListButton
                 name={product.genericName?.name ?? product.displayName}

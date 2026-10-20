@@ -9,16 +9,25 @@ export function ScanFeedView({
     feed,
     now,
     onDismiss,
+    onCheckedOut,
 }: {
     feed: FeedState;
     now: number;
     onDismiss: (toast: FeedToast) => void;
+    /** A green "Checked out" toast was tapped (#89): offer to add it to the shopping list. */
+    onCheckedOut?: (productId: string) => void;
 }) {
     const { shown, more } = visibleToasts(feed);
     return (
         <div className={styles.feed} role="status" aria-live="polite" aria-label="Scan feed">
             {shown.map((toast) => (
-                <Toast key={toast.scanId} toast={toast} now={now} onDismiss={onDismiss} />
+                <Toast
+                    key={toast.scanId}
+                    toast={toast}
+                    now={now}
+                    onDismiss={onDismiss}
+                    onCheckedOut={onCheckedOut}
+                />
             ))}
             {more > 0 && (
                 <div className={styles.more}>
@@ -43,10 +52,12 @@ function Toast({
     toast,
     now,
     onDismiss,
+    onCheckedOut,
 }: {
     toast: FeedToast;
     now: number;
     onDismiss: (toast: FeedToast) => void;
+    onCheckedOut?: (productId: string) => void;
 }) {
     const sub = toastSubtitle(toast, new Date(now));
     const text = (
@@ -64,8 +75,23 @@ function Toast({
         );
     }
     if (toast.kind === "ok") {
+        const tappable = toast.role === "out" && toast.productId && onCheckedOut;
+        const Tag = tappable ? "button" : "div";
         return (
-            <div className={`${styles.toast} ${styles.ok}`}>
+            <Tag
+                {...(tappable
+                    ? {
+                          type: "button" as const,
+                          onClick: () => onCheckedOut(toast.productId!),
+                          "aria-label": `${toast.title}. Add it to the shopping list?`,
+                      }
+                    : {})}
+                className={
+                    tappable
+                        ? `${styles.toast} ${styles.ok} ${styles.tappable}`
+                        : `${styles.toast} ${styles.ok}`
+                }
+            >
                 <svg
                     className={styles.icon}
                     width="22"
@@ -81,7 +107,7 @@ function Toast({
                     <path d="M5 12.5l4.5 4.5L19 7.5" />
                 </svg>
                 {text}
-            </div>
+            </Tag>
         );
     }
     return (

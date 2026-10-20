@@ -277,6 +277,33 @@ Sets a known product's generic name by hand (#90): `{ "genericNameId": "semi-ski
 - **200** `{ "productId": "…", "genericName": { "id": "…", "name": "…", "source": "manual" }, "created": false }`
 - **400** neither or both fields, no such name, or a bad new name (1–40 characters, no size, not the brand); **404** not a known product; **409** changed meanwhile.
 
+### Add when we run out (#89)
+
+The setting lives on the **generic name**, so turning it on from one brand covers every product with that name. After **every** check-out (scanner, stock list or item detail, whatever its reason), if the setting is on and nothing is left in stock across every product with that generic name, the name is added to the shopping list with `source: "autoRunOut"` and the product's id. Its item id and change id come from the unit and its check-out time, so a replayed check-out never adds twice. **Undoing** that check-out removes the item again, unless it has been ticked (even if put back) or given a note since. A name already open on the list isn't added again. Best-effort: a failure is a warning and never fails the check-out. A product without a generic name counts by its display name, but the setting can't be turned on for it.
+
+#### `GET /api/products/{productId}/run-out`
+
+**200** `{ "genericNameId": "semi-skimmed milk", "name": "Semi-skimmed milk", "addWhenOut": false, "inStock": 3, "canSet": true }`: `inStock` counts every product with that generic name; `canSet` is false while the product has no generic name. **404** not a known product.
+
+#### `PUT /api/generic-names/{id}/add-when-out`
+
+`{ "addWhenOut": true }` (or `false`). **200** `{ "genericNameId": "…", "name": "…", "addWhenOut": true }`; **400** a body that isn't a boolean; **404** no such generic name. The id is URL-encoded (it can contain spaces).
+
+#### `GET /api/run-out/batches/{batchId}` and `GET /api/run-out/products/{productId}`
+
+The "Add to the shopping list?" sheet: for a tapped stock change push (its batch), or for a tapped green "Checked out" toast (one product). **200**:
+
+```json
+{
+  "checkedOutBy": "Sam",
+  "at": "2026-10-20T17:42:00+00:00",
+  "items": [{ "productId": "…", "genericNameId": "semi-skimmed milk", "name": "Semi-skimmed milk", "left": 0, "onList": false, "addWhenOut": false, "canSet": true }]
+}
+```
+
+- **Batches:** the batch's removed items **netted per product** (a check-out and its undo cancel out), leaving out the caller's own app check-outs. One row per generic name. `checkedOutBy` is the person's name, `"the scanner"` for scanner check-outs, or null when several people did. **404** once the batch has expired (3 days) or for an unknown id.
+- **Products:** `checkedOutBy` and `at` are null.
+
 ### `PUT /api/products/{productId}/icon`
 
 Sets a known product's icon by hand (#72): `{ "icon": "bread" }`, one of the curated IconPark names (`ProductIcons.Names`), sets `iconSource: manual`, never overwritten. `{ "icon": null }` clears it ("Let Jev choose"): the next timer run asks Jev again.
@@ -612,7 +639,7 @@ One list for the household. Every endpoint needs a signed-in user (**401** witho
 - **Idempotent:** an id that exists returns the item as it is.
 - **No duplicates:** a name already open (lower case, trimmed, single spaces) returns that item with `merged: true`, adding the note if one was given.
 - **Aisle:** with `productId`, the product's aisle (and, when `name` is left out, its generic name or display name). A typed item reuses the aisle that name had before, or is queued for Jev (the aisles feature's choice question) on the API app's `list-aisles` queue; until then `aisleId` is null. Jev unreachable → `other` for now, retried by a timer every 15 minutes.
-- **400** for a missing id or changeId, a name of 0 or over 80 characters, a note over 60, or an unknown product.
+- **400** for a missing id or changeId, a name of 0 or over 80 characters, a note over 60, or an unknown product. `source` is one of `typed`, `suggestion`, `itemDetail` or `checkOutPrompt` (the sheet after a check-out, #89); `autoRunOut` is refused (only the server adds those).
 
 ### `POST /api/shopping-list/items/{id}/done`, `/undone` and `DELETE /api/shopping-list/items/{id}`
 

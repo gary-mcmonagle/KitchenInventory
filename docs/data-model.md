@@ -234,13 +234,17 @@ One document per **generic name** (what you'd say to someone going to the shop: 
   "name": "Semi-skimmed milk",
   "aisle": "dairyEggs",
   "createdAt": "2026-10-19T21:30:00.000Z",
-  "createdBy": "foundry"
+  "createdBy": "foundry",
+  "addWhenOut": true,
+  "addWhenOutBy": "<oid>",
+  "addWhenOutAt": "2026-10-20T20:00:00.000Z"
 }
 ```
 
 - **`id`** is `generic:` plus the normalized name (lower case, trimmed, single spaces). Created with a create-only write, so two products can never make two records for the same name: the second one finds the first.
 - **`aisle`** comes from the product that created it; matching starts in the product's aisle.
-- **`createdBy`**: `foundry` (written by the timer) or `manual` (typed in Edit details). #89 adds `addWhenOut` to the same record.
+- **`createdBy`**: `foundry` (written by the timer) or `manual` (typed in Edit details).
+- **`addWhenOut`** (#89): put the name on the shopping list when nothing is left in stock across every product with this generic name. Missing means off. Set with a patch (`addWhenOutBy`, `addWhenOutAt`: who and when), so it's household-wide and follows the name, not a product.
 
 On each **product**: `genericName` (display), `genericNameId` (the record's normalized id), `genericNameSource` (`jevMatch` | `foundry` | `manual` | `fallback`), `genericNameConfidence` (Jev's, when matched) and `genericNameEstimatedAt`. Filled by the estimate timer after the aisle is known; `manual` is never overwritten.
 
@@ -539,7 +543,8 @@ Short-lived documents, partitioned by **`/eventKey`**, each with its own **`ttl`
 
 - **Seen receipts:** `{ "id": "<eventKey>:<oid>", "eventKey": "scan:<scanId>", "userId": "<oid>", "seenAt": "…", "ttl": 86400 }`. Written when the app shows an event on a visible screen. A person counts as having seen an event if any of their devices sent a receipt; a delayed push can leave them out.
 - **Push job claims:** `{ "id": "job:<jobId>", "eventKey": "job:<jobId>", "claimedAt": "…", "ttl": 691200 }`. Created (never upserted) when a queued push job runs, so a re-delivered queue message finds it and sends nothing (8 days: longer than the queue keeps messages).
-- **The open stock change batch** (#80): at most one, `{ "id": "batch:stock", "eventKey": "batch:stock", "type": "stockChangeBatch", "batchId": "…", "firstAt": "…", "lastAt": "…", "changes": [{ "eventKey": "scan:<scanId>" | "app:<unitId>:<out|undo|added>:<ms>", "kind": "added" | "removed", "name": "Beef Gravy", "at": "…", "productId": "…", "actorId": "<oid>" | null }], "ttl": 86400 }`. A change creates it (create-only, so two at once conflict and one retries) or joins it (ETag replace; a key already there is skipped). It falls due 60 s after `lastAt`, but no later than 5 minutes after `firstAt`. Sending **deletes** it (ETag delete), so a stale or re-delivered queue message finds nothing to send, and the next change starts a new batch. At most 200 changes.
+- **The open stock change batch** (#80): at most one, `{ "id": "batch:stock", "eventKey": "batch:stock", "type": "stockChangeBatch", "batchId": "…", "firstAt": "…", "lastAt": "…", "changes": [{ "eventKey": "scan:<scanId>" | "app:<unitId>:<out|undo|added>:<ms>", "kind": "added" | "removed", "name": "Beef Gravy", "at": "…", "productId": "…", "actorId": "<oid>" | null }], "ttl": 86400 }`. A change creates it (create-only, so two at once conflict and one retries) or joins it (ETag replace; a key already there is skipped). It falls due 60 s after `lastAt`, but no later than 5 minutes after `firstAt`. Sending **deletes** it (ETag delete), so a stale or re-delivered queue message finds nothing to send, and the next change starts a new batch. At most 200 changes. Each change may also carry `actorName` (the person's display name, #89, for "Checked out by Sam").
+- **A sent batch** (#89): the same shape as `{ "id": "batchSent:<batchId>", "eventKey": "batchSent:<batchId>", "type": "stockChangeBatchSent", …, "ttl": 259200 }`, upserted just before the pushes go, so tapping a push can show what was removed (`GET /api/run-out/batches/{batchId}`). Kept 3 days.
 
 ## Container: `leases` (infrastructure)
 

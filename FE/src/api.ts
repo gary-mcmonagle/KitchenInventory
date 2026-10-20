@@ -352,6 +352,33 @@ export interface ShoppingListAnswer {
     items: ShoppingListItem[];
 }
 
+/** "Add to the shopping list when we run out" for item detail (#89). */
+export interface RunOutStatus {
+    genericNameId: string;
+    name: string;
+    addWhenOut: boolean;
+    inStock: number;
+    canSet: boolean;
+}
+
+/** One row of the "Add to the shopping list?" sheet (#89). */
+export interface RunOutChoice {
+    productId: string;
+    genericNameId: string;
+    name: string;
+    left: number;
+    onList: boolean;
+    addWhenOut: boolean;
+    canSet: boolean;
+}
+
+/** The sheet after a check-out (#89). `checkedOutBy` is "the scanner" for scanner check-outs, or null when mixed. */
+export interface RunOutChoices {
+    checkedOutBy: string | null;
+    at: string | null;
+    items: RunOutChoice[];
+}
+
 export interface ListSuggestion {
     name: string;
     inStock: number;
@@ -463,6 +490,32 @@ export class ApiClient {
         created: boolean;
     }> {
         return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/generic-name`, choice);
+    }
+
+    /** "Add to the shopping list when we run out" for a product's generic name (#89), with how many are in stock
+     * across every product with that name. `canSet` is false until the product has a generic name. */
+    runOutStatus(productId: string): Promise<RunOutStatus> {
+        return this.get(`/api/products/${encodeURIComponent(productId)}/run-out`);
+    }
+
+    /** Turns "add when we run out" on or off for a generic name (#89): every product with that name. */
+    setAddWhenOut(
+        genericNameId: string,
+        addWhenOut: boolean,
+    ): Promise<{ genericNameId: string; name: string; addWhenOut: boolean }> {
+        return this.send("PUT", `/api/generic-names/${encodeURIComponent(genericNameId)}/add-when-out`, {
+            addWhenOut,
+        });
+    }
+
+    /** The "Add to the shopping list?" sheet for a tapped stock change push (#89). 404 once it has expired. */
+    runOutForBatch(batchId: string): Promise<RunOutChoices> {
+        return this.get(`/api/run-out/batches/${encodeURIComponent(batchId)}`);
+    }
+
+    /** The "Add to the shopping list?" sheet for one product (a tapped "Checked out" toast, #89). */
+    runOutForProduct(productId: string): Promise<RunOutChoices> {
+        return this.get(`/api/run-out/products/${encodeURIComponent(productId)}`);
     }
 
     /** Sets a product's icon by hand (#72), or null to let Jev choose again. */
