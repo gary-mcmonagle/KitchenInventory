@@ -112,3 +112,14 @@
         padding-top: env(safe-area-inset-top, 0px);
     }
 }
+
+/* The stock list kept mounted under screens reached from it (spike #99 prototype). */
+.stockLayer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.stockLayer[hidden] {
+    display: none;
+}

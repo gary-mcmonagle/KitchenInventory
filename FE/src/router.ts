@@ -10,10 +10,25 @@ export function usePath(): string {
     return useSyncExternalStore(subscribe, () => window.location.pathname);
 }
 
+/** Where each screen was scrolled when we last left it (spike #99), so going back can land where you were. */
+const scrollPositions = new Map<string, number>();
+
+export const savedScroll = (path: string): number => scrollPositions.get(path) ?? 0;
+
 export function navigate(path: string): void {
     if (window.location.pathname === path) return;
-    window.history.pushState(null, "", path);
+    scrollPositions.set(window.location.pathname, window.scrollY);
+    // Remember where we came from (spike #99), so "‹ Stock" can go back instead of stacking a new entry.
+    window.history.pushState({ from: window.location.pathname }, "", path);
     window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+/** Back to `path`: a real history step when we came from there (so the browser and iOS swipe-back agree), else
+ * navigate (e.g. a deep link to item detail). */
+export function backTo(path: string): void {
+    const state = window.history.state as { from?: string } | null;
+    if (state?.from === path) window.history.back();
+    else navigate(path);
 }
 
 export const SCANNERS_PATH = "/scanners";

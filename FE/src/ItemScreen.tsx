@@ -25,7 +25,7 @@ import {
     type ExpiryTone,
 } from "./format";
 import { ProductTile } from "./ProductTile";
-import { editPath, navigate } from "./router";
+import { backTo, editPath, navigate } from "./router";
 import { TOAST_MS } from "./StockScreen";
 import styles from "./Item.module.css";
 
@@ -114,7 +114,7 @@ export function ItemScreen({ api, productId }: { api: ApiClient; productId: stri
         void load();
     };
 
-    const back = () => navigate("/");
+    const back = () => backTo("/");
 
     const checkOut = async (unit: ProductUnit) => {
         if (busy) return;
