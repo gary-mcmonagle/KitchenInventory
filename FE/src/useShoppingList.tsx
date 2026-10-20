@@ -179,7 +179,28 @@ export function ShoppingListProvider({
                 const entry = outboxRef.current[0];
                 try {
                     const items = await send(api, entry);
-                    const rest = outboxRef.current.filter((e) => e.changeId !== entry.changeId);
+                    let rest = outboxRef.current.filter((e) => e.changeId !== entry.changeId);
+                    const merged = entry.op === "add" ? items.find((i) => i.id !== entry.itemId) : undefined;
+                    if (entry.op === "add" && merged) {
+                        // Someone else added the same name first, so the server kept theirs: drop this phone's copy,
+                        // and point any later changes to it at the item that was kept.
+                        const local = entry.itemId;
+                        setState((s) => {
+                            const mine = s.items.get(local);
+                            const kept = mine
+                                ? {
+                                      ...merged,
+                                      status: mine.status,
+                                      doneAt: mine.doneAt,
+                                      doneByName: mine.doneByName,
+                                  }
+                                : merged;
+                            return applyItem(applyRemoved(s, local, Number.MAX_SAFE_INTEGER), kept);
+                        });
+                        rest = rest.map((e) =>
+                            "itemId" in e && e.itemId === local ? { ...e, itemId: merged.id } : e,
+                        );
+                    }
                     outboxRef.current = rest;
                     setOutbox(rest);
                     const stillWaiting = pendingIds(rest);

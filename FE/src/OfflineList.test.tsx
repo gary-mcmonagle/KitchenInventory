@@ -269,3 +269,31 @@ test("suggestions offline come from names seen on the list, with no stock counts
         "Bran flakes",
     ]);
 });
+
+test("two phones add the same name offline: the server keeps one, and this phone's copy and later changes follow it", async () => {
+    online = false;
+    const { api } = setup([], { items: [], asOf: "x", outbox: [], names: [] });
+    await flush();
+    await act(async () => addTyped("Kitchen foil"));
+    await act(async () => fireEvent.click(screen.getByRole("checkbox", { name: "Tick off Kitchen foil" })));
+    api.addToList.mockImplementationOnce(async (_id: string, add: { name: string }) => ({
+        item: item("theirs", add.name),
+        merged: true,
+    }));
+    let release!: () => void;
+    api.tickListItem.mockImplementationOnce(
+        (id: string) =>
+            new Promise((resolve) => {
+                release = () => resolve({ item: item(id, "Kitchen foil", { status: "done", version: 2 }) });
+            }),
+    );
+
+    await goOnline();
+    // While the tick is still on its way, the kept item shows once, ticked as this phone left it.
+    expect(screen.getAllByText("Kitchen foil")).toHaveLength(1);
+    expect(screen.getByRole("checkbox", { name: "Put Kitchen foil back on the list" })).toBeInTheDocument();
+    await act(async () => release());
+
+    expect(api.tickListItem.mock.calls.map((c) => c[0])).toEqual(["theirs"]);
+    expect(screen.queryAllByText("Kitchen foil")).toHaveLength(1);
+});
