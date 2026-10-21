@@ -312,8 +312,9 @@ test("Save on a recipe saves a snapshot, fills, and shows the toast; Undo unsave
         steps: ["Cook the penne."],
         alsoNeeded: ["1 onion"],
     });
-    const toast = screen.getByRole("status");
-    expect(toast).toHaveTextContent("Saved to Hungry?");
+    const toast = await screen
+        .findByText("Saved to Hungry?")
+        .then((t) => t.closest("[role=status]") as HTMLElement);
 
     fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
 
@@ -330,7 +331,7 @@ test("tapping Saved on a recipe unsaves it, with Undo saving it again", async ()
     await screen.findByRole("button", { name: "Save" });
     const id = api.saveRecipe.mock.calls[0][0];
     expect(api.deleteSavedRecipe).toHaveBeenCalledWith(id);
-    expect(screen.getByRole("status")).toHaveTextContent("Removed from saved");
+    await screen.findByText("Removed from saved");
 
     fireEvent.click(within(screen.getByRole("status")).getByRole("button", { name: "Undo" }));
 
@@ -374,7 +375,7 @@ test("each Ready now idea has Save in its button row, saving the idea with how a
         how: "Microwave the beans; toast the bread.",
         appliance: "microwave",
     });
-    expect(screen.getByRole("status")).toHaveTextContent("Saved to Hungry?");
+    expect(await screen.findByText("Saved to Hungry?")).toBeInTheDocument();
 });
 
 async function openTraybake(api = fakeApi()) {
@@ -522,8 +523,9 @@ test("Remove from saved: gone from the list, Save again shows; Undo puts the sam
     await screen.findByRole("button", { name: "Save again" });
     expect(api.deleteSavedRecipe).toHaveBeenCalledWith("s1");
     expect(screen.getByRole("button", { name: "Save", pressed: false })).toBeInTheDocument();
-    const toast = screen.getByRole("status");
-    expect(toast).toHaveTextContent("Removed from saved");
+    const toast = await screen
+        .findByText("Removed from saved")
+        .then((t) => t.closest("[role=status]") as HTMLElement);
 
     await act(async () => fireEvent.click(within(toast).getByRole("button", { name: "Undo" })));
 
