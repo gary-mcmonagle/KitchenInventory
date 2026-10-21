@@ -34,7 +34,7 @@ const STOCK = [
     product("cheddar", "Test cheddar"),
 ];
 
-const use = (id: string, name: string) => ({
+const usedItem = (id: string, name: string) => ({
     productId: id,
     displayName: name,
     useFirst: false,
