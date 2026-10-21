@@ -22,4 +22,6 @@ public sealed class CosmosContainers(CosmosClient client, string databaseName)
     public Container PushSeen { get; } = client.GetContainer(databaseName, "pushSeen");
 
     public Container ShoppingList { get; } = client.GetContainer(databaseName, "shoppingList");
+
+    public Container SavedRecipes { get; } = client.GetContainer(databaseName, "savedRecipes");
 }

@@ -21,7 +21,10 @@ public static class ListItemSources
     /// <summary>Added by itself when the house ran out (#89). Only the server adds these.</summary>
     public const string AutoRunOut = "autoRunOut";
 
-    public static readonly IReadOnlySet<string> FromTheApp = new HashSet<string>(StringComparer.Ordinal) { Typed, Suggestion, ItemDetail, CheckOutPrompt };
+    /// <summary>"Add missing to the list" on a saved recipe (#105).</summary>
+    public const string SavedRecipe = "savedRecipe";
+
+    public static readonly IReadOnlySet<string> FromTheApp = new HashSet<string>(StringComparer.Ordinal) { Typed, Suggestion, ItemDetail, CheckOutPrompt, SavedRecipe };
 }
 
 /// <summary>How a list item got its aisle: from its product, from Jev (or a remembered Jev answer), or Other because

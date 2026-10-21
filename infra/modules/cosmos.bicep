@@ -27,6 +27,8 @@ var containers = [
   // The household's shopping list (#84): items, their tombstones and list memory, one partition (listId "household").
   // defaultTtl -1 turns on per-document ttl (tombstones expire) without expiring anything else.
   { name: 'shoppingList', partitionKey: '/listId', defaultTtl: -1 }
+  // Saved recipes and Ready now ideas (#105): one household collection, one partition (householdId "household").
+  { name: 'savedRecipes', partitionKey: '/householdId' }
 ]
 
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {

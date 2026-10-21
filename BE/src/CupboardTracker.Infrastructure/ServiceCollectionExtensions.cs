@@ -11,6 +11,7 @@ using CupboardTracker.Application.GenericNaming;
 using CupboardTracker.Application.Products;
 using CupboardTracker.Application.Push;
 using CupboardTracker.Application.RunOut;
+using CupboardTracker.Application.SavedRecipes;
 using CupboardTracker.Application.Recipes;
 using CupboardTracker.Application.ScanFeed;
 using CupboardTracker.Application.Scanners;
@@ -68,6 +69,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ShoppingListNotifier>();
         services.AddTransient<AddToShoppingList>();
         services.AddTransient<ChangeShoppingListItem>();
+        services.AddSingleton<ISavedRecipeRepository, CosmosSavedRecipeRepository>(); // #105
+        services.AddTransient<SavedRecipeUseCases>();
         services.AddTransient<RunOutGroups>(); // #89
         services.AddTransient<AddWhenRunOut>();
         services.AddTransient<SetAddWhenOut>();
