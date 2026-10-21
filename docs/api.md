@@ -610,6 +610,43 @@ Quick things using **only a toaster, microwave or kettle, or no cooking** (never
 - **422** `{ "error": "There's nothing in stock to cook with." }`: no known products in stock.
 - **429** `{ "error": "That's a lot of recipes for one hour. Try again a bit later." }`: over `RECIPE_REQUESTS_PER_HOUR` (default 30) for this user in the last hour. Counted per API app instance, in memory: a cost guard, not an exact quota.
 
+### Adjust a recipe (#104)
+
+#### `POST /api/recipes/adjust`
+
+```json
+{
+  "recipe": { "title": "…", "summary": "…", "meal": "dinner", "servings": 2, "totalMinutes": 25,
+              "ingredients": [{ "name": "…", "amount": "…", "productId": "…" | null }], "steps": ["…"], "alsoNeeded": ["…"] },
+  "add": { "productIds": ["…"], "typed": ["chilli flakes"] },
+  "remove": ["Onion"],
+  "tweak": "spicier" | null
+}
+```
+
+The same recipe, updated by gpt-4o on Foundry (same deployment, managed identity, schema and validation as suggest).
+- **The recipe** is the one the app last showed. It's only the starting point: the stock is rebuilt from Cosmos. Up to 40 ingredients, 20 steps and 5 `alsoNeeded`; other fields (e.g. `useFirst`, `usesUp`) are ignored.
+- **Changes:**
+  - `add.productIds` must be in stock (400 otherwise), at most 10.
+  - `add.typed`: things to buy, at most 3 of up to 40 characters. They go under "You'll also need" and count towards its 3.
+  - `remove`: ingredient names from the recipe; unknown names are ignored.
+  - `tweak`: at most 300 characters (trimmed). Like the form's comments, it's a preference in its own delimited section and can't override the rules.
+  - At least one change is needed (400 "Choose something to add, remove or tweak.").
+- **Checked:** added items must appear and removed ones mustn't. If they don't, the model is asked once more; anything still wrong comes back as `couldNotAdd` / `couldNotRemove` on the recipe ("Couldn't add: …").
+- **200:** `{ "available": true, "recipe": { …as suggest…, "couldNotAdd": [], "couldNotRemove": [] }, "adjustmentSummary": { "added": ["Chorizo", "chilli flakes"], "removed": ["Onion"], "tweak": "spicier" } }`. Added products are named by their generic name. When the model can't help: `{ "available": false, "message": "Couldn't update the recipe just now. Try again." }`.
+- **Other statuses:** **422** nothing in stock; **429** over the hourly limit, which **adjustments share with suggest**; **401** without a token.
+- Nothing is stored. Logs record counts and whether a tweak was given, never the recipe or the tweak.
+
+#### `POST /api/recipes/suggest-additions`
+
+`{ "recipe": { …as above… } }` → **200** `{ "suggestions": [{ "name": "Chorizo", "productIds": ["…"], "useFirst": false, "confidence": 0.41 }] }`, 0 to 3, best first.
+- **Candidates:** every in-stock known product, grouped by **generic name** (display name when it has none), less anything already in the recipe (the same product, or a name an ingredient contains or is contained in).
+- **Ranking:** one Jev `choice` question ("which would improve this recipe most as an addition?") over the candidates plus "Nothing would improve it". Jev gives a **probability for every option**, so one question ranks them all; there's no asking again.
+- **Picking:** up to 3 that reach `RECIPE_ADDITION_MIN_CONFIDENCE` (default 0.1) **and** beat "Nothing would improve it".
+- **More than 254 candidates:** asked in batches; each batch's top picks meet in a **run-off** question, which decides.
+- **Use first:** a use-first suggestion moves ahead of ones within 0.1 of it.
+- No Foundry call and no rate limit. If Jev fails it returns `[]`, and the sheet hides the row. Logs record counts and latency only.
+
 ## Shopping list (#84)
 
 One list for the household. Every endpoint needs a signed-in user (**401** without a token). Item ids and change ids come from the app (UUIDs), so a write sent twice is applied once (ready for offline use). People are shown by name, never by object ID.

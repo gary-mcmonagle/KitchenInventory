@@ -1,0 +1,405 @@
+/* "Adjust this recipe" (#104, project/RecipeAdjust.dc.html). */
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+}
+
+.scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+}
+
+.sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: var(--design-width);
+    max-height: 92vh;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 24px rgba(28, 42, 36, 0.18);
+}
+
+.head {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px var(--page-x) 4px;
+}
+
+.handle {
+    align-self: center;
+    width: 40px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border);
+}
+
+.titleRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.close {
+    width: var(--touch);
+    height: var(--touch);
+    margin-right: -10px;
+    border: 0;
+    background: transparent;
+    color: var(--ink-strong);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.intro {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px var(--page-x);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sectionTitle {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.suggested {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.suggestedLabel {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.suggestions,
+.picked {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-height: 40px;
+}
+
+.finding {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 20px;
+    background: var(--ground);
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.smallSpinner {
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    border-radius: 7px;
+    border: 2px solid #cfe0d6;
+    border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .smallSpinner {
+        animation-duration: 3s;
+    }
+}
+
+.placeholderChip {
+    width: 88px;
+    height: 40px;
+    border-radius: 20px;
+    background: var(--off-bg);
+}
+
+.suggestion {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 20px;
+    border: 1px dashed var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.useFirstDot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--warn-border);
+}
+
+.pickedChip {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-left: 12px;
+    border-radius: 20px;
+    background: var(--accent);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.unpick {
+    width: 40px;
+    height: 40px;
+    border: 0;
+    background: transparent;
+    color: #ffffff;
+    font: inherit;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.searchBox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 48px;
+    box-sizing: border-box;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    color: var(--muted);
+}
+
+.searchInput {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.searchInput::placeholder,
+.typedInput::placeholder,
+.tweak::placeholder {
+    color: var(--muted);
+}
+
+.matches {
+    list-style: none;
+    margin: -4px 0 0;
+    padding: 4px 0;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-input);
+}
+
+.match {
+    width: 100%;
+    min-height: var(--touch);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 15px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.linkButton {
+    align-self: flex-start;
+    min-height: var(--touch);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.typedRow {
+    display: flex;
+    gap: 8px;
+}
+
+.typedInput {
+    flex: 1;
+    min-width: 0;
+    height: 48px;
+    box-sizing: border-box;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.typedAdd {
+    flex: none;
+    min-height: 48px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: var(--radius-input);
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.typedAdd:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.removable {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.removeRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: var(--touch);
+    cursor: pointer;
+}
+
+.removeBox {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    accent-color: var(--danger-fg);
+}
+
+.removeName {
+    font-size: 15px;
+    color: var(--ink);
+}
+
+.removed {
+    text-decoration: line-through;
+    color: var(--muted);
+}
+
+.tweakHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.optional {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.tweak {
+    box-sizing: border-box;
+    min-height: 72px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    background: var(--surface);
+    font: inherit;
+    font-size: 16px;
+    line-height: 1.4;
+    color: var(--ink);
+    resize: vertical;
+}
+
+.footer {
+    flex: none;
+    display: flex;
+    gap: 10px;
+    padding: 12px var(--page-x) calc(28px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border-soft);
+}
+
+.cancel,
+.update {
+    min-height: 52px;
+    border-radius: var(--radius-input);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.cancel {
+    flex: 1;
+    border: 1px solid var(--input-border);
+    background: var(--surface);
+    color: var(--ink);
+}
+
+.update {
+    flex: 2;
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.updateOff {
+    background: #9db8a9;
+    cursor: default;
+}

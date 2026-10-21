@@ -223,6 +223,12 @@ If you need a term that isn't here, add it as part of the card that introduces i
 - Not to be confused with: **Use first**, which says what needs using; a recipe suggestion only proposes how.
 - In code: `SuggestRecipe`, `IRecipeGenerator`, `RecipeRequest`, `Recipe`, `RecipesScreen`
 
+**Recipe adjustment** – changing a suggested recipe instead of asking for another (#104): **Adjust** opens a sheet to **add** (from the cupboard, or something to buy), **remove** ingredients, and **tweak** ("spicier", "for 4"). gpt-4o returns the same dish updated, with "Adjusted: + Chorizo · − Onion · "spicier"" under the meta and **Undo adjustment**, which steps back one version at a time. Another one and Start again drop the adjustments.
+- In code: `AdjustRecipe`, `RecipeChanges`, `AdjustAsync`, `AdjustSheet`, `AdjustmentSummary`
+
+**Suggested addition** – one of up to 3 in-stock things (by generic name) the Adjust sheet offers as chips: Jev's pick of what would improve the recipe most, with use-first items nudged ahead of close ones (#104). It's only a suggestion until tapped.
+- In code: `SuggestRecipeAdditions`, `IRecipeAdditionRanker`, `JevRecipeAdditionRanker`, `RecipeAddition`
+
 **Hungry?** – the tab and screen for ideas of what to eat from what's in stock (#88; called Recipes until then). It asks **Cook something** (a recipe suggestion) or **Ready now**, and which meal: breakfast, lunch, dinner or **snack**.
 - In code: `RecipesScreen` (route `/recipes`), `RecipeMode`
 

@@ -746,3 +746,113 @@
     font-size: 13px;
     color: var(--muted);
 }
+
+/* Adjust (#104, project/RecipeAdjust.dc.html). */
+.actionsWithAdjust {
+    flex-direction: column;
+}
+
+.actionRow {
+    flex: 1;
+    display: flex;
+    gap: 10px;
+}
+
+.adjust {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: var(--radius-input);
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.adjust:disabled,
+.secondary:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.adjusted {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px 8px 12px;
+    border-radius: var(--radius-button);
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.adjustedText {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.undoAdjust {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 6px;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.addedTag {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* While updating: the recipe stays, dimmed, with a calm note on top. */
+.updating {
+    position: relative;
+}
+
+.updating > :not(.updatingNote) {
+    opacity: 0.45;
+}
+
+.updatingNote {
+    position: sticky;
+    top: 12px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px;
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    box-shadow: 0 6px 20px rgba(28, 42, 36, 0.12);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.smallSpinner {
+    width: 18px;
+    height: 18px;
+    box-sizing: border-box;
+    border-radius: 9px;
+    border: 3px solid #cfe0d6;
+    border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite;
+}

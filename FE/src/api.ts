@@ -311,6 +311,42 @@ export interface Recipe {
     alsoNeeded: string[];
     /** Names of picked ingredients the recipe couldn't use. */
     couldNotFitIn: string[];
+    /** After an adjustment (#104): what the model couldn't add or take out. */
+    couldNotAdd?: string[];
+    couldNotRemove?: string[];
+}
+
+/** POST /api/recipes/adjust (#104): the recipe as shown, and what to change. At least one change. */
+export interface RecipeAdjustment {
+    recipe: Recipe;
+    add: { productIds: string[]; typed: string[] };
+    /** Ingredient names, as in the recipe. */
+    remove: string[];
+    /** At most 300 characters; null for none. */
+    tweak: string | null;
+}
+
+/** What an adjustment changed, for the "Adjusted: + Chorizo · − Onion · "spicier"" line. */
+export interface AdjustmentSummary {
+    added: string[];
+    removed: string[];
+    tweak: string | null;
+}
+
+/** `available: false`: the model couldn't help just now; the recipe stays as it was. */
+export interface AdjustedRecipe {
+    available: boolean;
+    recipe?: Recipe;
+    adjustmentSummary?: AdjustmentSummary;
+    message?: string;
+}
+
+/** A suggested addition for the Adjust sheet (#104): an in-stock generic name and its products. */
+export interface RecipeAddition {
+    name: string;
+    productIds: string[];
+    useFirst: boolean;
+    confidence: number;
 }
 
 /** `available: false`: the model couldn't help just now; show `message` with Try again. */
@@ -606,6 +642,16 @@ export class ApiClient {
     /** A recipe from what's in stock (#73). 400: bad choices; 422: nothing in stock; 429: over the hourly limit. */
     suggestRecipe(request: RecipeRequest): Promise<RecipeSuggestion> {
         return this.send<RecipeSuggestion>("POST", "/api/recipes/suggest", request);
+    }
+
+    /** The same recipe, updated (#104). 400: no change or bad choices; 429: over the hourly limit (shared with suggest). */
+    adjustRecipe(adjustment: RecipeAdjustment): Promise<AdjustedRecipe> {
+        return this.send<AdjustedRecipe>("POST", "/api/recipes/adjust", adjustment);
+    }
+
+    /** Up to 3 in-stock things that would improve the recipe (#104; Jev, quick, not rate limited). */
+    suggestRecipeAdditions(recipe: Recipe): Promise<{ suggestions: RecipeAddition[] }> {
+        return this.send("POST", "/api/recipes/suggest-additions", { recipe });
     }
 
     /** Push notifications (#77): the VAPID public key to subscribe with (null until the keys are set). */

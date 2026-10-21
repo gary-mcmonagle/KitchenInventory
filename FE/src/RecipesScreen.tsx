@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ApiError,
     SignInRequiredError,
+    type AdjustmentSummary,
     type ApiClient,
     type Appliance,
     type QuickIdea,
@@ -13,6 +14,7 @@ import {
 } from "./api";
 import { expiryBadge } from "./format";
 import { itemPath, navigate } from "./router";
+import { AdjustSheet, adjustmentLine, type AdjustChoices } from "./RecipeAdjust";
 import styles from "./Recipes.module.css";
 
 const MEALS: Array<{ id: RecipeMeal; label: string }> = [
@@ -49,6 +51,18 @@ function rememberMode(mode: RecipeMode) {
 export const MAX_COMMENTS = 300;
 const COUNT_FROM = 250;
 const UNAVAILABLE = "Couldn't come up with a recipe just now. Try again.";
+const ADJUST_UNAVAILABLE = "Couldn't update the recipe just now. Try again.";
+
+/** The API's friendly message (e.g. over the hourly limit), when it sent one. */
+function errorMessage(error: unknown): string | null {
+    return error instanceof ApiError &&
+        typeof error.body === "object" &&
+        error.body !== null &&
+        "error" in error.body &&
+        typeof error.body.error === "string"
+        ? error.body.error
+        : null;
+}
 
 /** The meal for the time of day in the UK (#88): before 11:00 breakfast, to 14:30 lunch, to 17:00 a snack, then
  * dinner. */
@@ -113,6 +127,20 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
     }));
     const [phase, setPhase] = useState<Phase>({ kind: "form" });
     const [shownTitles, setShownTitles] = useState<string[]>([]);
+    // Adjust (#104): earlier versions of the recipe (each Undo steps back once), what the last change was, and the sheet.
+    const [history, setHistory] = useState<Array<{ recipe: Recipe; summary: AdjustmentSummary | null }>>([]);
+    const [summary, setSummary] = useState<AdjustmentSummary | null>(null);
+    const [adjust, setAdjust] = useState<
+        | { kind: "sheet" }
+        | { kind: "updating" }
+        | { kind: "error"; message: string; choices: AdjustChoices }
+        | null
+    >(null);
+    const resetAdjust = () => {
+        setHistory([]);
+        setSummary(null);
+        setAdjust(null);
+    };
     const top = useRef<HTMLDivElement>(null);
 
     const loadStock = () => {
@@ -136,6 +164,7 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
     }, [phase.kind]);
 
     const ask = async (request: RecipeRequest) => {
+        resetAdjust(); // a new idea: adjustments aren't carried over
         setPhase({ kind: "loading" });
         try {
             const answer = await api.suggestRecipe(request);
@@ -152,16 +181,40 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
             );
         } catch (error) {
             if (error instanceof SignInRequiredError) return;
-            const message =
-                error instanceof ApiError &&
-                typeof error.body === "object" &&
-                error.body !== null &&
-                "error" in error.body &&
-                typeof error.body.error === "string"
-                    ? error.body.error
-                    : UNAVAILABLE;
-            setPhase({ kind: "error", message, retry: request });
+            setPhase({ kind: "error", message: errorMessage(error) ?? UNAVAILABLE, retry: request });
         }
+    };
+
+    const runAdjust = async (recipe: Recipe, choices: AdjustChoices) => {
+        setAdjust({ kind: "updating" });
+        try {
+            const answer = await api.adjustRecipe({
+                recipe,
+                add: { productIds: choices.productIds, typed: choices.typed },
+                remove: choices.remove,
+                tweak: choices.tweak,
+            });
+            if (!answer.available || !answer.recipe) {
+                setAdjust({ kind: "error", message: answer.message ?? ADJUST_UNAVAILABLE, choices });
+                return;
+            }
+            setHistory((h) => [...h, { recipe, summary }]);
+            setSummary(answer.adjustmentSummary ?? null);
+            setPhase({ kind: "recipe", recipe: answer.recipe });
+            setAdjust(null);
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return;
+            setAdjust({ kind: "error", message: errorMessage(error) ?? ADJUST_UNAVAILABLE, choices });
+        }
+    };
+
+    const undo = () => {
+        const previous = history[history.length - 1];
+        if (!previous) return;
+        setHistory((h) => h.slice(0, -1));
+        setSummary(previous.summary);
+        setPhase({ kind: "recipe", recipe: previous.recipe });
+        setAdjust(null);
     };
 
     const request = (avoidTitles: string[]): RecipeRequest => ({
@@ -176,11 +229,34 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
     return (
         <div className={styles.screen} ref={top}>
             {phase.kind === "recipe" ? (
-                <RecipeView
-                    recipe={phase.recipe}
-                    onAnother={() => void ask(request(shownTitles))}
-                    onStartAgain={() => setPhase({ kind: "form" })}
-                />
+                <>
+                    <RecipeView
+                        recipe={phase.recipe}
+                        previous={history[history.length - 1]?.recipe ?? null}
+                        summary={summary}
+                        updating={adjust?.kind === "updating"}
+                        adjustError={adjust?.kind === "error" ? adjust.message : null}
+                        onRetryAdjust={() =>
+                            adjust?.kind === "error" && void runAdjust(phase.recipe, adjust.choices)
+                        }
+                        onAdjust={() => setAdjust({ kind: "sheet" })}
+                        onUndo={history.length > 0 ? undo : null}
+                        onAnother={() => void ask(request(shownTitles))}
+                        onStartAgain={() => {
+                            resetAdjust();
+                            setPhase({ kind: "form" });
+                        }}
+                    />
+                    {adjust?.kind === "sheet" && (
+                        <AdjustSheet
+                            api={api}
+                            recipe={phase.recipe}
+                            stock={stock ?? []}
+                            onCancel={() => setAdjust(null)}
+                            onUpdate={(choices) => void runAdjust(phase.recipe, choices)}
+                        />
+                    )}
+                </>
             ) : phase.kind === "ideas" ? (
                 <IdeasView
                     meal={phase.meal}
@@ -547,24 +623,66 @@ function IngredientPicker({
 
 function RecipeView({
     recipe,
+    previous = null,
+    summary = null,
+    updating = false,
+    adjustError = null,
+    onRetryAdjust,
+    onAdjust,
+    onUndo = null,
     onAnother,
     onStartAgain,
 }: {
     recipe: Recipe;
+    /** The version before the last adjustment: its new ingredients get the "Added" tag. */
+    previous?: Recipe | null;
+    summary?: AdjustmentSummary | null;
+    updating?: boolean;
+    adjustError?: string | null;
+    onRetryAdjust?: () => void;
+    onAdjust?: () => void;
+    onUndo?: (() => void) | null;
     onAnother: () => void;
     onStartAgain: () => void;
 }) {
+    const before = new Set((previous?.ingredients ?? []).map((i) => i.name.trim().toLowerCase()));
+    const isNew = (name: string) => previous !== null && !before.has(name.trim().toLowerCase());
     const open = (productId: string) => (e: React.MouseEvent) => {
         e.preventDefault();
         navigate(itemPath(productId));
     };
     return (
         <>
-            <div className={styles.recipe}>
+            <div
+                className={updating ? `${styles.recipe} ${styles.updating}` : styles.recipe}
+                aria-busy={updating}
+            >
+                {updating && (
+                    <div className={styles.updatingNote} role="status">
+                        <span className={styles.smallSpinner} aria-hidden="true" />
+                        Updating your recipe…
+                    </div>
+                )}
+                {adjustError && (
+                    <div className={styles.errorCard} role="alert">
+                        <span>{adjustError}</span>
+                        <button type="button" className={styles.tryAgain} onClick={onRetryAdjust}>
+                            Try again
+                        </button>
+                    </div>
+                )}
                 <div className={styles.recipeHead}>
                     <div className={styles.kicker}>
                         {mealLabel(recipe.meal)} · Serves {recipe.servings} · {recipe.totalMinutes} min
                     </div>
+                    {summary && onUndo && (
+                        <div className={styles.adjusted}>
+                            <span className={styles.adjustedText}>{adjustmentLine(summary)}</span>
+                            <button type="button" className={styles.undoAdjust} onClick={onUndo}>
+                                Undo adjustment
+                            </button>
+                        </div>
+                    )}
                     <h1 className={styles.recipeTitle}>{recipe.title}</h1>
                     {recipe.summary && <div className={styles.summary}>{recipe.summary}</div>}
                 </div>
@@ -614,12 +732,23 @@ function RecipeView({
                                 ) : (
                                     <span className={styles.ingredientName}>{i.name}</span>
                                 )}
+                                {isNew(i.name) && <span className={styles.addedTag}>Added</span>}
                             </li>
                         ))}
                     </ul>
                     {recipe.couldNotFitIn.length > 0 && (
                         <p className={styles.notFitted}>
                             Couldn&apos;t fit in: {recipe.couldNotFitIn.join(", ")}
+                        </p>
+                    )}
+                    {(recipe.couldNotAdd ?? []).length > 0 && (
+                        <p className={styles.notFitted}>
+                            Couldn&apos;t add: {recipe.couldNotAdd!.join(", ")}
+                        </p>
+                    )}
+                    {(recipe.couldNotRemove ?? []).length > 0 && (
+                        <p className={styles.notFitted}>
+                            Couldn&apos;t remove: {recipe.couldNotRemove!.join(", ")}
                         </p>
                     )}
                     {recipe.alsoNeeded.length > 0 && (
@@ -644,13 +773,40 @@ function RecipeView({
                     </ol>
                 </section>
             </div>
-            <div className={styles.actions}>
-                <button type="button" className={styles.primary} onClick={onAnother}>
-                    Another one
-                </button>
-                <button type="button" className={styles.secondary} onClick={onStartAgain}>
-                    Start again
-                </button>
+            <div className={onAdjust ? `${styles.actions} ${styles.actionsWithAdjust}` : styles.actions}>
+                {onAdjust && (
+                    <button type="button" className={styles.adjust} onClick={onAdjust} disabled={updating}>
+                        <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+                            <circle cx="16" cy="7" r="2" />
+                            <circle cx="10" cy="17" r="2" />
+                        </svg>
+                        Adjust
+                    </button>
+                )}
+                <div className={styles.actionRow}>
+                    <button type="button" className={styles.primary} onClick={onAnother} disabled={updating}>
+                        Another one
+                    </button>
+                    <button
+                        type="button"
+                        className={styles.secondary}
+                        onClick={onStartAgain}
+                        disabled={updating}
+                    >
+                        Start again
+                    </button>
+                </div>
             </div>
         </>
     );
