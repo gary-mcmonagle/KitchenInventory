@@ -279,6 +279,34 @@ export interface QuickIdea {
         soonestEstimatedExpiryDate: string | null;
     }>;
     alsoNeeded: string | null;
+    /** After an adjustment (#108): what the model couldn't add or take out. */
+    couldNotAdd?: string[];
+    couldNotRemove?: string[];
+}
+
+/** POST /api/recipes/adjust-idea (#108): a Ready now idea as shown, its meal, and what to change. */
+export interface IdeaAdjustment {
+    idea: {
+        title: string;
+        how: string;
+        appliance: Appliance;
+        minutes: number;
+        uses: Array<{ productId: string; displayName: string }>;
+        alsoNeeded: string | null;
+    };
+    meal: RecipeMeal;
+    add: { productIds: string[]; typed: string[] };
+    /** Names of things the idea uses. */
+    remove: string[];
+    tweak: string | null;
+}
+
+/** `available: false`: the model couldn't help just now; the idea stays as it was. */
+export interface AdjustedIdea {
+    available: boolean;
+    idea?: QuickIdea;
+    adjustmentSummary?: AdjustmentSummary;
+    message?: string;
 }
 
 /** A saved recipe's ingredient (or a saved Ready now idea's item), checked against today's stock (#105). */
@@ -702,6 +730,11 @@ export class ApiClient {
     /** The same recipe, updated (#104). 400: no change or bad choices; 429: over the hourly limit (shared with suggest). */
     adjustRecipe(adjustment: RecipeAdjustment): Promise<AdjustedRecipe> {
         return this.send<AdjustedRecipe>("POST", "/api/recipes/adjust", adjustment);
+    }
+
+    /** The same Ready now idea, updated (#108): still a quick idea. Counts towards the hourly recipe limit. */
+    adjustIdea(adjustment: IdeaAdjustment): Promise<AdjustedIdea> {
+        return this.send<AdjustedIdea>("POST", "/api/recipes/adjust-idea", adjustment);
     }
 
     /** The household's saved recipes and ideas, newest first, each checked against today's stock (#105). */

@@ -139,7 +139,7 @@ public sealed partial class SuggestRecipe(
         return new SuggestRecipeResult.Suggested(ToView(recipe, byId));
     }
 
-    private static QuickIdeaView ToView(QuickIdea idea, Dictionary<Guid, StockProduct> byId) => new(
+    internal static QuickIdeaView ToView(QuickIdea idea, Dictionary<Guid, StockProduct> byId) => new(
         idea.Title,
         idea.How,
         idea.Appliance,

@@ -120,56 +120,65 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
                 return (null, error);
             }
 
-            var addIds = new List<Guid>();
-            var typed = new List<string>();
-            if (root.TryGetProperty("add", out var add) && add.ValueKind != JsonValueKind.Null)
-            {
-                if (add.ValueKind != JsonValueKind.Object)
-                {
-                    return (null, "add must be { productIds, typed }.");
-                }
-
-                if (add.TryGetProperty("productIds", out var ids) && ids.ValueKind != JsonValueKind.Null)
-                {
-                    if (ids.ValueKind != JsonValueKind.Array
-                        || ids.EnumerateArray().Any(i => i.ValueKind != JsonValueKind.String || !Guid.TryParse(i.GetString(), out _)))
-                    {
-                        return (null, "add.productIds must be a list of product IDs.");
-                    }
-
-                    addIds.AddRange(ids.EnumerateArray().Select(i => Guid.Parse(i.GetString()!)));
-                }
-
-                if (Strings(add, "typed") is not { } t)
-                {
-                    return (null, "add.typed must be a list of strings.");
-                }
-
-                typed.AddRange(t);
-            }
-
-            if (Strings(root, "remove") is not { } remove)
-            {
-                return (null, "remove must be a list of ingredient names.");
-            }
-
-            string? tweak = null;
-            if (root.TryGetProperty("tweak", out var tw) && tw.ValueKind != JsonValueKind.Null)
-            {
-                if (tw.ValueKind != JsonValueKind.String)
-                {
-                    return (null, "tweak must be a string or null.");
-                }
-
-                tweak = tw.GetString();
-            }
-
-            return (new AdjustChoices(recipe, addIds, typed, remove, tweak), null);
+            var changes = ParseChanges(root);
+            return changes.Error is null
+                ? (new AdjustChoices(recipe, changes.AddIds!, changes.Typed!, changes.Remove!, changes.Tweak), null)
+                : (null, changes.Error);
         }
         catch (JsonException)
         {
             return (null, "Body must be a JSON object.");
         }
+    }
+
+    /// <summary>An adjustment's changes (#104, #108): <c>add: { productIds, typed }</c>, <c>remove</c> and <c>tweak</c>.</summary>
+    internal static (List<Guid>? AddIds, List<string>? Typed, List<string>? Remove, string? Tweak, string? Error) ParseChanges(JsonElement root)
+    {
+        var addIds = new List<Guid>();
+        var typed = new List<string>();
+        if (root.TryGetProperty("add", out var add) && add.ValueKind != JsonValueKind.Null)
+        {
+            if (add.ValueKind != JsonValueKind.Object)
+            {
+                return (null, null, null, null, "add must be { productIds, typed }.");
+            }
+
+            if (add.TryGetProperty("productIds", out var ids) && ids.ValueKind != JsonValueKind.Null)
+            {
+                if (ids.ValueKind != JsonValueKind.Array
+                    || ids.EnumerateArray().Any(i => i.ValueKind != JsonValueKind.String || !Guid.TryParse(i.GetString(), out _)))
+                {
+                    return (null, null, null, null, "add.productIds must be a list of product IDs.");
+                }
+
+                addIds.AddRange(ids.EnumerateArray().Select(i => Guid.Parse(i.GetString()!)));
+            }
+
+            if (Strings(add, "typed") is not { } t)
+            {
+                return (null, null, null, null, "add.typed must be a list of strings.");
+            }
+
+            typed.AddRange(t);
+        }
+
+        if (Strings(root, "remove") is not { } remove)
+        {
+            return (null, null, null, null, "remove must be a list of ingredient names.");
+        }
+
+        string? tweak = null;
+        if (root.TryGetProperty("tweak", out var tw) && tw.ValueKind != JsonValueKind.Null)
+        {
+            if (tw.ValueKind != JsonValueKind.String)
+            {
+                return (null, null, null, null, "tweak must be a string or null.");
+            }
+
+            tweak = tw.GetString();
+        }
+
+        return (addIds, typed, remove, tweak, null);
     }
 
     /// <summary>A list of strings, an empty list when it's missing or null, or null when it isn't one.</summary>
@@ -428,6 +437,139 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
         await response.WriteStringAsync(JsonSerializer.Serialize(body, WebJson));
         return response;
     }
+
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+}
+
+/// <summary><c>POST /api/recipes/adjust-idea</c> (#108) with <c>{ idea: { title, how, appliance, minutes, uses, alsoNeeded },
+/// meal, add: { productIds, typed }, remove, tweak }</c>: the same Ready now idea, updated. Counts towards the hourly
+/// recipe limit. Nothing is stored. See docs/api.md.</summary>
+public sealed class IdeaAdjustFunctions(AdjustIdea adjust)
+{
+    private const int MaxBodyBytes = 16 * 1024;
+
+    public const string UnavailableMessage = "Couldn't update this idea just now. Try again.";
+
+    [Function("adjustIdea")]
+    public async Task<HttpResponseData> Adjust(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "recipes/adjust-idea")] HttpRequestData request,
+        FunctionContext context, CancellationToken cancellationToken)
+    {
+        using var buffer = new MemoryStream();
+        await request.Body.CopyToAsync(buffer, cancellationToken);
+        var (choices, error) = Parse(buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+        var (status, body) = choices is null
+            ? (HttpStatusCode.BadRequest, new { error })
+            : ToResponse(await adjust.ExecuteAsync(choices, context.GetCurrentUser(), cancellationToken));
+        var response = request.CreateResponse(status);
+        response.Headers.Add("Content-Type", "application/json; charset=utf-8");
+        response.Headers.Add("Cache-Control", "no-store");
+        await response.WriteStringAsync(JsonSerializer.Serialize(body, WebJson));
+        return response;
+    }
+
+    private const string Shape = "Body must be { idea: { title, how, appliance, minutes, uses, alsoNeeded }, meal, add, remove, tweak }.";
+
+    internal static (IdeaAdjustChoices? Choices, string? Error) Parse(ReadOnlySpan<byte> body)
+    {
+        if (body.Length > MaxBodyBytes)
+        {
+            return (null, "Body is too large.");
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body.ToArray());
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("idea", out var i) || i.ValueKind != JsonValueKind.Object)
+            {
+                return (null, Shape);
+            }
+
+            static string? Text(JsonElement o, string name, int max) =>
+                o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && v.GetString()!.Trim() is { Length: > 0 } t && t.Length <= max ? t : null;
+
+            RecipeMeal? meal = Text(root, "meal", 20) switch
+            {
+                "breakfast" => RecipeMeal.Breakfast,
+                "lunch" => RecipeMeal.Lunch,
+                "dinner" => RecipeMeal.Dinner,
+                "snack" => RecipeMeal.Snack,
+                _ => null,
+            };
+            Appliance? appliance = Text(i, "appliance", 20) switch
+            {
+                "toaster" => Appliance.Toaster,
+                "microwave" => Appliance.Microwave,
+                "kettle" => Appliance.Kettle,
+                "none" => Appliance.None,
+                _ => null,
+            };
+            var title = Text(i, "title", 120);
+            var how = Text(i, "how", 600);
+            if (meal is null || appliance is null || title is null || how is null || !i.TryGetProperty("uses", out var usesNode)
+                || usesNode.ValueKind != JsonValueKind.Array || usesNode.GetArrayLength() > 20)
+            {
+                return (null, Shape);
+            }
+
+            // Each use is a product ID, or { productId, displayName } as the app shows it.
+            var uses = new List<IdeaUse>();
+            foreach (var u in usesNode.EnumerateArray())
+            {
+                var id = u.ValueKind == JsonValueKind.String ? u.GetString() : u.ValueKind == JsonValueKind.Object ? Text(u, "productId", 64) : null;
+                if (!Guid.TryParse(id, out var productId))
+                {
+                    return (null, "idea.uses must be product IDs.");
+                }
+
+                uses.Add(new IdeaUse(productId, u.ValueKind == JsonValueKind.Object ? Text(u, "displayName", 120) : null));
+            }
+
+            var minutes = i.TryGetProperty("minutes", out var m) && m.ValueKind == JsonValueKind.Number && m.TryGetInt32(out var n) ? n : 5;
+            var current = new IdeaInput(title, how, appliance.Value, Math.Clamp(minutes, 1, 60), uses, Text(i, "alsoNeeded", 60));
+            var changes = RecipeFunctions.ParseChanges(root);
+            return changes.Error is null
+                ? (new IdeaAdjustChoices(current, meal.Value, changes.AddIds!, changes.Typed!, changes.Remove!, changes.Tweak), null)
+                : (null, changes.Error);
+        }
+        catch (JsonException)
+        {
+            return (null, "Body must be a JSON object.");
+        }
+    }
+
+    internal static (HttpStatusCode Status, object Body) ToResponse(AdjustIdeaResult result) => result switch
+    {
+        AdjustIdeaResult.Adjusted a => (HttpStatusCode.OK, new
+        {
+            available = true,
+            idea = new
+            {
+                title = a.Idea.Title,
+                how = a.Idea.How,
+                appliance = a.Idea.Appliance.ToString().ToLowerInvariant(),
+                minutes = a.Idea.Minutes,
+                uses = a.Idea.Uses.Select(u => new
+                {
+                    productId = u.ProductId,
+                    displayName = u.DisplayName,
+                    useFirst = u.UseFirst,
+                    daysUntilSoonest = u.DaysUntilSoonest,
+                    soonestEstimatedExpiryDate = u.SoonestEstimatedExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                }),
+                alsoNeeded = a.Idea.AlsoNeeded,
+                couldNotAdd = a.CouldNotAdd,
+                couldNotRemove = a.CouldNotRemove,
+            },
+            adjustmentSummary = new { added = a.Summary.Added, removed = a.Summary.Removed, tweak = a.Summary.Tweak },
+        }),
+        AdjustIdeaResult.Unavailable => (HttpStatusCode.OK, new { available = false, message = UnavailableMessage }),
+        AdjustIdeaResult.Invalid i => (HttpStatusCode.BadRequest, new { error = i.Error }),
+        AdjustIdeaResult.NothingInStock => (HttpStatusCode.UnprocessableEntity, new { error = "There's nothing in stock to cook with." }),
+        AdjustIdeaResult.TooManyRequests => ((HttpStatusCode)429, new { error = RecipeFunctions.TooManyMessage }),
+        _ => throw new ArgumentOutOfRangeException(nameof(result)),
+    };
 
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 }

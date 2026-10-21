@@ -506,6 +506,90 @@ public sealed class FoundryRecipeGeneratorTests
         Assert.DoesNotContain("secret", line, StringComparison.Ordinal);
         Assert.DoesNotContain("cheddar", line, StringComparison.OrdinalIgnoreCase);
     }
+
+    // ---- Adjust a Ready now idea (#108)
+
+    private static IdeaAdjustmentRequest IdeaAdjustment(
+        IReadOnlyList<Guid>? add = null, IReadOnlyList<string>? typed = null, IReadOnlyList<RecipeIngredient>? remove = null, string? tweak = null) =>
+        new(new RecipeRequest(RecipeMeal.Snack, false, Stock, add ?? [], tweak, []),
+            new QuickIdea("Warm milk", "Microwave a mug of milk for 90 seconds.", Appliance.Microwave, 3, [Milk], null),
+            new RecipeChanges(add ?? [], typed ?? [], remove ?? [], tweak));
+
+    private static string OneIdea(string title, string how, string appliance, string uses, string also = "") =>
+        $$"""{"title":"{{title}}","how":"{{how}}","appliance":"{{appliance}}","minutes":4,"uses":[{{uses}}],"alsoNeeded":[{{also}}]}""";
+
+    [Fact]
+    public async Task An_idea_adjustment_sends_the_idea_with_refs_and_its_own_schema_and_may_switch_appliance()
+    {
+        var answer = OneIdea("Cheese toastie", "Toast the cheddar between two slices.", "toaster", "\"p3\"", "\"2 slices of bread\"");
+        var (generator, handler, _) = Make(Options, () => Status(200, Answer(answer)));
+
+        var result = await generator.AdjustIdeaAsync(
+            IdeaAdjustment(add: [Cheddar], typed: ["bread"], remove: [new RecipeIngredient("Semi-skimmed milk", "", Milk)], tweak: "make it a toastie"),
+            CancellationToken.None);
+
+        var adjusted = Assert.IsType<IdeaResult.Adjusted>(result);
+        Assert.Equal(("Cheese toastie", Appliance.Toaster, "2 slices of bread"), (adjusted.Idea.Title, adjusted.Idea.Appliance, adjusted.Idea.AlsoNeeded));
+        Assert.Equal([Cheddar], adjusted.Idea.Uses);
+        Assert.Equal((0, 0, 0), (adjusted.CouldNotFitIn.Count, adjusted.CouldNotAddTyped.Count, adjusted.CouldNotRemove.Count));
+        var body = JsonNode.Parse(Assert.Single(handler.Requests).Body)!;
+        Assert.Equal("ready_now_idea", body["response_format"]!["json_schema"]!["name"]!.GetValue<string>());
+        var messages = body["messages"]!.AsArray();
+        Assert.Equal(FoundryRecipeGenerator.IdeaAdjustInstructions, messages[0]!["content"]!.GetValue<string>());
+        var prompt = messages[1]!["content"]!.GetValue<string>().ReplaceLineEndings("\n");
+        Assert.Contains("\"appliance\":\"microwave\",\"minutes\":3,\"uses\":[\"p1\"]", prompt, StringComparison.Ordinal);
+        Assert.Contains("Add (not in stock: it becomes alsoNeeded):\n- bread", prompt, StringComparison.Ordinal);
+        Assert.Contains("Remove (must not appear):\n- p1 Semi-skimmed milk", prompt, StringComparison.Ordinal);
+        Assert.Contains("Must include (use every one):\n- p3 Mature cheddar", prompt, StringComparison.Ordinal);
+        Assert.Contains("<preferences>\nmake it a toastie\n</preferences>", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_idea_that_ignores_a_change_is_asked_for_again_once_then_returned_with_notes()
+    {
+        var still = OneIdea("Warm milk", "Microwave the milk.", "microwave", "\"p1\"");
+        var (generator, handler, _) = Make(Options, () => Status(200, Answer(still)), () => Status(200, Answer(still)));
+
+        var result = await generator.AdjustIdeaAsync(
+            IdeaAdjustment(add: [Cheddar], typed: ["honey"], remove: [new RecipeIngredient("Semi-skimmed milk", "", Milk)]), CancellationToken.None);
+
+        var adjusted = Assert.IsType<IdeaResult.Adjusted>(result);
+        Assert.Equal([Cheddar], adjusted.CouldNotFitIn);
+        Assert.Equal(["honey"], adjusted.CouldNotAddTyped);
+        Assert.Equal(["Semi-skimmed milk"], adjusted.CouldNotRemove);
+        Assert.Equal(2, handler.Requests.Count);
+        var retry = JsonNode.Parse(handler.Requests[1].Body)!["messages"]!.AsArray()[3]!["content"]!.GetValue<string>();
+        Assert.Contains("uses leaves out p3 Mature cheddar", retry, StringComparison.Ordinal);
+        Assert.Contains("it still uses Semi-skimmed milk", retry, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("hob")]
+    [InlineData("oven")]
+    [InlineData("air fryer")]
+    public async Task An_idea_needing_anything_but_the_four_is_unavailable(string appliance)
+    {
+        var (generator, _, _) = Make(Options, () => Status(200, Answer(OneIdea("Fried egg", "Fry it.", appliance, ""))));
+
+        Assert.IsType<IdeaResult.Unavailable>(await generator.AdjustIdeaAsync(IdeaAdjustment(tweak: "an egg"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task An_idea_keeps_at_most_one_extra_item_drops_unknown_products_and_logs_only_metadata()
+    {
+        var answer = OneIdea("Milky tea", "Boil the kettle.", "kettle", "\"p1\",\"p99\"", "\"tea bags\",\"sugar\"");
+        var (generator, _, logs) = Make(Options, () => Status(200, Answer(answer)));
+
+        var result = await generator.AdjustIdeaAsync(IdeaAdjustment(tweak: "my secret tweak"), CancellationToken.None);
+
+        var idea = Assert.IsType<IdeaResult.Adjusted>(result).Idea;
+        Assert.Equal([Milk], idea.Uses);
+        Assert.Equal("tea bags", idea.AlsoNeeded);
+        var line = Assert.Single(logs.Entries).Message;
+        Assert.Contains("outcome adjusted idea", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("tea", line, StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public sealed class JevRecipeAdditionRankerTests

@@ -106,4 +106,7 @@ public interface IRecipeGenerator
     /// <summary>The same recipe, updated with the changes (#104): added items in, removed ones out, the same dish where
     /// possible.</summary>
     Task<RecipeResult> AdjustAsync(RecipeAdjustmentRequest request, CancellationToken cancellationToken);
+
+    /// <summary>The same Ready now idea, updated with the changes (#108): still one quick idea.</summary>
+    Task<IdeaResult> AdjustIdeaAsync(IdeaAdjustmentRequest request, CancellationToken cancellationToken);
 }

@@ -140,6 +140,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RecipeRateLimit>();
         services.AddTransient<SuggestRecipe>();
         services.AddTransient<AdjustRecipe>(); // #104
+        services.AddTransient<AdjustIdea>(); // #108: Ready now ideas, the same hourly limit
         services.AddSingleton(sp => RecipeAdditionSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddTransient<IRecipeAdditionRanker, JevRecipeAdditionRanker>();
         services.AddTransient<SuggestRecipeAdditions>();

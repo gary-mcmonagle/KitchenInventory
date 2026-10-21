@@ -872,3 +872,70 @@
     gap: 8px;
     padding-top: 2px;
 }
+
+/* Ready now card states (#108, project/ReadyNowStates.dc.html). */
+.ideaAdjusted {
+    border-color: var(--on-border);
+}
+
+.ideaUpdating {
+    position: relative;
+}
+
+.ideaUpdating > :not(.ideaUpdatingNote) {
+    opacity: 0.4;
+}
+
+.ideaUpdatingNote {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.ideaAdjustedLine {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 6px 6px 10px;
+    border-radius: 10px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.usedAddedTag {
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: var(--accent-tint);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.ideaAdjust {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: var(--touch);
+    border-radius: var(--radius-button);
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ideaAdjust:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
