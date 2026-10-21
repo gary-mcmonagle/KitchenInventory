@@ -241,6 +241,7 @@ Google accepted all of these; Apple didn't. The feature's sender must follow App
 
 - **VAPID subject:** Apple rejects a made-up contact (`403 {"reason":"BadJwtToken"}` for `mailto:…@example.invalid`). Use a real one: `https://kitchen.garymcmonagle.com` works and keeps Gary's email out of config.
 - **Topic:** Apple rejects hyphens (`400 {"reason":"BadWebPushTopic"}` for `poc-use-first`), although RFC 8030 allows them. Use **letters and digits only** (`useFirst`, `hubOffline`), at most 32.
+  - **Correction (#106, 2026-10-21):** it wasn't the hyphen. Apple reads the topic as URL-safe Base64, and `poc-use-first` is 13 characters: no Base64 string has a length with remainder 1 when divided by 4. The topic `stock` (5) was refused the same way. Letters and digits, at most 32, and not 1, 5, 9, 13… characters long.
 - **Error bodies:** push services explain refusals in the response body (Apple: `{"reason":"…"}`). Log that reason (it holds no secrets) with the status, or problems are guesswork.
 
 The iPhone needed iOS 16.4+ and the page **added to the Home Screen and opened from there** (Share → Add to Home Screen, "Open as Web App" on). In a Safari tab, `Notification` doesn't exist.

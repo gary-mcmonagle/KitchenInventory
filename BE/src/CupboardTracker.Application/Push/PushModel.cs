@@ -34,7 +34,7 @@ public enum PushUrgency
 public sealed record PushMessage(string Title, string Body, string Path, string Topic, TimeSpan TimeToLive, PushUrgency Urgency = PushUrgency.Normal)
 {
     public static string? Problem(PushMessage message) =>
-        !PushTopic.IsValid(message.Topic) ? "The topic must be letters and digits only, at most 32."
+        !PushTopic.IsValid(message.Topic) ? "The topic must be letters and digits only, at most 32, and not 1, 5, 9… characters long (Apple reads it as Base64)."
         : !message.Path.StartsWith('/') || message.Path.StartsWith("//", StringComparison.Ordinal) ? "The path must be a path in the app."
         : string.IsNullOrWhiteSpace(message.Title) ? "A push needs a title."
         : message.TimeToLive <= TimeSpan.Zero ? "The time to live must be positive."

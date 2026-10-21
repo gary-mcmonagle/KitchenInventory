@@ -37,13 +37,18 @@ public sealed class PushRulesTests
         Assert.Equal(allowed, PushServices.IsAllowed(endpoint));
 
     [Theory]
-    [InlineData("stock", true)]
-    [InlineData("useFirst2", true)]
-    [InlineData("use-first", false)] // Apple: 400 BadWebPushTopic
+    [InlineData("test", true)] // delivered to an iPhone
+    [InlineData("pocUseFirst", true)] // delivered to an iPhone (spike #75)
+    [InlineData("stockChanges", true)]
+    [InlineData("stock", false)] // Apple: 400 BadWebPushTopic (#106): 5 characters can't be Base64
+    [InlineData("poc-use-first", false)] // Apple: 400 BadWebPushTopic (spike #75): 13 characters
+    [InlineData("useFirst2", false)] // 9
+    [InlineData("a", false)]
+    [InlineData("use-first", false)]
     [InlineData("use_first", false)]
     [InlineData("", false)]
     [InlineData("abcdefghijklmnopqrstuvwxyz0123456", false)] // 33
     [InlineData("abcdefghijklmnopqrstuvwxyz012345", true)] // 32
-    public void Topics_are_letters_and_digits_up_to_32(string topic, bool valid) =>
+    public void Topics_are_letters_and_digits_up_to_32_with_a_length_Base64_can_have(string topic, bool valid) =>
         Assert.Equal(valid, PushTopic.IsValid(topic));
 }

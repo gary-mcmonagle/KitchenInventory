@@ -35,13 +35,19 @@ public static class PushServices
 
 /// <summary>
 /// The <c>Topic</c> (and notification tag) for a kind of push: a newer push with the same topic replaces an older one.
-/// Apple only accepts letters and digits, at most 32 (it rejects hyphens with 400 BadWebPushTopic, spike #75).
+/// Apple reads it as **URL-safe Base64**, so it refuses (400 BadWebPushTopic) anything that can't be Base64: more than
+/// 32 characters, or a length of 1, 5, 9, 13… (length % 4 == 1, which no Base64 string has). That's why "stock" (5)
+/// and spike #75's "poc-use-first" (13) were refused while "test" (4) and "pocUseFirst" (11) were delivered (#106).
+/// We also keep to letters and digits.
 /// </summary>
 public static partial class PushTopic
 {
     public const int MaxLength = 32;
 
-    public static bool IsValid(string topic) => topic.Length is > 0 and <= MaxLength && Allowed().IsMatch(topic);
+    public static bool IsValid(string topic) => IsName(topic) && topic.Length % 4 != 1;
+
+    /// <summary>Letters and digits, 1–32: the shape of a topic, without Apple's Base64 length rule (preference names).</summary>
+    public static bool IsName(string text) => text.Length is > 0 and <= MaxLength && Allowed().IsMatch(text);
 
     [GeneratedRegex("^[A-Za-z0-9]+$")]
     private static partial Regex Allowed();

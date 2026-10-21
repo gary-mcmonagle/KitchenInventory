@@ -83,7 +83,7 @@ public sealed class PushTests
     private const string P256dh = "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4";
     private const string Auth = "BTBZMqHH6r4Tts7J_aSIgg";
 
-    private static readonly PushMessage Message = new("Cupboard updated", "Added Milk", "/", "stock", TimeSpan.FromHours(1));
+    private static readonly PushMessage Message = new("Cupboard updated", "Added Milk", "/", "stockChanges", TimeSpan.FromHours(1));
 
     private readonly FakePushSubscriptions subscriptions = new();
     private readonly FakePushSeen seen = new();

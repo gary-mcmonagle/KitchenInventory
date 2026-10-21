@@ -242,9 +242,17 @@ public sealed class StockChangePushTests
         Assert.Equal(["gary-laptop", "gary-phone", "sam-phone"], sender.Sent.Select(s => s.Subscription.Id).Order());
         var message = sender.Sent[0].Message;
         // Something was removed, so tapping it opens the "add to the list?" sheet for this batch (#89).
-        Assert.Equal(("Cupboard updated", "Added Milk and Bread · Removed Hummus", $"/?removed={batchId:D}", "stock"), (message.Title, message.Body, message.Path, message.Topic));
+        Assert.Equal(("Cupboard updated", "Added Milk and Bread · Removed Hummus", $"/?removed={batchId:D}", "stockChanges"), (message.Title, message.Body, message.Path, message.Topic));
         Assert.Null(batches.Open); // closed
         Assert.Equal(3, batches.Sent[batchId].Changes.Count); // kept for the sheet
+    }
+
+    [Fact]
+    public void Every_topic_the_app_sends_is_one_Apple_accepts()
+    {
+        // Apple refused every "stock" push with 400 BadWebPushTopic (#106): it reads the topic as Base64.
+        Assert.Null(PushMessage.Problem(SendStockChangePush.Message([Change("Milk")], Guid.NewGuid())));
+        Assert.Null(PushMessage.Problem(SendTestPush.Message));
     }
 
     [Fact]

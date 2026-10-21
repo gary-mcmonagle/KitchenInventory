@@ -65,7 +65,7 @@ public static class PushSubscriptionRules
             : "Browser";
     }
 
-    public static bool IsPreferenceType(string type) => PushTopic.IsValid(type);
+    public static bool IsPreferenceType(string type) => PushTopic.IsName(type);
 
     private static byte[]? Decode(string? base64Url)
     {

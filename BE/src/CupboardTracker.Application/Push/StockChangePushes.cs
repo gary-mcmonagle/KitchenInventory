@@ -181,7 +181,8 @@ public sealed partial class SendStockChangePush(
     StockPushSettings settings, StockSettings stock, TimeProvider clock, ILogger<SendStockChangePush> logger)
 {
     public const string PreferenceKey = "stockChanges";
-    public const string Topic = "stock";
+    /// <summary>Not "stock": Apple refuses a 5-character topic (#106, see <see cref="Domain.Push.PushTopic"/>).</summary>
+    public const string Topic = "stockChanges";
 
     /// <summary>Queue messages can arrive a little early; a message this close to the due time sends.</summary>
     private static readonly TimeSpan Early = TimeSpan.FromSeconds(5);

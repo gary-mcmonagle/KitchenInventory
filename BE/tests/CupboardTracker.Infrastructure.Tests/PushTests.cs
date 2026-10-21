@@ -24,7 +24,7 @@ public sealed class WebPushSenderTests
         FirstRetryDelay = TimeSpan.Zero,
     };
 
-    private static readonly PushMessage Message = new("Cupboard updated", "Added Milk", "/?from=push", "stock", TimeSpan.FromHours(12));
+    private static readonly PushMessage Message = new("Cupboard updated", "Added Milk", "/?from=push", "stockChanges", TimeSpan.FromHours(12));
 
     private static (string, string) MakeKeys()
     {
@@ -130,7 +130,7 @@ public sealed class WebPushSenderTests
         Assert.EndsWith($", k={Vapid.Public}", request.Headers.Authorization.Parameter, StringComparison.Ordinal);
         Assert.Equal(["43200"], request.Headers.GetValues("TTL"));
         Assert.Equal(["high"], request.Headers.GetValues("Urgency"));
-        Assert.Equal(["stock"], request.Headers.GetValues("Topic"));
+        Assert.Equal(["stockChanges"], request.Headers.GetValues("Topic"));
         Assert.Equal(4096u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(body.AsSpan(16, 4))); // aes128gcm header
         Assert.Equal(65, body[20]);
     }
@@ -144,7 +144,7 @@ public sealed class WebPushSenderTests
         Assert.Equal("Cupboard updated", payload["notification"]!["title"]!.GetValue<string>());
         Assert.Equal("Added Milk", payload["notification"]!["body"]!.GetValue<string>());
         Assert.Equal("https://kitchen.garymcmonagle.com/?from=push", payload["notification"]!["navigate"]!.GetValue<string>());
-        Assert.Equal("stock", payload["notification"]!["tag"]!.GetValue<string>());
+        Assert.Equal("stockChanges", payload["notification"]!["tag"]!.GetValue<string>());
     }
 
     [Theory]
@@ -247,7 +247,7 @@ public sealed class PushStorageTests
     [Fact]
     public void Push_jobs_survive_the_queue_round_trip()
     {
-        var job = new PushJob(Guid.NewGuid(), new PushMessage("T", "B", "/", "stock", TimeSpan.FromMinutes(30), PushUrgency.High),
+        var job = new PushJob(Guid.NewGuid(), new PushMessage("T", "B", "/", "stockChanges", TimeSpan.FromMinutes(30), PushUrgency.High),
             new PushAudience { OptedInTo = "stockChanges", ExceptSeenEventKey = "scan:1", ExceptUsers = [Guid.NewGuid()] });
 
         var back = StorageQueuePushJobScheduler.Deserialize(StorageQueuePushJobScheduler.Serialize(job))!;
