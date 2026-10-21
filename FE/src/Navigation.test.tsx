@@ -53,6 +53,7 @@ function shellApi(scanners: Scanners = clear) {
         me: async () => ({ name: "Cupboard test", objectId: "o" }),
         ping: async () => ({ status: "ok", commit: "abc1234" }),
         stock: async () => ({ generatedAt: "", totalUnits: 0, useFirstCount: 0, products: [] }),
+        savedRecipes: async () => ({ savedRecipes: [] }),
         scanners: vi.fn(async () => scanners),
         looseProducts: async () => ({ products: [] }),
         product: async () => ({ productId: "p1", displayName: "Milk", status: "known", units: [] }),

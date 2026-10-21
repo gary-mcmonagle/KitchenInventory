@@ -533,9 +533,28 @@ One document per **device** that has push notifications turned on, partitioned b
 
 The household's one shopping list, in **one partition**: `listId` is always `"household"` (a few hundred documents at most). `defaultTtl: -1`, so only documents that set a `ttl` expire.
 
-- **Items** (`type: "item"`, `id` = the app's item id): `name`, `normalizedName` (lower case, trimmed, single spaces), `note`, `productId`, `aisle` (aisle id, null while Jev works it out), `aisleSource` (`product` | `jev` | `fallback`), `source` (`typed` | `suggestion` | `itemDetail`; later cards add more), `status` (`open` | `done`), `addedBy`, `addedByName`, `addedAt`, `doneBy`, `doneByName`, `doneAt`, `statusChangedAt` (when the last tick or put-back was made on the phone, #85: an older one sent late from the outbox is ignored), `updatedAt`, `version` (+1 on every change), `changeId` (the last change applied) and `removed`. Every write is ETag-checked.
+- **Items** (`type: "item"`, `id` = the app's item id): `name`, `normalizedName` (lower case, trimmed, single spaces), `note`, `productId`, `aisle` (aisle id, null while Jev works it out), `aisleSource` (`product` | `jev` | `fallback`), `source` (`typed` | `suggestion` | `itemDetail` | `autoRunOut` | `savedRecipe`), `status` (`open` | `done`), `addedBy`, `addedByName`, `addedAt`, `doneBy`, `doneByName`, `doneAt`, `statusChangedAt` (when the last tick or put-back was made on the phone, #85: an older one sent late from the outbox is ignored), `updatedAt`, `version` (+1 on every change), `changeId` (the last change applied) and `removed`. Every write is ETag-checked.
 - **Tombstones:** removing an item (or Clear ticked, or the daily clean-up of items ticked off over 24 hours ago) sets `removed: true` and `ttl: 604800`, so apps catching up with `since` learn it's gone; then Cosmos deletes it.
 - **List memory** (`type: "memory"`, `id` `memory:<hash of the normalized name>`): `name`, `aisle` (Jev's answer, reused for the same name), `timesAdded` and `lastAddedAt` (for suggestions).
+
+## Container: `savedRecipes` (#105)
+
+The household's saved recipes and Ready now ideas, in **one partition**: `householdId` is always `"household"` (at most 500 documents, all read together for the list). Partitioned like `shoppingList` because the collection is shared and always read whole; there's no per-person split.
+
+```json
+{
+  "id": "<the app's UUID>", "householdId": "household", "type": "savedRecipe", "kind": "recipe" | "readyNow",
+  "title": "Sam's traybake", "originalTitle": "Halloumi and pepper traybake", "meal": "dinner", "totalMinutes": 40,
+  "servings": 2, "ingredients": [{ "name": "Halloumi", "amount": "225 g", "productId": null, "genericName": "Halloumi" }],
+  "steps": ["…"], "alsoNeeded": ["…"],
+  "note": "", "savedBy": "<oid>", "savedByName": "Sam", "savedAt": "…", "updatedBy": "<oid>", "updatedAt": "…"
+}
+```
+
+- **Recipes** have `servings`, `ingredients` and `steps`; **Ready now ideas** have `how`, `appliance` and `uses: [{ name, productId, genericName }]` instead. Both have `alsoNeeded`.
+- **A snapshot:** nothing is regenerated. `genericName` is recorded at save time when the product has one, so the stock status still finds it after that product is used up.
+- **Stock status** isn't stored: the API works it out against today's stock on every read (see `docs/api.md`, Saved recipes).
+- Created once (`PUT` is idempotent by `id`); renames and notes are ETag-checked replaces; removed by delete (Undo creates it again).
 
 ## Container: `pushSeen` (#77)
 

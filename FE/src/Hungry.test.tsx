@@ -94,6 +94,7 @@ async function renderScreen(answer?: (r: RecipeRequest) => Promise<RecipeSuggest
     const api = {
         stock: async () => ({ generatedAt: "", totalUnits: 2, useFirstCount: 1, products: STOCK }),
         suggestRecipe,
+        savedRecipes: async () => ({ savedRecipes: [] }),
     } as unknown as ApiClient;
     render(<RecipesScreen api={api} now={EVENING} />);
     await screen.findByRole("combobox", { name: "Include ingredients" });

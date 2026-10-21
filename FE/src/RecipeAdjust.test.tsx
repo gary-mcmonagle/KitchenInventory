@@ -85,6 +85,7 @@ function setup(
     const api = {
         stock: async () => ({ generatedAt: "", totalUnits: STOCK.length, useFirstCount: 1, products: STOCK }),
         suggestRecipe: vi.fn(async () => ({ available: true, recipe: RECIPE })),
+        savedRecipes: async () => ({ savedRecipes: [] }),
         suggestRecipeAdditions: vi.fn(options.additions ?? (async () => ({ suggestions: SUGGESTIONS }))),
         adjustRecipe: vi.fn(
             options.adjust ??

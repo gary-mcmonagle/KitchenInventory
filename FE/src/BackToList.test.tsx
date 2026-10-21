@@ -78,6 +78,7 @@ function shellApi() {
             product(id, PRODUCTS.find((p) => p.productId === id)?.displayName ?? "Item"),
         ),
         suggestRecipe: vi.fn(async () => ({ available: true, mode: "cook", recipe: RECIPE })),
+        savedRecipes: async () => ({ savedRecipes: [] }),
         runOutStatus: vi.fn(async () => ({
             genericNameId: "x",
             name: "x",

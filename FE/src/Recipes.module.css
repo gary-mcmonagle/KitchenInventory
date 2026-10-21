@@ -856,3 +856,19 @@
     border-top-color: var(--accent);
     animation: spin 0.9s linear infinite;
 }
+
+/* The kicker with the Save pill on its right (#105). */
+.kickerRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: var(--touch);
+}
+
+/* A Ready now idea's button row: Save (#105), and room for Adjust (#108). */
+.ideaButtons {
+    display: flex;
+    gap: 8px;
+    padding-top: 2px;
+}

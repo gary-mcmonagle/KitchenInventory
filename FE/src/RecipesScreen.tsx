@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ApiError,
     SignInRequiredError,
@@ -10,12 +10,27 @@ import {
     type RecipeMeal,
     type RecipeMode,
     type RecipeRequest,
+    type SaveRecipeBody,
+    type SavedRecipe,
     type StockProduct,
 } from "./api";
 import { expiryBadge } from "./format";
 import { itemPath, navigate } from "./router";
 import { AdjustSheet, adjustmentLine, type AdjustChoices } from "./RecipeAdjust";
 import styles from "./Recipes.module.css";
+import {
+    SaveIdeaButton,
+    SavePill,
+    SavedBox,
+    SavedRecipeView,
+    ideaToSave,
+    recipeToSave,
+    savedToRecipe,
+    savedToSave,
+} from "./SavedRecipes";
+import savedStyles from "./SavedRecipes.module.css";
+import { newId } from "./shoppingList";
+import { TOAST_MS } from "./StockScreen";
 
 const MEALS: Array<{ id: RecipeMeal; label: string }> = [
     { id: "breakfast", label: "Breakfast" },
@@ -108,7 +123,12 @@ type Phase =
     | { kind: "loading" }
     | { kind: "recipe"; recipe: Recipe }
     | { kind: "ideas"; meal: RecipeMeal; ideas: QuickIdea[] }
-    | { kind: "error"; message: string; retry: RecipeRequest };
+    | { kind: "error"; message: string; retry: RecipeRequest }
+    /** A saved recipe (#105); `asRecipe` is it as the recipe Adjust works on, `saved` false after Remove. */
+    | { kind: "saved"; recipe: SavedRecipe; asRecipe: Recipe; saved: boolean };
+
+/** What's on screen that can be saved: a recipe, or a Ready now idea. */
+type Saveable = Recipe | QuickIdea;
 
 /**
  * Hungry? (#73, #88): the form (project/Hungry.dc.html), then a recipe (project/Recipe.dc.html) or Ready now ideas
@@ -142,6 +162,147 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
         setAdjust(null);
     };
     const top = useRef<HTMLDivElement>(null);
+
+    // Saved recipes (#105): the household's list, which shown recipes and ideas are saved (by object, while in memory),
+    // whether the Saved box is open (the form dims), and the toast with Undo.
+    const [saved, setSaved] = useState<SavedRecipe[] | null>(null);
+    const [savedFailed, setSavedFailed] = useState(false);
+    const [savedIds, setSavedIds] = useState<Map<Saveable, string>>(() => new Map());
+    const [boxOpen, setBoxOpen] = useState(false);
+    const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
+    const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const showToast = (text: string, undo?: () => void) => {
+        clearTimeout(toastTimer.current);
+        setToast({ text, undo });
+        toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+    };
+    useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+    const loadSaved = useCallback(() => {
+        api.savedRecipes()
+            .then((s) => {
+                setSaved(s.savedRecipes);
+                setSavedFailed(false);
+            })
+            .catch((error: unknown) => {
+                if (error instanceof SignInRequiredError) return;
+                console.warn("Couldn't load the saved recipes", error);
+                setSavedFailed(true);
+            });
+    }, [api]);
+    useEffect(loadSaved, [loadSaved]);
+    const onBoxOpen = useCallback(
+        (open: boolean) => {
+            setBoxOpen(open);
+            if (open) loadSaved(); // someone else at home may have saved one
+        },
+        [loadSaved],
+    );
+
+    const remember = (item: Saveable, id: string | null) =>
+        setSavedIds((m) => {
+            const next = new Map(m);
+            if (id) next.set(item, id);
+            else next.delete(item);
+            return next;
+        });
+    const upsert = (recipe: SavedRecipe) =>
+        setSaved((list) => [recipe, ...(list ?? []).filter((r) => r.id !== recipe.id)]);
+    const drop = (id: string) => setSaved((list) => (list ?? []).filter((r) => r.id !== id));
+
+    /** Unsaves by id; resolves false when it couldn't be. */
+    const unsave = async (id: string): Promise<boolean> => {
+        try {
+            await api.deleteSavedRecipe(id);
+        } catch (error) {
+            if (!(error instanceof ApiError && error.status === 404)) {
+                if (!(error instanceof SignInRequiredError)) showToast("Couldn't remove that. Try again.");
+                return false;
+            }
+        }
+        drop(id);
+        return true;
+    };
+
+    /** Saves a recipe or idea as shown: a snapshot (no Foundry call), with Undo. */
+    const save = async (item: Saveable, body: SaveRecipeBody) => {
+        const id = newId();
+        remember(item, id);
+        try {
+            upsert(await api.saveRecipe(id, body));
+            showToast("Saved to Hungry?", () => {
+                setToast(null);
+                void unsaveItem(item, id, body, false);
+            });
+        } catch (error) {
+            remember(item, null);
+            if (!(error instanceof SignInRequiredError)) showToast("Couldn't save that. Try again.");
+        }
+    };
+
+    const unsaveItem = async (item: Saveable, id: string, body: SaveRecipeBody, offerUndo: boolean) => {
+        remember(item, null);
+        if (!(await unsave(id))) {
+            remember(item, id);
+        } else if (offerUndo) {
+            showToast("Removed from saved", () => {
+                setToast(null);
+                void save(item, body);
+            });
+        }
+    };
+
+    const toggleSave = (item: Saveable, body: SaveRecipeBody) => {
+        const existing = savedIds.get(item);
+        void (existing ? unsaveItem(item, existing, body, true) : save(item, body));
+    };
+
+    const openSaved = (recipe: SavedRecipe) => {
+        resetAdjust();
+        const asRecipe = savedToRecipe(recipe);
+        remember(asRecipe, recipe.id); // adjusting it and then undoing comes back to the saved version
+        setPhase({ kind: "saved", recipe, asRecipe, saved: true });
+    };
+
+    /** Remove from saved, or Save again (the same id and snapshot, so it's also Undo). */
+    const toggleSavedView = async (recipe: SavedRecipe, isSaved: boolean) => {
+        const setSavedFlag = (value: boolean) =>
+            setPhase((p) => (p.kind === "saved" && p.recipe.id === recipe.id ? { ...p, saved: value } : p));
+        if (isSaved) {
+            setSavedFlag(false);
+            if (await unsave(recipe.id)) {
+                showToast("Removed from saved", () => {
+                    setToast(null);
+                    void toggleSavedView(recipe, false);
+                });
+            } else {
+                setSavedFlag(true);
+            }
+            return;
+        }
+        setSavedFlag(true);
+        try {
+            const back = await api.saveRecipe(recipe.id, savedToSave(recipe));
+            upsert(back);
+            setPhase((p) => (p.kind === "saved" && p.recipe.id === recipe.id ? { ...p, recipe: back } : p));
+        } catch (error) {
+            setSavedFlag(false);
+            if (!(error instanceof SignInRequiredError)) showToast("Couldn't save that. Try again.");
+        }
+    };
+
+    const updateSaved = async (recipe: SavedRecipe, change: { title?: string; note?: string }) => {
+        try {
+            const updated = await api.updateSavedRecipe(recipe.id, change);
+            setSaved((list) => (list ?? []).map((r) => (r.id === updated.id ? updated : r)));
+            setPhase((p) =>
+                p.kind === "saved" && p.recipe.id === updated.id ? { ...p, recipe: updated } : p,
+            );
+            return true;
+        } catch (error) {
+            return error instanceof SignInRequiredError;
+        }
+    };
 
     const loadStock = () => {
         setStockFailed(false);
@@ -240,6 +401,8 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                             adjust?.kind === "error" && void runAdjust(phase.recipe, adjust.choices)
                         }
                         onAdjust={() => setAdjust({ kind: "sheet" })}
+                        saved={savedIds.has(phase.recipe)}
+                        onToggleSave={() => toggleSave(phase.recipe, recipeToSave(phase.recipe))}
                         onUndo={history.length > 0 ? undo : null}
                         onAnother={() => void ask(request(shownTitles))}
                         onStartAgain={() => {
@@ -262,9 +425,40 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                     meal={phase.meal}
                     ideas={phase.ideas}
                     preferUseFirst={choices.prefer}
+                    isSaved={(idea) => savedIds.has(idea)}
+                    onToggleSave={(idea) => toggleSave(idea, ideaToSave(idea, phase.meal))}
                     onMore={() => void ask(request(shownTitles))}
                     onStartAgain={() => setPhase({ kind: "form" })}
                 />
+            ) : phase.kind === "saved" ? (
+                <>
+                    <SavedRecipeView
+                        recipe={phase.recipe}
+                        saved={phase.saved}
+                        now={now}
+                        updating={adjust?.kind === "updating"}
+                        adjustError={adjust?.kind === "error" ? adjust.message : null}
+                        onRetryAdjust={() =>
+                            adjust?.kind === "error" && void runAdjust(phase.asRecipe, adjust.choices)
+                        }
+                        onBack={() => {
+                            resetAdjust();
+                            setPhase({ kind: "form" });
+                        }}
+                        onToggleSaved={() => void toggleSavedView(phase.recipe, phase.saved)}
+                        onUpdate={(change) => updateSaved(phase.recipe, change)}
+                        onAdjust={phase.recipe.kind === "recipe" ? () => setAdjust({ kind: "sheet" }) : null}
+                    />
+                    {adjust?.kind === "sheet" && (
+                        <AdjustSheet
+                            api={api}
+                            recipe={phase.asRecipe}
+                            stock={stock ?? []}
+                            onCancel={() => setAdjust(null)}
+                            onUpdate={(choices) => void runAdjust(phase.asRecipe, choices)}
+                        />
+                    )}
+                </>
             ) : (
                 <>
                     <header className={styles.header}>
@@ -278,45 +472,70 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                         </div>
                     ) : (
                         <div className={styles.content}>
-                            {phase.kind === "error" && (
-                                <div className={styles.errorCard} role="alert">
-                                    <span>{phase.message}</span>
-                                    <button
-                                        type="button"
-                                        className={styles.tryAgain}
-                                        onClick={() => void ask(phase.retry)}
-                                    >
-                                        Try again
-                                    </button>
-                                </div>
-                            )}
-                            {stockFailed ? (
-                                <div className={styles.errorCard} role="alert">
-                                    <span>Couldn&apos;t load what&apos;s in stock.</span>
-                                    <button type="button" className={styles.tryAgain} onClick={loadStock}>
-                                        Try again
-                                    </button>
-                                </div>
-                            ) : (
-                                <RecipeForm
-                                    stock={stock}
-                                    choices={choices}
-                                    onChange={(update) =>
-                                        setChoices((c) => {
-                                            const next = update(c);
-                                            if (next.mode !== c.mode) rememberMode(next.mode);
-                                            return next;
-                                        })
-                                    }
-                                    onSubmit={() => {
-                                        setShownTitles([]);
-                                        void ask(request([]));
-                                    }}
-                                />
-                            )}
+                            <SavedBox
+                                saved={saved}
+                                failed={savedFailed}
+                                now={now}
+                                onOpenChange={onBoxOpen}
+                                onChoose={openSaved}
+                            />
+                            <div
+                                className={
+                                    boxOpen
+                                        ? `${savedStyles.formArea} ${savedStyles.dimmed}`
+                                        : savedStyles.formArea
+                                }
+                            >
+                                {phase.kind === "error" && (
+                                    <div className={styles.errorCard} role="alert">
+                                        <span>{phase.message}</span>
+                                        <button
+                                            type="button"
+                                            className={styles.tryAgain}
+                                            onClick={() => void ask(phase.retry)}
+                                        >
+                                            Try again
+                                        </button>
+                                    </div>
+                                )}
+                                {stockFailed ? (
+                                    <div className={styles.errorCard} role="alert">
+                                        <span>Couldn&apos;t load what&apos;s in stock.</span>
+                                        <button type="button" className={styles.tryAgain} onClick={loadStock}>
+                                            Try again
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <RecipeForm
+                                        stock={stock}
+                                        choices={choices}
+                                        onChange={(update) =>
+                                            setChoices((c) => {
+                                                const next = update(c);
+                                                if (next.mode !== c.mode) rememberMode(next.mode);
+                                                return next;
+                                            })
+                                        }
+                                        onSubmit={() => {
+                                            setShownTitles([]);
+                                            void ask(request([]));
+                                        }}
+                                    />
+                                )}
+                            </div>
                         </div>
                     )}
                 </>
+            )}
+            {toast && (
+                <div className={savedStyles.toast} role="status">
+                    <span>{toast.text}</span>
+                    {toast.undo && (
+                        <button type="button" className={savedStyles.undo} onClick={toast.undo}>
+                            Undo
+                        </button>
+                    )}
+                </div>
             )}
         </div>
     );
@@ -630,10 +849,15 @@ function RecipeView({
     onRetryAdjust,
     onAdjust,
     onUndo = null,
+    saved = false,
+    onToggleSave,
     onAnother,
     onStartAgain,
 }: {
     recipe: Recipe;
+    /** Saved recipes (#105): the Save pill, filled when this version is saved. */
+    saved?: boolean;
+    onToggleSave?: () => void;
     /** The version before the last adjustment: its new ingredients get the "Added" tag. */
     previous?: Recipe | null;
     summary?: AdjustmentSummary | null;
@@ -672,8 +896,11 @@ function RecipeView({
                     </div>
                 )}
                 <div className={styles.recipeHead}>
-                    <div className={styles.kicker}>
-                        {mealLabel(recipe.meal)} · Serves {recipe.servings} · {recipe.totalMinutes} min
+                    <div className={styles.kickerRow}>
+                        <div className={styles.kicker}>
+                            {mealLabel(recipe.meal)} · Serves {recipe.servings} · {recipe.totalMinutes} min
+                        </div>
+                        {onToggleSave && <SavePill saved={saved} onClick={onToggleSave} />}
                     </div>
                     {summary && onUndo && (
                         <div className={styles.adjusted}>
@@ -852,12 +1079,16 @@ function IdeasView({
     meal,
     ideas,
     preferUseFirst,
+    isSaved = () => false,
+    onToggleSave,
     onMore,
     onStartAgain,
 }: {
     meal: RecipeMeal;
     ideas: QuickIdea[];
     preferUseFirst: boolean;
+    isSaved?: (idea: QuickIdea) => boolean;
+    onToggleSave?: (idea: QuickIdea) => void;
     onMore: () => void;
     onStartAgain: () => void;
 }) {
@@ -950,6 +1181,15 @@ function IdeasView({
                             {idea.alsoNeeded && (
                                 <div className={styles.ideaAlso}>
                                     You&apos;ll also need: {idea.alsoNeeded}
+                                </div>
+                            )}
+                            {onToggleSave && (
+                                <div className={styles.ideaButtons}>
+                                    <SaveIdeaButton
+                                        title={idea.title}
+                                        saved={isSaved(idea)}
+                                        onClick={() => onToggleSave(idea)}
+                                    />
                                 </div>
                             )}
                         </article>

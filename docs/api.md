@@ -647,6 +647,62 @@ The same recipe, updated by gpt-4o on Foundry (same deployment, managed identity
 - **Use first:** a use-first suggestion moves ahead of ones within 0.1 of it.
 - No Foundry call and no rate limit. If Jev fails it returns `[]`, and the sheet hides the row. Logs record counts and latency only.
 
+## Saved recipes (#105)
+
+The household's one collection of saved recipes and Ready now ideas. Every endpoint needs a signed-in user (**401** without a token). Ids come from the app (UUIDs), so saving is idempotent. Logs record ids, kinds and counts, never titles, notes or recipe text.
+
+**A saved recipe**, as every endpoint returns it:
+
+```json
+{
+  "id": "…", "kind": "recipe" | "readyNow", "title": "Sam's traybake", "originalTitle": "Halloumi and pepper traybake",
+  "meal": "dinner", "totalMinutes": 40, "servings": 2 | null,
+  "ingredients": [{ "name": "Halloumi", "amount": "225 g" | null, "productId": "…" | null, "genericName": "Halloumi" | null,
+                    "status": "have" | "useFirst" | "missing" }],
+  "steps": ["…"], "alsoNeeded": ["…"], "how": "…" | null, "appliance": "microwave" | null,
+  "note": "Halve the chilli", "savedByName": "Sam", "savedAt": "…", "updatedAt": "…",
+  "missing": ["Halloumi"], "usesUp": ["Smoked paprika"]
+}
+```
+
+A Ready now idea's items come back as `ingredients` too (no `amount`), with `how` and `appliance`; a recipe has `servings` and `steps`.
+
+**Stock status** is worked out on every read, against today's stock. For each ingredient: **have** if its `productId` is in stock; otherwise if any in-stock product shares its **generic name**; otherwise if its name (normalized like generic names) matches an in-stock product's generic or display name. **Staples** (an ingredient made only of words like salt, pepper, oil, olive, water, "to taste") always count as had. **useFirst** when it's had and a matching product has a use-first unit. `missing` lists the missing ones (by generic name when known) and `usesUp` the use-first ones; the app shows "You've got everything · Uses up …" or "Missing: …".
+
+### `GET /api/saved-recipes`
+
+**200** `{ "savedRecipes": [ … ] }`, **newest first** (at most 500). Filtering by meal, cook time and text happens in the app.
+
+### `GET /api/saved-recipes/{id}`
+
+**200** the saved recipe; **404** if there's no such one.
+
+### `PUT /api/saved-recipes/{id}`
+
+Saves a snapshot of what the app showed. No Foundry call.
+
+```json
+{
+  "kind": "recipe", "title": "…", "meal": "dinner", "totalMinutes": 25, "servings": 2,
+  "ingredients": [{ "name": "…", "amount": "…", "productId": "…" | null, "genericName": null }],
+  "steps": ["…"], "alsoNeeded": ["…"], "note": "", "originalTitle": "…"
+}
+```
+
+For `kind: "readyNow"`, send `uses` (`[{ name, productId }]`) instead of `ingredients`, with `how` and `appliance` (`toaster`, `microwave`, `kettle` or `none`) and no `steps`.
+- Each ingredient's **generic name** is filled in from its product when not sent, so matching still works after the product is used up.
+- `title` 1–80 characters (trimmed); `note` at most 300 (may be empty); `originalTitle` defaults to the title. **400** for a bad body, kind, meal, appliance or title, or once 500 are saved.
+- **Idempotent:** a second `PUT` with the same id returns the one already saved, unchanged. Undo of a removal is the same call with the same snapshot.
+- **200** the saved recipe, with its status.
+
+### `PATCH /api/saved-recipes/{id}`
+
+`{ "title"?: "…", "note"?: "…" }`: rename (1–80) and/or change the shared note (at most 300). Records who changed it and when. **400** for neither or a bad value, **404** if it's gone, **409** if it kept changing meanwhile (ETag, retried first). **200** the saved recipe.
+
+### `DELETE /api/saved-recipes/{id}`
+
+**204**; **404** if there's no such one. The app's Undo puts it back with `PUT`.
+
 ## Shopping list (#84)
 
 One list for the household. Every endpoint needs a signed-in user (**401** without a token). Item ids and change ids come from the app (UUIDs), so a write sent twice is applied once (ready for offline use). People are shown by name, never by object ID.
@@ -657,7 +713,7 @@ One list for the household. Every endpoint needs a signed-in user (**401** witho
 {
   "id": "…", "name": "Semi-skimmed milk", "note": "2", "productId": "…" | null,
   "aisleId": "dairyEggs" | null, "aisleName": "Dairy & eggs" | null, "findingAisle": false,
-  "source": "typed" | "suggestion" | "itemDetail", "status": "open" | "done",
+  "source": "typed" | "suggestion" | "itemDetail" | "autoRunOut" | "savedRecipe", "status": "open" | "done",
   "addedByName": "Gary", "addedAt": "…", "doneByName": null, "doneAt": null,
   "updatedAt": "…", "version": 3, "removed": false
 }

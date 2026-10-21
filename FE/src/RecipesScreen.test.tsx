@@ -87,6 +87,7 @@ function fakeApi(
     const api = {
         stock: async () => ({ generatedAt: "", totalUnits: stock.length, useFirstCount: 0, products: stock }),
         suggestRecipe,
+        savedRecipes: async () => ({ savedRecipes: [] }),
     } as unknown as ApiClient;
     return { api, suggestRecipe };
 }

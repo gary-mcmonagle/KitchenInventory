@@ -281,6 +281,61 @@ export interface QuickIdea {
     alsoNeeded: string | null;
 }
 
+/** A saved recipe's ingredient (or a saved Ready now idea's item), checked against today's stock (#105). */
+export interface SavedIngredient {
+    name: string;
+    amount: string | null;
+    productId: string | null;
+    genericName: string | null;
+    status: "have" | "missing" | "useFirst";
+}
+
+/** A saved recipe or Ready now idea (#105): one household collection, checked against today's stock. */
+export interface SavedRecipe {
+    id: string;
+    kind: "recipe" | "readyNow";
+    title: string;
+    originalTitle: string;
+    meal: RecipeMeal;
+    totalMinutes: number;
+    servings: number | null;
+    ingredients: SavedIngredient[];
+    steps: string[];
+    alsoNeeded: string[];
+    how: string | null;
+    appliance: Appliance | null;
+    note: string;
+    savedByName: string;
+    savedAt: string;
+    updatedAt: string;
+    /** Names not in stock today (generic names when known). */
+    missing: string[];
+    /** Use-first names it would use up. */
+    usesUp: string[];
+}
+
+/** PUT /api/saved-recipes/{id}: what's being saved (a snapshot of what was shown). */
+export interface SaveRecipeBody {
+    kind: "recipe" | "readyNow";
+    title: string;
+    originalTitle?: string;
+    meal: RecipeMeal;
+    totalMinutes: number;
+    servings?: number | null;
+    ingredients?: Array<{
+        name: string;
+        amount?: string | null;
+        productId?: string | null;
+        genericName?: string | null;
+    }>;
+    uses?: Array<{ name: string; productId?: string | null; genericName?: string | null }>;
+    steps?: string[];
+    alsoNeeded?: string[];
+    how?: string | null;
+    appliance?: Appliance | null;
+    note?: string;
+}
+
 /** POST /api/recipes/suggest (#73): the household's choices. The stock itself is read on the server. */
 export interface RecipeRequest {
     mode: RecipeMode;
@@ -647,6 +702,29 @@ export class ApiClient {
     /** The same recipe, updated (#104). 400: no change or bad choices; 429: over the hourly limit (shared with suggest). */
     adjustRecipe(adjustment: RecipeAdjustment): Promise<AdjustedRecipe> {
         return this.send<AdjustedRecipe>("POST", "/api/recipes/adjust", adjustment);
+    }
+
+    /** The household's saved recipes and ideas, newest first, each checked against today's stock (#105). */
+    savedRecipes(): Promise<{ savedRecipes: SavedRecipe[] }> {
+        return this.get("/api/saved-recipes");
+    }
+
+    savedRecipe(id: string): Promise<SavedRecipe> {
+        return this.get(`/api/saved-recipes/${encodeURIComponent(id)}`);
+    }
+
+    /** Saves a snapshot (idempotent by id: Undo of a removal is the same call). */
+    saveRecipe(id: string, body: SaveRecipeBody): Promise<SavedRecipe> {
+        return this.send("PUT", `/api/saved-recipes/${encodeURIComponent(id)}`, body);
+    }
+
+    /** Rename and/or change the shared note. */
+    updateSavedRecipe(id: string, change: { title?: string; note?: string }): Promise<SavedRecipe> {
+        return this.send("PATCH", `/api/saved-recipes/${encodeURIComponent(id)}`, change);
+    }
+
+    deleteSavedRecipe(id: string): Promise<void> {
+        return this.send("DELETE", `/api/saved-recipes/${encodeURIComponent(id)}`);
     }
 
     /** Up to 3 in-stock things that would improve the recipe (#104; Jev, quick, not rate limited). */

@@ -1,0 +1,666 @@
+/* Saved recipes (#105): project/SavedPicker.dc.html (the Saved box) and project/SavedRecipe.dc.html (a saved recipe). */
+
+/* The Saved box. */
+.saved {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.savedHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.savedLabel,
+.sectionLabel {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.savedCount {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.box {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    overflow: hidden;
+}
+
+.boxOpen {
+    border-color: var(--accent);
+    box-shadow: 0 6px 20px rgba(28, 42, 36, 0.12);
+}
+
+.searchRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 48px;
+    padding: 0 6px 0 14px;
+}
+
+.searchIcon {
+    display: flex;
+    color: var(--accent-dark);
+}
+
+.search {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.search::placeholder {
+    color: var(--muted);
+}
+
+.search::-webkit-search-cancel-button {
+    display: none;
+}
+
+.chevron {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: var(--ink-strong);
+    cursor: pointer;
+}
+
+.filters {
+    border-top: 1px solid var(--border-soft);
+    padding: 10px 12px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chips {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+}
+
+.chip {
+    flex: none;
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.chipOn {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.rows {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.row {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 14px;
+    border: 0;
+    border-top: 1px solid #f0f3f1;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.rowTitleLine {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rowTitle {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.readyTag {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: var(--off-bg);
+    color: var(--ink-strong);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.rowMeta {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.rowStatus {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-dark);
+}
+
+.rowMissing {
+    color: var(--warn-fg);
+}
+
+.empty {
+    padding: 14px;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+/* The Save pill and the Save button on a Ready now idea. */
+.pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border-radius: 22px;
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.pillOn {
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.ideaSave {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: var(--touch);
+    border-radius: var(--radius-button);
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ideaSaveOn {
+    background: var(--accent);
+    color: #ffffff;
+}
+
+/* A saved recipe. */
+.view {
+    flex: 1;
+    padding: 16px var(--page-x) 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.updating {
+    position: relative;
+}
+
+.updating > :not(.updatingNote) {
+    opacity: 0.45;
+}
+
+.updatingNote {
+    position: sticky;
+    top: 12px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px;
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    box-shadow: 0 6px 20px rgba(28, 42, 36, 0.12);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.spinner {
+    width: 18px;
+    height: 18px;
+    box-sizing: border-box;
+    border-radius: 9px;
+    border: 3px solid #cfe0d6;
+    border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.errorCard {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    border-radius: var(--radius-card);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.tryAgain {
+    align-self: flex-start;
+    min-height: var(--touch);
+    padding: 0 16px;
+    border: 1px solid var(--warn-fg);
+    border-radius: var(--radius-button);
+    background: transparent;
+    color: var(--warn-fg);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.back {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: var(--touch);
+    margin-left: -12px;
+    padding: 0 8px 0 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.backIcon {
+    width: 32px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.head {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.meta {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.titleRow {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.title {
+    flex: 1;
+    margin: 0;
+    font-size: 28px;
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.titleInput {
+    flex: 1;
+    min-width: 0;
+    min-height: var(--touch);
+    padding: 4px 10px;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-button);
+    font: inherit;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ink);
+}
+
+.rename {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin-right: -10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    cursor: pointer;
+}
+
+.noteCard {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.noteHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.noteHint {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.note {
+    min-height: 56px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-button);
+    font: inherit;
+    font-size: 15px;
+    line-height: 1.4;
+    color: var(--ink);
+    resize: vertical;
+}
+
+.missing {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--warn-bg);
+    border-radius: var(--radius-card);
+    color: var(--warn-fg);
+}
+
+.missingTitle {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.missingText {
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.addMissing {
+    align-self: flex-start;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border-radius: var(--radius-button);
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.added {
+    background: #5e8a72;
+    cursor: default;
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.ingredients {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.ingredient {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: var(--touch);
+    border-bottom: 1px solid var(--off-bg);
+}
+
+.icon {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.iconMissing {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.amount {
+    flex: none;
+    width: 56px;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.name {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.stockNote {
+    flex: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.warn {
+    color: var(--warn-fg);
+}
+
+.also {
+    font-size: 13px;
+    color: var(--muted);
+    padding-top: 4px;
+}
+
+.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.step {
+    display: flex;
+    gap: 12px;
+    font-size: 15px;
+    line-height: 1.45;
+}
+
+.stepNumber {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 13px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.actions {
+    flex: none;
+    display: flex;
+    gap: 10px;
+    padding: 12px var(--page-x);
+    background: var(--surface);
+    border-top: 1px solid var(--border-soft);
+}
+
+.adjust {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    border: 0;
+    border-radius: var(--radius-input);
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.remove {
+    flex: none;
+    min-height: 52px;
+    padding: 0 16px;
+    border-radius: var(--radius-input);
+    border: 1px solid var(--input-border);
+    background: var(--surface);
+    color: var(--danger-fg);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.removeWide {
+    flex: 1;
+}
+
+.adjust:disabled,
+.remove:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* "Saved to Hungry?" with Undo: the dark toast, as on the stock list. */
+.toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 98px;
+    z-index: 5;
+    max-width: calc(var(--design-width) - 32px);
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 6px 6px 16px;
+    min-height: 52px;
+    background: var(--ink);
+    color: #ffffff;
+    border-radius: var(--radius-input);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.undo {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    color: var(--toast-action);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* The Hungry? form while the Saved box is open. */
+.dimmed {
+    opacity: 0.5;
+}
+
+.formArea {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}

@@ -240,6 +240,10 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Basic staples** – the few things a recipe suggestion may assume without them being in stock: salt, pepper, cooking oil and water. Anything else not in stock is listed under "You'll also need" (at most 3).
 
+**Saved recipe** – a recipe or Ready now idea someone liked and kept (#105), in the household's one shared collection: a **snapshot** of what was shown (nothing is regenerated), with a name anyone can change and a shared **note**. Found in the **Saved** box at the top of Hungry?, newest first, filtered by meal, cook time and words in the name. **Remove from saved** has Undo.
+
+**Stock status (of a saved recipe)** – whether each ingredient is in today's stock: **have** (the same product, or any product with the same generic name, or a matching name), **use first** (had, and due soon), or **missing**. Basic staples always count as had. The recipe shows "You've got everything" (with "Uses up …") or "Missing: …", and **Add missing to the list** puts the missing ones on the shopping list by generic name.
+
 **Push notification** – a message that appears on a household member's phone or computer from Cupboard Tracker, even when the app is closed (#77). Only on devices where they turned notifications on; on iPhone, only in the app added to the Home Screen.
 - In code: `SendPush`, `PushMessage`, `IPushSender`
 
