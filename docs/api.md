@@ -540,7 +540,7 @@ A **recipe suggestion** built from what's in stock: gpt-4o on Azure AI Foundry (
 | `comments` | One-off preferences, or `null`. Trimmed; empty means none; **at most 300 characters**. Sent to the model in their own delimited section as wishes, never instructions: they can't change the stock-only rule, the 3-item limit, food safety or the output format. |
 | `avoidTitles` | Titles already shown this visit (Another one, More ideas): the model suggests something different, a little more freely. The last 20 are used, each cut to 80 characters. |
 
-The **stock is read on the server from Cosmos**, never taken from the app (in the prompt each product is a short ref, `p1`, `p2`, …, mapped back to its ID on the server, so ~230 products fit the deployment's 10k tokens a minute): every in-stock known product (items waiting for a name are left out) with its name, quantity, days to its soonest estimated expiry, the use-first flag, its aisle and how many are opened.
+The **stock is read on the server from Cosmos**, never taken from the app (in the prompt each product is a short ref, `p1`, `p2`, …, mapped back to its ID on the server, so a prompt stays around 7k tokens; the deployment allows 50k tokens a minute since 2026-10-21, 10k before): every in-stock known product (items waiting for a name are left out) with its name, quantity, days to its soonest estimated expiry, the use-first flag, its aisle and how many are opened.
 
 ```json
 {

@@ -17,9 +17,13 @@ param userPrincipalId string = ''
 @description('Managed identities that call the models (Cognitive Services User): the API app, for photo recognition (#58).')
 param appPrincipalIds array = []
 
-@description('Thousands of tokens per minute for each model deployment (household volume is tiny).')
+@description('Thousands of tokens per minute for gpt-4.1-mini (left from spike #41; unused).')
 @minValue(1)
 param capacity int = 10
+
+@description('Thousands of tokens per minute for gpt-4o, shared by recipes, adjustments, photo identification and generic names. 50 is the subscription\'s Standard quota in UK South (Gary, 2026-10-21); billing is per token, so this is only a speed limit.')
+@minValue(1)
+param gpt4oCapacity int = 50
 
 var cognitiveServicesUser = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 
@@ -46,7 +50,7 @@ resource gpt4o 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
   name: 'gpt-4o'
   sku: {
     name: 'Standard' // regional: processed in this region
-    capacity: capacity
+    capacity: gpt4oCapacity
   }
   properties: {
     model: {
