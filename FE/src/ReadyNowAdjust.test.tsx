@@ -128,7 +128,7 @@ test("Adjust opens the sheet for that idea: titled for an idea, Remove lists its
         fireEvent.click(within(card(BEANS.title)).getByRole("button", { name: `Adjust ${BEANS.title}` })),
     );
 
-    expect(sheet()).toBeInTheDocument();
+    expect(sheet()).toHaveTextContent("Change anything below; we'll update the same idea.");
     expect(
         within(sheet())
             .getAllByRole("checkbox")

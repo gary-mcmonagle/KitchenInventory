@@ -164,7 +164,8 @@ export function AdjustSheet({
                         </button>
                     </div>
                     <div className={styles.intro}>
-                        Change anything below; we&apos;ll update the same recipe.
+                        Change anything below; we&apos;ll update the same{" "}
+                        {kind === "idea" ? "idea" : "recipe"}.
                     </div>
                 </div>
 
