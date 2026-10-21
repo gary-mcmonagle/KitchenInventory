@@ -347,7 +347,7 @@ public sealed partial class SavedRecipeUseCases(
             return $"A note is at most {MaxNote} characters.";
         }
 
-        if (r.Kind == SavedRecipeKinds.ReadyNow && r.Appliance is not ("toaster" or "microwave" or "kettle" or "none"))
+        if (r.Kind == SavedRecipeKinds.ReadyNow && r.Appliance is not ("toaster" or "microwave" or "kettle" or "airFryer" or "none"))
         {
             return "A Ready now idea needs its appliance.";
         }

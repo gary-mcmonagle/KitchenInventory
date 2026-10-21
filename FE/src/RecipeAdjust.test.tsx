@@ -199,6 +199,17 @@ test("add from the search and typed, remove, tweak: sends them, dims while updat
         add: { productIds: ["chorizo"], typed: ["chilli flakes"] },
         remove: ["Onion"],
         tweak: "spicier",
+        equipment: [
+            "hob",
+            "ovenGrill",
+            "microwave",
+            "toaster",
+            "airFryer",
+            "slowCooker",
+            "riceCooker",
+            "soupMaker",
+            "blender",
+        ],
     });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Updating your recipe…");

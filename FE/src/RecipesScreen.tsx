@@ -13,6 +13,8 @@ import {
     type SaveRecipeBody,
     type SavedRecipe,
     type StockProduct,
+    type Kit,
+    KITS,
 } from "./api";
 import { expiryBadge } from "./format";
 import { itemPath, navigate } from "./router";
@@ -41,7 +43,7 @@ const MEALS: Array<{ id: RecipeMeal; label: string }> = [
 
 const MODES: Array<{ id: RecipeMode; label: string; sub: string }> = [
     { id: "cook", label: "Cook something", sub: "A proper recipe" },
-    { id: "readyNow", label: "Ready now", sub: "Toaster, microwave, kettle" },
+    { id: "readyNow", label: "Ready now", sub: "Toaster, microwave, air fryer" },
 ];
 
 /** The last mode chosen on this device (#88). Storage can be missing or throw (private mode): then "cook". */
@@ -116,7 +118,12 @@ interface Choices {
     prefer: boolean;
     picked: string[];
     comments: string;
+    /** Cook something (#111): the kit ticked. All of it each time the form opens; nothing is remembered. */
+    equipment: Kit[];
 }
+
+const ALL_KIT: Kit[] = KITS.map((k) => k.id);
+const kitLabel = (kit: Kit) => KITS.find((k) => k.id === kit)!.label;
 
 type Phase =
     | { kind: "form" }
@@ -177,6 +184,7 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
         prefer: false,
         picked: [],
         comments: "",
+        equipment: ALL_KIT,
     }));
     const [phase, setPhase] = useState<Phase>({ kind: "form" });
     const [shownTitles, setShownTitles] = useState<string[]>([]);
@@ -456,6 +464,9 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                 : c;
         });
 
+    /** The kit the recipe on screen was made with (#111): the form is hidden while it's shown, so the chips are as they were. */
+    const kitInUse = choices.equipment;
+
     const runAdjust = async (recipe: Recipe, choices: AdjustChoices) => {
         setAdjust({ kind: "updating" });
         try {
@@ -464,6 +475,7 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                 add: { productIds: choices.productIds, typed: choices.typed },
                 remove: choices.remove,
                 tweak: choices.tweak,
+                equipment: kitInUse, // the same kit as the recipe was made with (#111)
             });
             if (!answer.available || !answer.recipe) {
                 setAdjust({ kind: "error", message: answer.message ?? ADJUST_UNAVAILABLE, choices });
@@ -495,7 +507,14 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
         includeProductIds: choices.picked,
         comments: choices.comments.trim() || null,
         avoidTitles,
+        ...(choices.mode === "cook" ? { equipment: choices.equipment } : {}),
     });
+
+    // The chips start all ticked every time the form opens (#111).
+    useEffect(() => {
+        if (phase.kind === "form")
+            setChoices((c) => (c.equipment.length === ALL_KIT.length ? c : { ...c, equipment: ALL_KIT }));
+    }, [phase.kind]);
 
     return (
         <div className={styles.screen} ref={top}>
@@ -699,6 +718,7 @@ function RecipeForm({
     const useFirst = (stock ?? []).filter((p) => p.useFirst);
     const empty = stock !== null && stock.length === 0;
     const ready = choices.mode === "readyNow";
+    const noKit = !ready && choices.equipment.length === 0;
     const things = `${useFirst.length} ${useFirst.length === 1 ? "thing" : "things"}`;
     return (
         <form
@@ -743,6 +763,62 @@ function RecipeForm({
                     ))}
                 </div>
             </div>
+
+            {!ready && (
+                <div className={styles.group}>
+                    <div className={styles.labelRow}>
+                        <div id="kit-label" className={styles.label}>
+                            What can you use?
+                        </div>
+                        <span className={styles.optional}>
+                            {choices.equipment.length} of {KITS.length}
+                        </span>
+                    </div>
+                    <div role="group" aria-labelledby="kit-label" className={styles.kitChips}>
+                        {KITS.map((k) => {
+                            const on = choices.equipment.includes(k.id);
+                            return (
+                                <button
+                                    key={k.id}
+                                    type="button"
+                                    aria-pressed={on}
+                                    className={on ? `${styles.kitChip} ${styles.kitChipOn}` : styles.kitChip}
+                                    onClick={() =>
+                                        onChange((c) => ({
+                                            ...c,
+                                            equipment: on
+                                                ? c.equipment.filter((e) => e !== k.id)
+                                                : KITS.map((x) => x.id).filter(
+                                                      (id) => id === k.id || c.equipment.includes(id),
+                                                  ),
+                                        }))
+                                    }
+                                >
+                                    {on && (
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="3"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            aria-hidden="true"
+                                        >
+                                            <path d="M5 12.5l4.5 4.5L19 7.5" />
+                                        </svg>
+                                    )}
+                                    {k.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div className={styles.kitNote}>
+                        The kettle is always fine. Untick anything you can&apos;t use today.
+                    </div>
+                </div>
+            )}
 
             <div className={styles.preferCard}>
                 <label className={styles.preferLabel}>
@@ -813,7 +889,8 @@ function RecipeForm({
             </div>
 
             {empty && <p className={styles.note}>There&apos;s nothing in stock to cook with yet.</p>}
-            <button type="submit" className={styles.primary} disabled={stock === null || empty}>
+            {noKit && <p className={styles.note}>Tick at least one</p>}
+            <button type="submit" className={styles.primary} disabled={stock === null || empty || noKit}>
                 {ready ? "Show me ideas" : "Get a recipe"}
             </button>
         </form>
@@ -1042,7 +1119,12 @@ function RecipeView({
                 <div className={styles.recipeHead}>
                     <div className={styles.kickerRow}>
                         <div className={styles.kicker}>
-                            {mealLabel(recipe.meal)} · Serves {recipe.servings} · {recipe.totalMinutes} min
+                            {[
+                                mealLabel(recipe.meal),
+                                `Serves ${recipe.servings}`,
+                                `${recipe.totalMinutes} min`,
+                                ...(recipe.equipment ?? []).map(kitLabel),
+                            ].join(" · ")}
                         </div>
                         {onToggleSave && <SavePill saved={saved} onClick={onToggleSave} />}
                     </div>
@@ -1057,6 +1139,32 @@ function RecipeView({
                     <h1 className={styles.recipeTitle}>{recipe.title}</h1>
                     {recipe.summary && <div className={styles.summary}>{recipe.summary}</div>}
                 </div>
+
+                {(recipe.warnings ?? []).length > 0 && (
+                    <div role="note" className={styles.checkFirst}>
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                            className={styles.checkFirstIcon}
+                        >
+                            <path d="M12 4l9 16H3z" />
+                            <path d="M12 10v4M12 17.2v.1" />
+                        </svg>
+                        <div className={styles.checkFirstText}>
+                            <span className={styles.checkFirstTitle}>Check before cooking</span>
+                            {recipe.warnings!.map((w) => (
+                                <span key={w}>{w}</span>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {recipe.usesUp.length > 0 && (
                     <section className={styles.usesUp} aria-label="Uses up">
@@ -1212,6 +1320,16 @@ const APPLIANCES: Record<Appliance, { label: string; icon: React.ReactNode }> = 
             </>
         ),
     },
+    airFryer: {
+        label: "Air fryer",
+        icon: (
+            <>
+                <rect x="5" y="3" width="14" height="18" rx="4" />
+                <path d="M8 13h8M9 17h6" />
+                <circle cx="12" cy="8" r="2" />
+            </>
+        ),
+    },
     none: {
         label: "No cooking",
         icon: <path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 0-3 2-3 6h3v12" />,
@@ -1258,7 +1376,7 @@ function IdeasView({
                         {ideas.length} quick {ideas.length === 1 ? "idea" : "ideas"}
                     </h1>
                     <div className={styles.summary}>
-                        Toaster, microwave, kettle or no cooking, from what&apos;s in.
+                        Toaster, microwave, kettle, air fryer or no cooking, from what&apos;s in.
                         {preferUseFirst && usesUseFirst && " Things to use first come first."}
                     </div>
                 </div>

@@ -52,6 +52,18 @@ public sealed class AdjustRecipeTests
     // ---- Adjust
 
     [Fact]
+    public async Task An_adjustment_keeps_the_same_equipment()
+    {
+        var chicken = Known("Chicken breast");
+        var kit = new HashSet<Kit> { Kit.Hob };
+
+        await UseCase().ExecuteAsync(Choices(Current(new RecipeIngredient("Chicken breast", "2", chicken)), tweak: "in the oven") with { Equipment = kit },
+            Gary, CancellationToken.None);
+
+        Assert.Same(kit, Assert.Single(generator.Adjustments).Context.Equipment);
+    }
+
+    [Fact]
     public async Task Sends_the_current_recipe_the_changes_and_the_stock_rebuilt_from_cosmos()
     {
         var chicken = Known("Chicken breast");

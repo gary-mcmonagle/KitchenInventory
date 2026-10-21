@@ -115,7 +115,7 @@ test("Cook something | Ready now at the top: cook by default, with its own butto
         within(modes())
             .getAllByRole("radio")
             .map((r) => r.textContent),
-    ).toEqual(["Cook somethingA proper recipe", "Ready nowToaster, microwave, kettle"]);
+    ).toEqual(["Cook somethingA proper recipe", "Ready nowToaster, microwave, air fryer"]);
     expect(within(modes()).getByRole("radio", { name: /Cook something/ })).toHaveAttribute(
         "aria-checked",
         "true",

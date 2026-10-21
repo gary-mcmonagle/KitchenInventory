@@ -227,6 +227,17 @@ test("Get a recipe sends the choices, shows the loading state, then the recipe",
         includeProductIds: ["cheddar"],
         comments: "no oven",
         avoidTitles: [],
+        equipment: [
+            "hob",
+            "ovenGrill",
+            "microwave",
+            "toaster",
+            "airFryer",
+            "slowCooker",
+            "riceCooker",
+            "soupMaker",
+            "blender",
+        ],
     });
     expect(screen.getByRole("status")).toHaveTextContent("Thinking up something with what you've got…");
 

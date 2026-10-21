@@ -527,9 +527,17 @@ A **recipe suggestion** built from what's in stock: gpt-4o on Azure AI Foundry (
   "preferUseFirst": true,
   "includeProductIds": ["…"],
   "comments": "something spicy, no oven",
-  "avoidTitles": ["Creamy cheddar penne"]
+  "avoidTitles": ["Creamy cheddar penne"],
+  "equipment": ["hob", "microwave", "airFryer"]
 }
 ```
+
+**Equipment (#111):** `equipment` lists the kit a Cook something recipe may use, from `hob`, `ovenGrill` (oven and grill), `microwave`, `toaster`, `airFryer`, `slowCooker`, `riceCooker`, `soupMaker`, `blender`. A kettle is always allowed. Missing or `null` means all of it (older apps); an empty list or an unknown value is **400**. `POST /api/recipes/adjust` takes the same field, and the app sends the kit the recipe was made with.
+- **Enforced three ways:** a rule in the system message ("Use only this equipment: …, plus a kettle"), so the comments can't change it; a schema built **per request** whose `equipment` enum holds only the allowed kit; and a deterministic check of the method steps for words that give unticked kit away (oven, roast, bake, grill, °C; pan, fry, simmer, boil without a kettle; and the names of the rest). The word lists live in `Kits` (Application) and ignore ingredient adjectives such as "grilled peppers" or "baked beans".
+- **One retry** naming what broke (shared with the "leaves out an included product" retry). If the steps still use something unticked, the recipe comes back with `warnings`, e.g. `"This recipe mentions the oven or grill, which you said you can't use."`, shown as **Check before cooking**.
+- The recipe gains `equipment` (the kit its method uses, as ids, not the kettle) and `warnings` (`[]` when none).
+- Logged: the allowed kit as ids, and whether a warning was returned.
+- **Ready now** has no chips; its ideas may also use the **air fryer** (`appliance: "airFryer"`, about 15 minutes), as may adjusted ideas (#108).
 
 | Field | Notes |
 |---|---|

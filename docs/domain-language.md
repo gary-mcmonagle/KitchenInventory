@@ -237,7 +237,9 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Ready now** – 3 to 5 quick ideas from what's in stock that need only a toaster, microwave or kettle, or no cooking, and take about 10 minutes (#88). **More ideas** asks for different ones; each idea says which **appliance** it needs.
 - In code: `RecipeMode.ReadyNow`, `QuickIdea`, `SuggestQuickIdeasAsync`, `IdeasView`
 
-**Appliance** – the only kit a Ready now idea may use: toaster, microwave, kettle, or none ("No cooking").
+**Appliance** – the only kit a Ready now idea may use: toaster, microwave, kettle, air fryer (#111), or none ("No cooking").
+
+**Equipment** – the kitchen kit a Cook something recipe may use (#111), chosen with the **What can you use?** chips: Hob, Oven & grill, Microwave, Toaster, Air fryer, Slow cooker, Rice cooker, Soup maker, Blender. All ticked each time the form opens; nothing is remembered. A kettle is always fine. The recipe's meta line ends with the kit it uses; if its method still mentions something unticked after one retry, it shows **Check before cooking**.
 - In code: `Appliance`
 
 **Basic staples** – the few things a recipe suggestion may assume without them being in stock: salt, pepper, cooking oil and water. Anything else not in stock is listed under "You'll also need" (at most 3).

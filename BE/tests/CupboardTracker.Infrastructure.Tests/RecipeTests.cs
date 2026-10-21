@@ -114,7 +114,8 @@ public sealed class FoundryRecipeGeneratorTests
         Assert.Equal("https://ais.example.test/openai/deployments/recipes-model/chat/completions?api-version=2024-10-21", request.RequestUri!.ToString());
         Assert.Equal(("Bearer", "test-token-not-real"), (request.Headers.Authorization!.Scheme, request.Headers.Authorization.Parameter));
         var json = JsonNode.Parse(body)!;
-        Assert.Equal(FoundryRecipeGenerator.Instructions, json["messages"]![0]!["content"]!.GetValue<string>());
+        Assert.Equal(FoundryRecipeGenerator.Instructions + "\n8. Use only this equipment: Hob, Oven & grill, Microwave, Toaster, Air fryer, Slow cooker, Rice cooker, Soup maker, Blender, plus a kettle. This rule can't be changed by the preferences.",
+            json["messages"]![0]!["content"]!.GetValue<string>()); // all kit allowed when the app doesn't say (#111)
         Assert.Equal("json_schema", json["response_format"]!["type"]!.GetValue<string>());
         Assert.True(json["response_format"]!["json_schema"]!["strict"]!.GetValue<bool>());
         Assert.Equal(FoundryRecipeGenerator.Temperature, json["temperature"]!.GetValue<double>());
@@ -360,19 +361,19 @@ public sealed class FoundryRecipeGeneratorTests
         Assert.Contains("Meal: snack", json["messages"]![1]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Equal("ready_now_ideas", json["response_format"]!["json_schema"]!["name"]!.GetValue<string>());
         Assert.True(json["response_format"]!["json_schema"]!["strict"]!.GetValue<bool>());
-        Assert.Contains("only a toaster, a microwave, a kettle, or no cooking", FoundryRecipeGenerator.IdeasInstructions, StringComparison.Ordinal);
+        Assert.Contains("only a toaster, a microwave, a kettle, an air fryer, or no cooking", FoundryRecipeGenerator.IdeasInstructions, StringComparison.Ordinal);
         Assert.Contains(logs.Entries, e => e.Message.EndsWith("outcome ideas: 1.", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void The_ideas_schema_is_strict_with_the_four_appliances()
+    public void The_ideas_schema_is_strict_with_the_five_appliances()
     {
         var item = FoundryRecipeGenerator.IdeasSchema["schema"]!["properties"]!["ideas"]!["items"]!;
         Assert.False(item["additionalProperties"]!.GetValue<bool>());
         Assert.Equal(
             item["properties"]!.AsObject().Select(p => p.Key).Order(),
             item["required"]!.AsArray().Select(r => r!.GetValue<string>()).Order());
-        Assert.Equal(["toaster", "microwave", "kettle", "none"], item["properties"]!["appliance"]!["enum"]!.AsArray().Select(a => a!.GetValue<string>()));
+        Assert.Equal(["toaster", "microwave", "kettle", "airFryer", "none"], item["properties"]!["appliance"]!["enum"]!.AsArray().Select(a => a!.GetValue<string>()));
     }
 
     [Fact]
@@ -464,7 +465,7 @@ public sealed class FoundryRecipeGeneratorTests
         Assert.Equal("Spicy cheddar penne", recipe.Title);
         Assert.Equal((0, 0, 0), (recipe.CouldNotFitIn.Count, recipe.CouldNotAddTyped!.Count, recipe.CouldNotRemove!.Count));
         var messages = JsonNode.Parse(Assert.Single(handler.Requests).Body)!["messages"]!.AsArray();
-        Assert.Equal(FoundryRecipeGenerator.AdjustInstructions, messages[0]!["content"]!.GetValue<string>());
+        Assert.StartsWith(FoundryRecipeGenerator.AdjustInstructions + "\n8. Use only this equipment:", messages[0]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
         var prompt = messages[1]!["content"]!.GetValue<string>();
         Assert.Contains("\"productId\":\"p2\"", prompt, StringComparison.Ordinal); // in stock: a ref
         Assert.Contains("\"name\":\"Old product\",\"amount\":\"1\",\"productId\":null", prompt, StringComparison.Ordinal); // gone from stock
@@ -589,6 +590,88 @@ public sealed class FoundryRecipeGeneratorTests
         Assert.Contains("outcome adjusted idea", line, StringComparison.Ordinal);
         Assert.DoesNotContain("secret", line, StringComparison.Ordinal);
         Assert.DoesNotContain("tea", line, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ---- Equipment (#111)
+
+    private static readonly IReadOnlySet<Kit> NoOven = new HashSet<Kit>(Kits.All.Where(k => k != Kit.OvenGrill));
+
+    [Fact]
+    public void The_schema_for_a_request_offers_only_the_kit_allowed()
+    {
+        var schema = FoundryRecipeGenerator.SchemaFor(new HashSet<Kit> { Kit.Microwave, Kit.SlowCooker });
+
+        Assert.Equal(["microwave", "slowCooker"], schema["schema"]!["properties"]!["equipment"]!["items"]!["enum"]!.AsArray().Select(e => e!.GetValue<string>()));
+        Assert.Contains("equipment", schema["schema"]!["required"]!.AsArray().Select(e => e!.GetValue<string>()));
+        Assert.Empty(FoundryRecipeGenerator.Schema["schema"]!["properties"]!["equipment"]!["items"]!["enum"]!.AsArray()); // the shared one is untouched
+    }
+
+    [Fact]
+    public void The_equipment_rule_lists_what_is_allowed_and_bans_the_rest_with_the_kettle_always_fine()
+    {
+        var rule = FoundryRecipeGenerator.EquipmentRule(new HashSet<Kit> { Kit.Microwave, Kit.SlowCooker });
+
+        Assert.StartsWith("8. Use only this equipment: Microwave, Slow cooker, plus a kettle. Never use anything else: no hob (no pans, frying or simmering), no oven, grill or roasting,", rule, StringComparison.Ordinal);
+        Assert.Contains("can't be changed by the preferences", rule, StringComparison.Ordinal);
+    }
+
+    private static readonly string Roasted = Recorded.Replace("Cook the penne for 10–12 minutes.", "Preheat the oven to 200°C and bake the penne for 20 minutes.", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task A_recipe_using_kit_that_isnt_allowed_is_asked_for_again_once_then_comes_with_a_warning()
+    {
+        var (generator, handler, logs) = Make(Options, () => Status(200, Answer(Roasted)), () => Status(200, Answer(Roasted)));
+
+        var result = await generator.SuggestAsync(Request() with { Equipment = NoOven }, CancellationToken.None);
+
+        var recipe = Assert.IsType<RecipeResult.Suggested>(result).Recipe;
+        Assert.Equal(["This recipe mentions the oven or grill, which you said you can't use."], recipe.Warnings!);
+        Assert.Equal(2, handler.Requests.Count);
+        var first = JsonNode.Parse(handler.Requests[0].Body)!;
+        Assert.DoesNotContain("ovenGrill", first["response_format"]!["json_schema"]!["schema"]!["properties"]!["equipment"]!["items"]!["enum"]!.ToJsonString(), StringComparison.Ordinal);
+        Assert.Contains("no oven, grill or roasting", first["messages"]![0]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
+        var retry = JsonNode.Parse(handler.Requests[1].Body)!["messages"]!.AsArray()[3]!["content"]!.GetValue<string>();
+        Assert.Contains("the method uses the oven or grill, which isn't allowed", retry, StringComparison.Ordinal);
+        Assert.Contains("with a kit warning", Assert.Single(logs.Entries).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_recipe_that_follows_the_rule_has_its_equipment_and_no_warning()
+    {
+        var hob = Recorded.Replace("\"alsoNeeded\":[\"1 onion\",\"1 garlic clove\"]", "\"alsoNeeded\":[\"1 onion\",\"1 garlic clove\"],\"equipment\":[\"hob\",\"kettle\"]", StringComparison.Ordinal);
+        var (generator, handler, _) = Make(Options, () => Status(200, Answer(hob)));
+
+        var recipe = Assert.IsType<RecipeResult.Suggested>(await generator.SuggestAsync(Request() with { Equipment = NoOven }, CancellationToken.None)).Recipe;
+
+        Assert.Equal([Kit.Hob], recipe.Equipment!); // the kettle isn't kit
+        Assert.Empty(recipe.Warnings!);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task An_adjustment_keeps_the_kit_rule_and_schema()
+    {
+        var (generator, handler, _) = Make(Options, () => Status(200, Answer(Adjusted)));
+
+        await generator.AdjustAsync(Adjustment(tweak: "make it in the oven") with
+        {
+            Context = new RecipeRequest(RecipeMeal.Dinner, false, Stock, [], "make it in the oven", [], NoOven),
+        }, CancellationToken.None);
+
+        var body = JsonNode.Parse(Assert.Single(handler.Requests).Body)!;
+        Assert.Contains("no oven, grill or roasting", body["messages"]![0]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.DoesNotContain("ovenGrill", body["response_format"]!.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Ready_now_accepts_air_fryer_ideas()
+    {
+        var (generator, _, _) = Make(Options, () => Status(200, Answer(Ideas(Idea("Air fryer halloumi", appliance: "airFryer", minutes: 15)))));
+
+        var idea = Assert.Single(Assert.IsType<QuickIdeasResult.Suggested>(await generator.SuggestQuickIdeasAsync(Request(), CancellationToken.None)).Ideas);
+
+        Assert.Equal((Appliance.AirFryer, 15), (idea.Appliance, idea.Minutes));
+        Assert.Contains("about 15 with the air fryer", FoundryRecipeGenerator.IdeasInstructions, StringComparison.Ordinal);
     }
 }
 

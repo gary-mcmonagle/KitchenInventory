@@ -122,7 +122,9 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
 
             var changes = ParseChanges(root);
             return changes.Error is null
-                ? (new AdjustChoices(recipe, changes.AddIds!, changes.Typed!, changes.Remove!, changes.Tweak), null)
+                ? ParseEquipment(root) is var (kit, kitError) && kitError is null
+                    ? (new AdjustChoices(recipe, changes.AddIds!, changes.Typed!, changes.Remove!, changes.Tweak, kit), null)
+                    : (null, kitError)
                 : (null, changes.Error);
         }
         catch (JsonException)
@@ -179,6 +181,35 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
         }
 
         return (addIds, typed, remove, tweak, null);
+    }
+
+    /// <summary><c>equipment</c> (#111): the kit a recipe may use. Missing or null → all of it (older apps); an empty
+    /// list or an unknown value is a 400.</summary>
+    internal static (IReadOnlySet<Kit>? Equipment, string? Error) ParseEquipment(JsonElement root)
+    {
+        if (!root.TryGetProperty("equipment", out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return (null, null);
+        }
+
+        const string Error = "equipment must be a list of at least one of hob, ovenGrill, microwave, toaster, airFryer, slowCooker, riceCooker, soupMaker, blender.";
+        if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() == 0)
+        {
+            return (null, Error);
+        }
+
+        var kit = new HashSet<Kit>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String || Kits.Parse(item.GetString()) is not { } k)
+            {
+                return (null, Error);
+            }
+
+            kit.Add(k);
+        }
+
+        return (kit, null);
     }
 
     /// <summary>A list of strings, an empty list when it's missing or null, or null when it isn't one.</summary>
@@ -365,7 +396,8 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
                 avoid.AddRange(titles.EnumerateArray().Select(t => t.GetString()!));
             }
 
-            return (new RecipeChoices(meal.Value, prefer, include, comments, avoid, mode), null);
+            var (equipment, kitError) = ParseEquipment(root);
+            return kitError is null ? (new RecipeChoices(meal.Value, prefer, include, comments, avoid, mode, equipment), null) : (null, kitError);
         }
         catch (JsonException)
         {
@@ -394,7 +426,7 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
     {
         title = i.Title,
         how = i.How,
-        appliance = i.Appliance.ToString().ToLowerInvariant(),
+        appliance = Appliances.Id(i.Appliance),
         minutes = i.Minutes,
         uses = i.Uses.Select(u => new
         {
@@ -427,6 +459,8 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
         couldNotFitIn = r.CouldNotFitIn,
         couldNotAdd = r.CouldNotAdd ?? [],
         couldNotRemove = r.CouldNotRemove ?? [],
+        equipment = (r.Equipment ?? []).Select(Kits.Id),
+        warnings = r.Warnings ?? [],
     };
 
     private static async Task<HttpResponseData> JsonAsync(HttpRequestData request, HttpStatusCode status, object body)
@@ -497,14 +531,7 @@ public sealed class IdeaAdjustFunctions(AdjustIdea adjust)
                 "snack" => RecipeMeal.Snack,
                 _ => null,
             };
-            Appliance? appliance = Text(i, "appliance", 20) switch
-            {
-                "toaster" => Appliance.Toaster,
-                "microwave" => Appliance.Microwave,
-                "kettle" => Appliance.Kettle,
-                "none" => Appliance.None,
-                _ => null,
-            };
+            var appliance = Appliances.Parse(Text(i, "appliance", 20));
             var title = Text(i, "title", 120);
             var how = Text(i, "how", 600);
             if (meal is null || appliance is null || title is null || how is null || !i.TryGetProperty("uses", out var usesNode)
@@ -548,7 +575,7 @@ public sealed class IdeaAdjustFunctions(AdjustIdea adjust)
             {
                 title = a.Idea.Title,
                 how = a.Idea.How,
-                appliance = a.Idea.Appliance.ToString().ToLowerInvariant(),
+                appliance = Appliances.Id(a.Idea.Appliance),
                 minutes = a.Idea.Minutes,
                 uses = a.Idea.Uses.Select(u => new
                 {

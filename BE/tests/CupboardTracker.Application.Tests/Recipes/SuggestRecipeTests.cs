@@ -284,7 +284,8 @@ public sealed class SuggestRecipeTests
         await UseCase().ExecuteAsync(Choices(comments: "no oven please"), Gary, CancellationToken.None);
 
         var entry = Assert.Single(logger.Entries);
-        Assert.Equal("Recipe suggested: meal Dinner, comments given True, 0 included, 0 couldn't be fitted in.", entry.Message);
+        Assert.Equal("Recipe suggested: meal Dinner, comments given True, 0 included, 0 couldn't be fitted in, "
+            + "equipment hob,ovenGrill,microwave,toaster,airFryer,slowCooker,riceCooker,soupMaker,blender, warning False.", entry.Message);
     }
 
     [Fact]

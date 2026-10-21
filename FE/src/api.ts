@@ -263,7 +263,32 @@ export type RecipeMeal = "breakfast" | "lunch" | "dinner" | "snack";
 /** Hungry? (#88): a proper recipe, or quick Ready now ideas. */
 export type RecipeMode = "cook" | "readyNow";
 
-export type Appliance = "toaster" | "microwave" | "kettle" | "none";
+export type Appliance = "toaster" | "microwave" | "kettle" | "airFryer" | "none";
+
+/** The kit a Cook something recipe may use (#111); the kettle is always fine and isn't one of these. */
+export type Kit =
+    | "hob"
+    | "ovenGrill"
+    | "microwave"
+    | "toaster"
+    | "airFryer"
+    | "slowCooker"
+    | "riceCooker"
+    | "soupMaker"
+    | "blender";
+
+/** The equipment chips, in order, with their labels (project/Hungry.dc.html). */
+export const KITS: Array<{ id: Kit; label: string }> = [
+    { id: "hob", label: "Hob" },
+    { id: "ovenGrill", label: "Oven & grill" },
+    { id: "microwave", label: "Microwave" },
+    { id: "toaster", label: "Toaster" },
+    { id: "airFryer", label: "Air fryer" },
+    { id: "slowCooker", label: "Slow cooker" },
+    { id: "riceCooker", label: "Rice cooker" },
+    { id: "soupMaker", label: "Soup maker" },
+    { id: "blender", label: "Blender" },
+];
 
 /** A Ready now idea (#88): the in-stock products it uses, a line or two on how, and at most one extra. */
 export interface QuickIdea {
@@ -374,6 +399,8 @@ export interface RecipeRequest {
     comments: string | null;
     /** Titles already shown this visit, for Another one and More ideas. */
     avoidTitles: string[];
+    /** Cook something (#111): the kit the recipe may use (at least one); left out, everything is allowed. */
+    equipment?: Kit[];
 }
 
 export interface Recipe {
@@ -397,6 +424,10 @@ export interface Recipe {
     /** After an adjustment (#104): what the model couldn't add or take out. */
     couldNotAdd?: string[];
     couldNotRemove?: string[];
+    /** The kit the method uses (#111), for the meta line. */
+    equipment?: Kit[];
+    /** "Check before cooking" (#111): what still breaks a rule after one retry. */
+    warnings?: string[];
 }
 
 /** POST /api/recipes/adjust (#104): the recipe as shown, and what to change. At least one change. */
@@ -407,6 +438,8 @@ export interface RecipeAdjustment {
     remove: string[];
     /** At most 300 characters; null for none. */
     tweak: string | null;
+    /** The same kit as the recipe was made with (#111). */
+    equipment?: Kit[];
 }
 
 /** What an adjustment changed, for the "Adjusted: + Chorizo · − Onion · "spicier"" line. */

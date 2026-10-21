@@ -939,3 +939,64 @@
     opacity: 0.6;
     cursor: default;
 }
+
+/* "What can you use?" (#111, project/Hungry.dc.html): multi-select chips, all ticked when the form opens. */
+.kitChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.kitChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.kitChipOn {
+    border-color: var(--accent);
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.kitNote {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* "Check before cooking" (#111, project/RecipeHalfVeg.dc.html): what still breaks a rule after the retry. */
+.checkFirst {
+    display: flex;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--warn-bg);
+    border-radius: var(--radius-card);
+    color: var(--warn-fg);
+}
+
+.checkFirstIcon {
+    flex: none;
+    margin-top: 1px;
+}
+
+.checkFirstText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.checkFirstTitle {
+    font-weight: 700;
+}

@@ -7,7 +7,8 @@ namespace CupboardTracker.Application.Recipes;
 /// <summary>What the household asked to change (#104), as sent by the app: the recipe as it was last shown, products to
 /// add, things to add that aren't in stock, ingredient names to remove, and a tweak.</summary>
 public sealed record AdjustChoices(
-    Recipe Current, IReadOnlyList<Guid> AddProductIds, IReadOnlyList<string> AddTyped, IReadOnlyList<string> Remove, string? Tweak);
+    Recipe Current, IReadOnlyList<Guid> AddProductIds, IReadOnlyList<string> AddTyped, IReadOnlyList<string> Remove, string? Tweak,
+    IReadOnlySet<Kit>? Equipment = null);
 
 /// <summary>What changed, for the line under the meta: <c>Adjusted: + Chorizo · − Onion · "spicier"</c>.</summary>
 public sealed record AdjustmentSummary(IReadOnlyList<string> Added, IReadOnlyList<string> Removed, string? Tweak);
@@ -93,7 +94,8 @@ public sealed partial class AdjustRecipe(GetStock stock, IRecipeGenerator genera
                 k.Product.DaysUntilSoonest, k.Product.UseFirst, k.Aisle.Name, k.Product.OpenedCount))],
             add,
             tweak,
-            []);
+            [],
+            choices.Equipment); // #111: an adjustment keeps the same kit
         var result = await generator.AdjustAsync(new RecipeAdjustmentRequest(context, choices.Current, changes), cancellationToken);
         if (result is not RecipeResult.Suggested { Recipe: var recipe })
         {
@@ -105,6 +107,7 @@ public sealed partial class AdjustRecipe(GetStock stock, IRecipeGenerator genera
         var couldNotAdd = shown.CouldNotFitIn.Concat(recipe.CouldNotAddTyped ?? []).ToList();
         var couldNotRemove = recipe.CouldNotRemove ?? [];
         shown = shown with { CouldNotFitIn = [], CouldNotAdd = couldNotAdd, CouldNotRemove = couldNotRemove };
+        // Equipment and Warnings come through ToView from the recipe (#111).
         var summary = new AdjustmentSummary(
             [.. add.Select(id => byId[id].GenericName ?? byId[id].DisplayName).Concat(typed)],
             [.. remove.Select(r => r.Name)],

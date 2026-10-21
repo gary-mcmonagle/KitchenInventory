@@ -15,13 +15,30 @@ public enum RecipeMode
     ReadyNow,
 }
 
-/// <summary>The only kitchen kit a Ready now idea may need.</summary>
+/// <summary>The only kitchen kit a Ready now idea may need (the air fryer since #111).</summary>
 public enum Appliance
 {
     Toaster,
     Microwave,
     Kettle,
     None,
+    AirFryer,
+}
+
+/// <summary>Appliance ids as the API and the model use them.</summary>
+public static class Appliances
+{
+    public static string Id(Appliance appliance) => appliance == Appliance.AirFryer ? "airFryer" : appliance.ToString().ToLowerInvariant();
+
+    public static Appliance? Parse(string? id) => id switch
+    {
+        "toaster" => Appliance.Toaster,
+        "microwave" => Appliance.Microwave,
+        "kettle" => Appliance.Kettle,
+        "airFryer" => Appliance.AirFryer,
+        "none" => Appliance.None,
+        _ => null,
+    };
 }
 
 /// <summary>A Ready now idea (#88), already validated against the stock that was sent: the products it uses, a line or
@@ -41,14 +58,19 @@ public sealed record RecipeStockItem(
     Guid ProductId, string Name, int Quantity, int? DaysUntilSoonest, bool UseFirst, string AisleName, int OpenedCount);
 
 /// <summary>What to ask for: the meal, the stock, and the household's choices. <see cref="Comments"/> are one-off
-/// preferences ("vegetarian", "no oven"), never instructions.</summary>
+/// preferences ("vegetarian", "no oven"), never instructions. <see cref="Equipment"/> (#111) is the kit a recipe may
+/// use (a kettle always); null means all of it.</summary>
 public sealed record RecipeRequest(
     RecipeMeal Meal,
     bool PreferUseFirst,
     IReadOnlyList<RecipeStockItem> Stock,
     IReadOnlyList<Guid> IncludeProductIds,
     string? Comments,
-    IReadOnlyList<string> AvoidTitles);
+    IReadOnlyList<string> AvoidTitles,
+    IReadOnlySet<Kit>? Equipment = null)
+{
+    public IReadOnlySet<Kit> AllowedKit => Equipment ?? Kits.All;
+}
 
 /// <summary>An ingredient: <see cref="ProductId"/> when it's from the stock, <c>null</c> for a basic staple.</summary>
 public sealed record RecipeIngredient(string Name, string Amount, Guid? ProductId);
@@ -68,7 +90,9 @@ public sealed record Recipe(
     IReadOnlyList<string> AlsoNeeded,
     IReadOnlyList<Guid> CouldNotFitIn,
     IReadOnlyList<string>? CouldNotAddTyped = null,
-    IReadOnlyList<string>? CouldNotRemove = null);
+    IReadOnlyList<string>? CouldNotRemove = null,
+    IReadOnlyList<Kit>? Equipment = null,
+    IReadOnlyList<string>? Warnings = null);
 
 /// <summary>
 /// What to change in a recipe (#104): in-stock products to add, things to add that aren't in stock (they go under
