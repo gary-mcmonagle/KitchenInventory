@@ -713,7 +713,7 @@ One list for the household. Every endpoint needs a signed-in user (**401** witho
 {
   "id": "…", "name": "Semi-skimmed milk", "note": "2", "productId": "…" | null,
   "aisleId": "dairyEggs" | null, "aisleName": "Dairy & eggs" | null, "findingAisle": false,
-  "source": "typed" | "suggestion" | "itemDetail" | "autoRunOut" | "savedRecipe", "status": "open" | "done",
+  "source": "typed" | "suggestion" | "itemDetail" | "checkOutPrompt" | "autoRunOut" | "savedRecipe" | "stockSearch", "status": "open" | "done",
   "addedByName": "Gary", "addedAt": "…", "doneByName": null, "doneAt": null,
   "updatedAt": "…", "version": 3, "removed": false
 }

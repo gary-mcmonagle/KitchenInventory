@@ -253,6 +253,8 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Shopping list** – the household's one shared list of things to buy (#84), on the List tab. Items are added by **generic name**; anyone can tick them off, and every open phone sees changes within a couple of seconds.
 - In code: `ShoppingListItem`, `AddToShoppingList`, `ListScreen`, `useShoppingList`, `shoppingList` container
 
+**Add from an empty search** – when a stock search finds nothing, the stock list offers **Add "<what you typed>" to the shopping list** (#97): one tap puts it on the list (`source: stockSearch`), named as typed with a capital first letter. Not offered for barcodes (digits only) or a single character, and it says so when the name is already on the list.
+
 **Outbox** – the changes to the shopping list made on a phone but not yet sent (#85): each add, tick, put-back, removal and Clear ticked, with its own change ID and the time it was made, kept in order on the phone (IndexedDB, with the list's last copy). Rows with a change waiting show **Not synced** while offline.
 - In code: `OutboxEntry`, `listStore.ts`, `ShoppingList.waiting`
 

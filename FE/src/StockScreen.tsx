@@ -24,13 +24,14 @@ import { takeFlash } from "./flash";
 import { rememberItemPreview } from "./itemPreview";
 import { ProductTile } from "./ProductTile";
 import { createSeenReporter } from "./push";
-import { ADD_PATH, itemPath, namePath, navigate, SCANNERS_PATH } from "./router";
+import { ADD_PATH, itemPath, LIST_PATH, namePath, navigate, SCANNERS_PATH } from "./router";
 import { scannerLabel, scannerStatus, type ScannerStatus } from "./scannerStatus";
 import { matchesSearch, searchWords } from "./stockSearch";
 import styles from "./Stock.module.css";
 import { ScanFeedView } from "./ScanFeedView";
 import { RunOutSheet, type RunOutSource } from "./RunOut";
 import { signalRConnection, useScanFeed, type FeedConnection } from "./useScanFeed";
+import { useOptionalShoppingList } from "./useShoppingList";
 
 const PULL_TO_REFRESH = 70; // px
 export const TOAST_MS = 6000; // as in the mockup
@@ -601,11 +602,14 @@ export function StockScreen({
                 stock.products.length > 0 &&
                 groups.length === 0 &&
                 waiting.length === 0 ? (
-                    <p className={styles.noMatches}>
-                        Nothing matches that.
-                        <br />
-                        Try another word or filter.
-                    </p>
+                    <div className={styles.noMatchesBlock}>
+                        <p className={styles.noMatches}>
+                            Nothing matches that.
+                            <br />
+                            Try another word or filter.
+                        </p>
+                        <AddFromSearch query={query} />
+                    </div>
                 ) : (
                     useFirstOnly &&
                     groups.length === 0 && <p className={styles.empty}>Nothing needs using up right now.</p>
@@ -922,5 +926,67 @@ function Skeleton() {
                 </li>
             ))}
         </ul>
+    );
+}
+
+/** The name a stock search would put on the list (#97): trimmed, single spaces, first letter capitalised. */
+export function listNameFor(query: string): string {
+    const name = query.trim().replace(/\s+/g, " ");
+    return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** A search worth offering to the list: 2+ characters, and not only digits (a barcode). */
+export function offersListAdd(query: string): boolean {
+    const name = query.trim();
+    return name.length >= 2 && !/^\d+$/.test(name);
+}
+
+/**
+ * "Add "<query>" to the shopping list" under an empty stock search (#97): the list's normal add (instant, as on the
+ * List screen) with source stockSearch. Already open on the list → says so; just added → "Added to the list ✓" and
+ * View list.
+ */
+function AddFromSearch({ query }: { query: string }) {
+    const list = useOptionalShoppingList();
+    const [added, setAdded] = useState<string | null>(null);
+    if (!list || !offersListAdd(query)) return null;
+
+    const name = listNameFor(query);
+    const key = name.toLowerCase();
+    if (added === key) {
+        return (
+            <div className={styles.addFromSearch}>
+                <button type="button" className={`${styles.addToList} ${styles.addedToList}`} disabled>
+                    Added to the list ✓
+                </button>
+                <a
+                    href={LIST_PATH}
+                    className={styles.viewList}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        navigate(LIST_PATH);
+                    }}
+                >
+                    View list
+                </a>
+            </div>
+        );
+    }
+
+    const onList = list.open.find((i) => i.name.trim().replace(/\s+/g, " ").toLowerCase() === key);
+    return (
+        <div className={styles.addFromSearch}>
+            <button
+                type="button"
+                className={onList ? `${styles.addToList} ${styles.addedToList}` : styles.addToList}
+                disabled={!!onList}
+                onClick={() => {
+                    list.add(name, null, "stockSearch");
+                    setAdded(key);
+                }}
+            >
+                {onList ? `✓ "${onList.name}" is on the list` : `Add "${name}" to the shopping list`}
+            </button>
+        </div>
     );
 }

@@ -24,7 +24,10 @@ public static class ListItemSources
     /// <summary>"Add missing to the list" on a saved recipe (#105).</summary>
     public const string SavedRecipe = "savedRecipe";
 
-    public static readonly IReadOnlySet<string> FromTheApp = new HashSet<string>(StringComparer.Ordinal) { Typed, Suggestion, ItemDetail, CheckOutPrompt, SavedRecipe };
+    /// <summary>"Add "…" to the shopping list" under an empty stock search (#97).</summary>
+    public const string StockSearch = "stockSearch";
+
+    public static readonly IReadOnlySet<string> FromTheApp = new HashSet<string>(StringComparer.Ordinal) { Typed, Suggestion, ItemDetail, CheckOutPrompt, SavedRecipe, StockSearch };
 }
 
 /// <summary>How a list item got its aisle: from its product, from Jev (or a remembered Jev answer), or Other because
