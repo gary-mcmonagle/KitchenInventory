@@ -11,6 +11,8 @@ import styles from "./RecipeAdjust.module.css";
 /** The suggested additions give up after this, quietly: nothing else waits for them (#104). */
 export const SUGGESTIONS_TIMEOUT_MS = 8000;
 export const MAX_TYPED = 3;
+/** A Ready now idea has room for one thing that isn't in stock (#108). */
+export const MAX_IDEA_TYPED = 1;
 export const MAX_TWEAK = 300;
 
 /** What the household chose in the sheet. */
@@ -36,13 +38,18 @@ export function AdjustSheet({
     stock,
     onCancel,
     onUpdate,
+    kind = "recipe",
 }: {
     api: ApiClient;
+    /** For a Ready now idea (#108), the idea as a recipe: its uses as the ingredients, its how as the one step. */
     recipe: Recipe;
+    /** "idea": titled "Adjust this idea", with room for one thing to buy. */
+    kind?: "recipe" | "idea";
     stock: StockProduct[];
     onCancel: () => void;
     onUpdate: (choices: AdjustChoices) => void;
 }) {
+    const maxTyped = kind === "idea" ? MAX_IDEA_TYPED : MAX_TYPED;
     const [suggestions, setSuggestions] = useState<RecipeAddition[] | "loading" | "none">("loading");
     const [picked, setPicked] = useState<Pick[]>([]);
     const [remove, setRemove] = useState<string[]>([]);
@@ -93,7 +100,7 @@ export function AdjustSheet({
     const typedCount = picked.filter((p) => p.kind === "typed").length;
     const addTyped = () => {
         const name = typed.trim().slice(0, 40);
-        if (!name || typedCount >= MAX_TYPED) return;
+        if (!name || typedCount >= maxTyped) return;
         if (!picked.some((p) => p.kind === "typed" && p.name.toLowerCase() === name.toLowerCase()))
             setPicked((p) => [...p, { kind: "typed", name }]);
         setTyped("");
@@ -139,7 +146,7 @@ export function AdjustSheet({
                     <div className={styles.handle} aria-hidden="true" />
                     <div className={styles.titleRow}>
                         <h2 id="adjust-title" className={styles.title}>
-                            Adjust this recipe
+                            {kind === "idea" ? "Adjust this idea" : "Adjust this recipe"}
                         </h2>
                         <button type="button" className={styles.close} aria-label="Close" onClick={onCancel}>
                             <svg
@@ -296,7 +303,7 @@ export function AdjustSheet({
                                 </button>
                             </div>
                         ) : (
-                            typedCount < MAX_TYPED && (
+                            typedCount < maxTyped && (
                                 <button
                                     type="button"
                                     className={styles.linkButton}
@@ -373,7 +380,7 @@ export function AdjustSheet({
                         aria-disabled={!chosen}
                         onClick={update}
                     >
-                        Update recipe
+                        {kind === "idea" ? "Update idea" : "Update recipe"}
                     </button>
                 </div>
             </div>

@@ -647,6 +647,31 @@ The same recipe, updated by gpt-4o on Foundry (same deployment, managed identity
 - **Use first:** a use-first suggestion moves ahead of ones within 0.1 of it.
 - No Foundry call and no rate limit. If Jev fails it returns `[]`, and the sheet hides the row. Logs record counts and latency only.
 
+### Adjust a Ready now idea (#108)
+
+#### `POST /api/recipes/adjust-idea`
+
+A sibling of `/api/recipes/adjust` for one Ready now idea, which comes back as an idea (not a recipe).
+
+```json
+{
+  "idea": { "title": "…", "how": "…", "appliance": "microwave", "minutes": 5,
+            "uses": [{ "productId": "…", "displayName": "…" }], "alsoNeeded": "…" | null },
+  "meal": "snack",
+  "add": { "productIds": ["…"], "typed": ["hot sauce"] },
+  "remove": ["Baked beans"],
+  "tweak": "make it a toastie" | null
+}
+```
+
+- **The idea** is only the starting point: the stock is rebuilt from Cosmos, and `uses` may also be bare product IDs. Uses no longer in stock are dropped from what the model sees.
+- **Changes** as for recipes, except: `add.typed` takes **at most 1** (an idea has room for one extra item; it becomes `alsoNeeded`). `remove` names things the idea uses (by the name shown, or its generic name); other names are ignored. At least one change (400).
+- **Rules:** gpt-4o with a strict one-idea schema (`ready_now_idea`, the fields of a #88 idea) and #88's Ready now rules, plus: keep the same idea where possible; **only a toaster, microwave, kettle or no cooking**, switching between those if the change needs it ("make it a toastie" → toaster); added products in `uses` and the how; removed ones in neither. Checked, asked again once, then returned with notes.
+- **200:** `{ "available": true, "idea": { …as a #88 idea…, "couldNotAdd": [], "couldNotRemove": [] }, "adjustmentSummary": { "added": [], "removed": [], "tweak": null } }`; or `{ "available": false, "message": "Couldn't update this idea just now. Try again." }`.
+- **Other statuses:** as adjust: **422** nothing in stock, **429** over the hourly limit (**shared with suggest and adjust**), **401** without a token.
+- **Suggested additions** for an idea use `POST /api/recipes/suggest-additions` unchanged: the app sends the idea as a recipe (its uses as ingredients, its how as the one step).
+- Nothing is stored. Logs record counts, the appliance and whether a tweak was given, never the idea or the tweak.
+
 ## Saved recipes (#105)
 
 The household's one collection of saved recipes and Ready now ideas. Every endpoint needs a signed-in user (**401** without a token). Ids come from the app (UUIDs), so saving is idempotent. Logs record ids, kinds and counts, never titles, notes or recipe text.

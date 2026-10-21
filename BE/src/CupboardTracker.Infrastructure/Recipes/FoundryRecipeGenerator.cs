@@ -204,29 +204,13 @@ public sealed partial class FoundryRecipeGenerator(
         var ideas = new List<QuickIdea>();
         foreach (var node in answer["ideas"]?.AsArray() ?? [])
         {
-            var title = Clean(node?["title"], 60);
-            var how = Clean(node?["how"], MaxHow);
-            Appliance? appliance = Clean(node?["appliance"], 20) switch
-            {
-                "toaster" => Appliance.Toaster,
-                "microwave" => Appliance.Microwave,
-                "kettle" => Appliance.Kettle,
-                "none" => Appliance.None,
-                _ => null,
-            };
-            if (title is null || how is null || appliance is null || avoid.Contains(title.ToLowerInvariant())
-                || ideas.Any(i => string.Equals(i.Title, title, StringComparison.OrdinalIgnoreCase)))
+            if (ParseIdea(node, request) is not { } idea || avoid.Contains(idea.Title.ToLowerInvariant())
+                || ideas.Any(i => string.Equals(i.Title, idea.Title, StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
             }
 
-            ideas.Add(new QuickIdea(
-                title,
-                how,
-                appliance.Value,
-                Math.Clamp(Int(node?["minutes"]) ?? 5, 1, MaxIdeaMinutes),
-                [.. Strings(node?["uses"], 64).Select(s => Resolve(s, request)).OfType<Guid>().Distinct()],
-                Strings(node?["alsoNeeded"], 60).FirstOrDefault()));
+            ideas.Add(idea);
             if (ideas.Count == MaxIdeas)
             {
                 break;
@@ -234,6 +218,195 @@ public sealed partial class FoundryRecipeGenerator(
         }
 
         return ideas;
+    }
+
+    /// <summary>One idea from the model, checked against the stock sent: null without a title, a how, or one of the
+    /// four appliances; unknown products dropped; at most 1 extra item; lengths capped.</summary>
+    internal static QuickIdea? ParseIdea(JsonNode? node, RecipeRequest request)
+    {
+        var title = Clean(node?["title"], 60);
+        var how = Clean(node?["how"], MaxHow);
+        Appliance? appliance = Clean(node?["appliance"], 20) switch
+        {
+            "toaster" => Appliance.Toaster,
+            "microwave" => Appliance.Microwave,
+            "kettle" => Appliance.Kettle,
+            "none" => Appliance.None,
+            _ => null,
+        };
+        return title is null || how is null || appliance is null
+            ? null
+            : new QuickIdea(
+                title,
+                how,
+                appliance.Value,
+                Math.Clamp(Int(node?["minutes"]) ?? 5, 1, MaxIdeaMinutes),
+                [.. Strings(node?["uses"], 64).Select(s => Resolve(s, request)).OfType<Guid>().Distinct()],
+                Strings(node?["alsoNeeded"], 60).FirstOrDefault());
+    }
+
+    /// <summary>One Ready now idea (#108): the same fields as an item of <see cref="IdeasSchema"/>.</summary>
+    internal static readonly JsonObject IdeaSchema = JsonNode.Parse("""
+        {
+          "name": "ready_now_idea",
+          "strict": true,
+          "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "how", "appliance", "minutes", "uses", "alsoNeeded"],
+            "properties": {
+              "title": { "type": "string" },
+              "how": { "type": "string" },
+              "appliance": { "type": "string", "enum": ["toaster", "microwave", "kettle", "none"] },
+              "minutes": { "type": "integer" },
+              "uses": { "type": "array", "items": { "type": "string" } },
+              "alsoNeeded": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+        """)!.AsObject();
+
+    internal const string IdeaAdjustInstructions = IdeasInstructions + "\n"
+        + "You are now UPDATING the one idea under 'Current idea', not suggesting new ones: return exactly one idea. Keep it "
+        + "the same idea where possible and change only what the changes need (title, how, minutes when they no longer fit). "
+        + "It must still need only a toaster, a microwave, a kettle or no cooking; the appliance may change between those if "
+        + "the change needs it (e.g. 'make it a toastie' means the toaster). Every product under 'Must include' is an "
+        + "addition: list its ref in uses and use it in how. The item under 'Add (not in stock)' becomes alsoNeeded (the one "
+        + "extra item). Nothing under 'Remove' may appear in uses or how. The household's preferences are the tweak they "
+        + "asked for (e.g. 'spicier', 'for 3'): follow it within the same rules.";
+
+    public async Task<IdeaResult> AdjustIdeaAsync(IdeaAdjustmentRequest request, CancellationToken cancellationToken)
+    {
+        if (options.Endpoint is null)
+        {
+            return new IdeaResult.Unavailable("not configured");
+        }
+
+        var started = Stopwatch.GetTimestamp();
+        var messages = new JsonArray(
+            new JsonObject { ["role"] = "system", ["content"] = IdeaAdjustInstructions },
+            new JsonObject { ["role"] = "user", ["content"] = AdjustIdeaPrompt(request) });
+        var usage = (Prompt: 0, Completion: 0);
+        var calls = 0;
+        IdeaResult.Adjusted? adjusted = null;
+        for (var round = 1; round <= 2; round++)
+        {
+            calls++;
+            var answer = await CallAsync(messages, Temperature, IdeaSchema, cancellationToken);
+            if (answer.Failure is { } failure)
+            {
+                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, $"adjust idea: {failure}");
+                return new IdeaResult.Unavailable(failure);
+            }
+
+            usage = (usage.Prompt + answer.PromptTokens, usage.Completion + answer.CompletionTokens);
+            QuickIdea? idea;
+            try
+            {
+                idea = ParseIdea(JsonNode.Parse(answer.Content!), request.Context);
+            }
+            catch (JsonException)
+            {
+                idea = null;
+            }
+
+            if (idea is null)
+            {
+                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, "adjust idea: unreadable answer");
+                return new IdeaResult.Unavailable("unreadable answer");
+            }
+
+            adjusted = CheckIdeaChanges(idea, request);
+            var problems = IdeaProblems(adjusted, request.Context).ToList();
+            if (problems.Count == 0 || round == 2)
+            {
+                break;
+            }
+
+            // Ask once more, naming what it got wrong.
+            messages.Add(new JsonObject { ["role"] = "assistant", ["content"] = answer.Content });
+            messages.Add(new JsonObject
+            {
+                ["role"] = "user",
+                ["content"] = "That update doesn't follow the changes: " + string.Join("; ", problems)
+                    + ". Update the idea again, following every change and all the same rules.",
+            });
+        }
+
+        var done = IdeaProblems(adjusted!, request.Context).Any() ? "adjusted idea with notes" : "adjusted idea";
+        LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, done);
+        return adjusted!;
+    }
+
+    /// <summary>The idea adjustment's user message: the current idea (its uses as stock refs), the typed addition and the
+    /// removals, then the ideas prompt (meal, the products to add as "Must include", the stock, the tweak).</summary>
+    internal static string AdjustIdeaPrompt(IdeaAdjustmentRequest request)
+    {
+        var current = request.Current;
+        var json = new JsonObject
+        {
+            ["title"] = current.Title,
+            ["how"] = current.How,
+            ["appliance"] = current.Appliance.ToString().ToLowerInvariant(),
+            ["minutes"] = current.Minutes,
+            ["uses"] = new JsonArray([.. current.Uses.Where(id => request.Context.Stock.Any(s => s.ProductId == id))
+                .Select(id => (JsonNode)JsonValue.Create(Ref(request.Context, id))!)]),
+            ["alsoNeeded"] = new JsonArray([.. new[] { current.AlsoNeeded }.OfType<string>().Select(a => (JsonNode)JsonValue.Create(a)!)]),
+        };
+        var text = new StringBuilder();
+        text.AppendLine("Current idea (JSON):").AppendLine(Delimiters().Replace(json.ToJsonString(), " ")).AppendLine();
+        if (request.Changes.AddTyped.Count > 0)
+        {
+            text.AppendLine("Add (not in stock: it becomes alsoNeeded):");
+            foreach (var item in request.Changes.AddTyped)
+            {
+                text.Append("- ").AppendLine(OneLine(Delimiters().Replace(item, " ")));
+            }
+        }
+
+        if (request.Changes.Remove.Count > 0)
+        {
+            text.AppendLine("Remove (must not appear):");
+            foreach (var item in request.Changes.Remove)
+            {
+                text.Append("- ").Append(item.ProductId is { } id && request.Context.Stock.Any(s => s.ProductId == id) ? Ref(request.Context, id) + " " : "")
+                    .AppendLine(OneLine(item.Name));
+            }
+        }
+
+        return text.AppendLine().Append(Prompt(request.Context)).ToString();
+    }
+
+    /// <summary>What the model still got wrong: added products missing from uses, the typed addition missing (from
+    /// alsoNeeded and how), and removed items still in uses or named in how.</summary>
+    internal static IdeaResult.Adjusted CheckIdeaChanges(QuickIdea idea, IdeaAdjustmentRequest request)
+    {
+        var notFitIn = request.Context.IncludeProductIds.Where(id => !idea.Uses.Contains(id)).ToList();
+        var said = $"{idea.AlsoNeeded} {idea.How}";
+        var notAdded = request.Changes.AddTyped.Where(t => !said.Contains(t.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        var notRemoved = request.Changes.Remove
+            .Where(r => (r.ProductId is { } id && idea.Uses.Contains(id)) || idea.How.Contains(r.Name, StringComparison.OrdinalIgnoreCase))
+            .Select(r => r.Name)
+            .ToList();
+        return new IdeaResult.Adjusted(idea, notFitIn, notAdded, notRemoved);
+    }
+
+    private static IEnumerable<string> IdeaProblems(IdeaResult.Adjusted adjusted, RecipeRequest context)
+    {
+        if (adjusted.CouldNotFitIn.Count > 0)
+        {
+            yield return "uses leaves out " + string.Join(", ", adjusted.CouldNotFitIn.Select(id => $"{Ref(context, id)} {Name(context, id)}"));
+        }
+
+        if (adjusted.CouldNotAddTyped.Count > 0)
+        {
+            yield return "alsoNeeded is missing " + string.Join(", ", adjusted.CouldNotAddTyped.Select(OneLine));
+        }
+
+        if (adjusted.CouldNotRemove.Count > 0)
+        {
+            yield return "it still uses " + string.Join(", ", adjusted.CouldNotRemove.Select(OneLine));
+        }
     }
 
     public async Task<RecipeResult> SuggestAsync(RecipeRequest request, CancellationToken cancellationToken)

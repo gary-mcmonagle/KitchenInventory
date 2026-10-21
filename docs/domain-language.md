@@ -226,6 +226,8 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Recipe adjustment** – changing a suggested recipe instead of asking for another (#104): **Adjust** opens a sheet to **add** (from the cupboard, or something to buy), **remove** ingredients, and **tweak** ("spicier", "for 4"). gpt-4o returns the same dish updated, with "Adjusted: + Chorizo · − Onion · "spicier"" under the meta and **Undo adjustment**, which steps back one version at a time. Another one and Start again drop the adjustments.
 - In code: `AdjustRecipe`, `RecipeChanges`, `AdjustAsync`, `AdjustSheet`, `AdjustmentSummary`
 
+**Adjusted idea** – a Ready now idea changed in place with its card's **Adjust** button (#108): the same Adjust sheet as a recipe ("Adjust this idea"; Remove lists what it uses; room for one thing to buy). It stays a quick idea (toaster, microwave, kettle or no cooking, possibly a different one of those), shows "Adjusted: …" with **Undo** at the top of the card, and tags what it added. Each card keeps its own versions.
+
 **Suggested addition** – one of up to 3 in-stock things (by generic name) the Adjust sheet offers as chips: Jev's pick of what would improve the recipe most, with use-first items nudged ahead of close ones (#104). It's only a suggestion until tapped.
 - In code: `SuggestRecipeAdditions`, `IRecipeAdditionRanker`, `JevRecipeAdditionRanker`, `RecipeAddition`
 

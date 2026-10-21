@@ -122,10 +122,43 @@ type Phase =
     | { kind: "form" }
     | { kind: "loading" }
     | { kind: "recipe"; recipe: Recipe }
-    | { kind: "ideas"; meal: RecipeMeal; ideas: QuickIdea[] }
+    /** Ready now ideas (#88); each card adjusts on its own (#108). `round` tells a late answer it's out of date. */
+    | { kind: "ideas"; meal: RecipeMeal; cards: IdeaCard[]; round: number }
     | { kind: "error"; message: string; retry: RecipeRequest }
     /** A saved recipe (#105); `asRecipe` is it as the recipe Adjust works on, `saved` false after Remove. */
     | { kind: "saved"; recipe: SavedRecipe; asRecipe: Recipe; saved: boolean };
+
+/** One Ready now card (#108): the idea now, the versions before it (each Undo steps back once), what the last change
+ * was, and whether it's updating or failed (with the choices, for Try again). */
+type IdeaCard = {
+    idea: QuickIdea;
+    history: Array<{ idea: QuickIdea; summary: AdjustmentSummary | null }>;
+    summary: AdjustmentSummary | null;
+    status: "idle" | "updating" | { message: string; choices: AdjustChoices };
+};
+
+const IDEA_UNAVAILABLE = "Couldn't update this idea just now. Try again.";
+
+/** An idea as the Adjust sheet sees it: its uses as the ingredients (so Remove lists them), its how as the step. */
+export function ideaAsRecipe(idea: QuickIdea, meal: RecipeMeal): Recipe {
+    return {
+        title: idea.title,
+        summary: idea.how,
+        meal,
+        servings: 1,
+        totalMinutes: idea.minutes,
+        ingredients: idea.uses.map((u) => ({
+            name: u.displayName,
+            amount: "",
+            productId: u.productId,
+            useFirst: u.useFirst,
+        })),
+        steps: [idea.how],
+        usesUp: [],
+        alsoNeeded: idea.alsoNeeded ? [idea.alsoNeeded] : [],
+        couldNotFitIn: [],
+    };
+}
 
 /** What's on screen that can be saved: a recipe, or a Ready now idea. */
 type Saveable = Recipe | QuickIdea;
@@ -338,13 +371,90 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
             setPhase(
                 answer.recipe
                     ? { kind: "recipe", recipe: answer.recipe }
-                    : { kind: "ideas", meal: answer.meal ?? request.meal, ideas: answer.ideas! },
+                    : {
+                          kind: "ideas",
+                          meal: answer.meal ?? request.meal,
+                          cards: answer.ideas!.map((idea) => ({
+                              idea,
+                              history: [],
+                              summary: null,
+                              status: "idle",
+                          })),
+                          round: ++ideaRound.current,
+                      },
             );
         } catch (error) {
             if (error instanceof SignInRequiredError) return;
             setPhase({ kind: "error", message: errorMessage(error) ?? UNAVAILABLE, retry: request });
         }
     };
+
+    // Adjusting a Ready now idea (#108): one card at a time in the sheet; each card updates on its own.
+    const ideaRound = useRef(0);
+    const [ideaSheet, setIdeaSheet] = useState<{ round: number; index: number; recipe: Recipe } | null>(null);
+    const updateCard = (round: number, index: number, change: (card: IdeaCard) => IdeaCard) =>
+        setPhase((p) =>
+            p.kind === "ideas" && p.round === round
+                ? { ...p, cards: p.cards.map((c, i) => (i === index ? change(c) : c)) }
+                : p,
+        );
+
+    const runIdeaAdjust = async (
+        round: number,
+        index: number,
+        card: IdeaCard,
+        meal: RecipeMeal,
+        choices: AdjustChoices,
+    ) => {
+        updateCard(round, index, (c) => ({ ...c, status: "updating" }));
+        const failed = (message: string) =>
+            updateCard(round, index, (c) => ({ ...c, status: { message, choices } }));
+        try {
+            const { idea } = card;
+            const answer = await api.adjustIdea({
+                idea: {
+                    title: idea.title,
+                    how: idea.how,
+                    appliance: idea.appliance,
+                    minutes: idea.minutes,
+                    uses: idea.uses.map((u) => ({ productId: u.productId, displayName: u.displayName })),
+                    alsoNeeded: idea.alsoNeeded,
+                },
+                meal,
+                add: { productIds: choices.productIds, typed: choices.typed },
+                remove: choices.remove,
+                tweak: choices.tweak,
+            });
+            if (!answer.available || !answer.idea) {
+                failed(answer.message ?? IDEA_UNAVAILABLE);
+                return;
+            }
+            const adjusted = answer.idea;
+            setShownTitles((t) => (t.includes(adjusted.title) ? t : [...t, adjusted.title])); // More ideas avoids it too
+            updateCard(round, index, (c) => ({
+                idea: adjusted,
+                history: [...c.history, { idea: c.idea, summary: c.summary }],
+                summary: answer.adjustmentSummary ?? null,
+                status: "idle",
+            }));
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return;
+            failed(errorMessage(error) ?? IDEA_UNAVAILABLE);
+        }
+    };
+
+    const undoIdea = (round: number, index: number) =>
+        updateCard(round, index, (c) => {
+            const previous = c.history[c.history.length - 1];
+            return previous
+                ? {
+                      idea: previous.idea,
+                      summary: previous.summary,
+                      history: c.history.slice(0, -1),
+                      status: "idle",
+                  }
+                : c;
+        });
 
     const runAdjust = async (recipe: Recipe, choices: AdjustChoices) => {
         setAdjust({ kind: "updating" });
@@ -421,15 +531,49 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                     )}
                 </>
             ) : phase.kind === "ideas" ? (
-                <IdeasView
-                    meal={phase.meal}
-                    ideas={phase.ideas}
-                    preferUseFirst={choices.prefer}
-                    isSaved={(idea) => savedIds.has(idea)}
-                    onToggleSave={(idea) => toggleSave(idea, ideaToSave(idea, phase.meal))}
-                    onMore={() => void ask(request(shownTitles))}
-                    onStartAgain={() => setPhase({ kind: "form" })}
-                />
+                <>
+                    <IdeasView
+                        meal={phase.meal}
+                        cards={phase.cards}
+                        preferUseFirst={choices.prefer}
+                        isSaved={(idea) => savedIds.has(idea)}
+                        onToggleSave={(idea) => toggleSave(idea, ideaToSave(idea, phase.meal))}
+                        onAdjust={(index) =>
+                            setIdeaSheet({
+                                round: phase.round,
+                                index,
+                                recipe: ideaAsRecipe(phase.cards[index].idea, phase.meal),
+                            })
+                        }
+                        onRetry={(index) => {
+                            const card = phase.cards[index];
+                            if (typeof card.status === "object")
+                                void runIdeaAdjust(phase.round, index, card, phase.meal, card.status.choices);
+                        }}
+                        onUndo={(index) => undoIdea(phase.round, index)}
+                        onMore={() => void ask(request(shownTitles))}
+                        onStartAgain={() => setPhase({ kind: "form" })}
+                    />
+                    {ideaSheet?.round === phase.round && (
+                        <AdjustSheet
+                            api={api}
+                            kind="idea"
+                            recipe={ideaSheet.recipe}
+                            stock={stock ?? []}
+                            onCancel={() => setIdeaSheet(null)}
+                            onUpdate={(choices) => {
+                                setIdeaSheet(null);
+                                void runIdeaAdjust(
+                                    phase.round,
+                                    ideaSheet.index,
+                                    phase.cards[ideaSheet.index],
+                                    phase.meal,
+                                    choices,
+                                );
+                            }}
+                        />
+                    )}
+                </>
             ) : phase.kind === "saved" ? (
                 <>
                     <SavedRecipeView
@@ -1077,18 +1221,25 @@ const APPLIANCES: Record<Appliance, { label: string; icon: React.ReactNode }> = 
 /** Ready now (#88, project/ReadyNow.dc.html): 3 to 5 quick ideas, each with what it uses from stock. */
 function IdeasView({
     meal,
-    ideas,
+    cards,
     preferUseFirst,
     isSaved = () => false,
     onToggleSave,
+    onAdjust,
+    onRetry,
+    onUndo,
     onMore,
     onStartAgain,
 }: {
     meal: RecipeMeal;
-    ideas: QuickIdea[];
+    cards: IdeaCard[];
     preferUseFirst: boolean;
     isSaved?: (idea: QuickIdea) => boolean;
     onToggleSave?: (idea: QuickIdea) => void;
+    /** Adjust (#108): opens the sheet for that card; Try again and Undo act on that card only. */
+    onAdjust?: (index: number) => void;
+    onRetry?: (index: number) => void;
+    onUndo?: (index: number) => void;
     onMore: () => void;
     onStartAgain: () => void;
 }) {
@@ -1096,6 +1247,7 @@ function IdeasView({
         e.preventDefault();
         navigate(itemPath(productId));
     };
+    const ideas = cards.map((c) => c.idea);
     const usesUseFirst = ideas.some((i) => i.uses.some((u) => u.useFirst));
     return (
         <>
@@ -1111,13 +1263,64 @@ function IdeasView({
                     </div>
                 </div>
 
-                {ideas.map((idea) => {
+                {cards.map((card, index) => {
+                    const { idea } = card;
                     const expired = idea.uses.filter(
                         (u) => u.daysUntilSoonest !== null && u.daysUntilSoonest < 0,
                     );
                     const appliance = APPLIANCES[idea.appliance];
+                    const updating = card.status === "updating";
+                    const failed = typeof card.status === "object" ? card.status.message : null;
+                    const previous = card.history[card.history.length - 1]?.idea;
+                    const before = new Set(previous?.uses.map((u) => u.productId) ?? []);
+                    const isNew = (productId: string) => previous !== undefined && !before.has(productId);
+                    const adjusted = card.summary !== null && card.history.length > 0;
                     return (
-                        <article key={idea.title} className={styles.idea} aria-label={idea.title}>
+                        <article
+                            key={index}
+                            className={[
+                                styles.idea,
+                                adjusted && styles.ideaAdjusted,
+                                updating && styles.ideaUpdating,
+                            ]
+                                .filter(Boolean)
+                                .join(" ")}
+                            aria-label={idea.title}
+                            aria-busy={updating}
+                        >
+                            {updating && (
+                                <div className={styles.ideaUpdatingNote} role="status">
+                                    <span className={styles.smallSpinner} aria-hidden="true" />
+                                    Updating this idea…
+                                </div>
+                            )}
+                            {failed && (
+                                <div className={styles.errorCard} role="alert">
+                                    <span>{failed}</span>
+                                    <button
+                                        type="button"
+                                        className={styles.tryAgain}
+                                        onClick={() => onRetry?.(index)}
+                                    >
+                                        Try again
+                                    </button>
+                                </div>
+                            )}
+                            {adjusted && (
+                                <div className={styles.ideaAdjustedLine}>
+                                    <span className={styles.adjustedText}>
+                                        {adjustmentLine(card.summary!)}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className={styles.undoAdjust}
+                                        disabled={updating}
+                                        onClick={() => onUndo?.(index)}
+                                    >
+                                        Undo
+                                    </button>
+                                </div>
+                            )}
                             <div className={styles.ideaHead}>
                                 <h2 className={styles.ideaTitle}>{idea.title}</h2>
                                 <span className={styles.ideaMinutes}>{idea.minutes} min</span>
@@ -1172,6 +1375,9 @@ function IdeasView({
                                                             {gone ? " (estimated expired)" : " (use first)"}
                                                         </span>
                                                     )}
+                                                    {isNew(u.productId) && (
+                                                        <span className={styles.usedAddedTag}>Added</span>
+                                                    )}
                                                 </a>
                                             );
                                         })}
@@ -1183,13 +1389,51 @@ function IdeasView({
                                     You&apos;ll also need: {idea.alsoNeeded}
                                 </div>
                             )}
-                            {onToggleSave && (
+                            {(idea.couldNotAdd ?? []).length > 0 && (
+                                <p className={styles.notFitted}>
+                                    Couldn&apos;t add: {idea.couldNotAdd!.join(", ")}
+                                </p>
+                            )}
+                            {(idea.couldNotRemove ?? []).length > 0 && (
+                                <p className={styles.notFitted}>
+                                    Couldn&apos;t remove: {idea.couldNotRemove!.join(", ")}
+                                </p>
+                            )}
+                            {(onAdjust || onToggleSave) && (
                                 <div className={styles.ideaButtons}>
-                                    <SaveIdeaButton
-                                        title={idea.title}
-                                        saved={isSaved(idea)}
-                                        onClick={() => onToggleSave(idea)}
-                                    />
+                                    {onAdjust && (
+                                        <button
+                                            type="button"
+                                            className={styles.ideaAdjust}
+                                            aria-label={`Adjust ${idea.title}`}
+                                            disabled={updating}
+                                            onClick={() => onAdjust(index)}
+                                        >
+                                            <svg
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2.2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                aria-hidden="true"
+                                            >
+                                                <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+                                                <circle cx="16" cy="7" r="2" />
+                                                <circle cx="10" cy="17" r="2" />
+                                            </svg>
+                                            Adjust
+                                        </button>
+                                    )}
+                                    {onToggleSave && (
+                                        <SaveIdeaButton
+                                            title={idea.title}
+                                            saved={isSaved(idea)}
+                                            onClick={() => onToggleSave(idea)}
+                                        />
+                                    )}
                                 </div>
                             )}
                         </article>

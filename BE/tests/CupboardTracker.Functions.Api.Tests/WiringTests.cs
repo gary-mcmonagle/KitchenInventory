@@ -22,6 +22,7 @@ public sealed class WiringTests
     [InlineData(typeof(UnitStateFunctions))]
     [InlineData(typeof(ClassificationFunctions))]
     [InlineData(typeof(RecipeFunctions))]
+    [InlineData(typeof(IdeaAdjustFunctions))]
     [InlineData(typeof(PushFunctions))]
     [InlineData(typeof(GenericNameFunctions))]
     [InlineData(typeof(RunOutFunctions))]
