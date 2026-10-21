@@ -3,6 +3,7 @@ import { ApiError, SignInRequiredError, type ApiClient } from "./api";
 import {
     phoneNotifications,
     setPreferences,
+    SHOPPING_LIST,
     STOCK_CHANGES,
     subscribe,
     unsubscribe,
@@ -26,7 +27,7 @@ const LOOK = {
 
 /**
  * "This phone" on the Scanners screen (#80, project/Scanners.dc.html): turn notifications on or off for this device,
- * choose stock change pushes, and send a test. Permission is only ever asked from the Turn on tap (iOS requires it).
+ * choose stock change and shopping list (#86) pushes, and send a test. Permission is only ever asked from the Turn on tap (iOS requires it).
  */
 export function ThisPhoneCard({ api, env }: { api: Api; env?: PushEnvironment }) {
     const [state, setState] = useState<PhoneNotifications | null>(null);
@@ -65,8 +66,9 @@ export function ThisPhoneCard({ api, env }: { api: Api; env?: PushEnvironment })
         run(async () => {
             const result = await subscribe(api as ApiClient, env);
             if (result === "subscribed") {
-                await setPreferences(api as ApiClient, { [STOCK_CHANGES]: true }, env); // on by default
-                setState({ kind: "on", preferences: { [STOCK_CHANGES]: true } });
+                const defaults = { [STOCK_CHANGES]: true, [SHOPPING_LIST]: true }; // on by default
+                await setPreferences(api as ApiClient, defaults, env);
+                setState({ kind: "on", preferences: defaults });
             } else if (result === "notConfigured") {
                 setProblem("Notifications aren't set up yet.");
             } else {
@@ -103,6 +105,7 @@ export function ThisPhoneCard({ api, env }: { api: Api; env?: PushEnvironment })
     const kind = state?.kind ?? "off";
     const look = LOOK[kind];
     const stockOn = state?.kind === "on" && state.preferences[STOCK_CHANGES] === true;
+    const listOn = state?.kind === "on" && state.preferences[SHOPPING_LIST] !== false;
 
     return (
         <section className={styles.section} aria-labelledby="phone-title">
@@ -163,6 +166,32 @@ export function ThisPhoneCard({ api, env }: { api: Api; env?: PushEnvironment })
                                     </span>
                                 </button>
                             </div>
+                            <div className={styles.toggle}>
+                                <div className={styles.toggleText}>
+                                    <span id="sw-list" className={styles.toggleLabel}>
+                                        Shopping list
+                                    </span>
+                                    <span className={styles.toggleHelp}>
+                                        When someone else adds to the list
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={listOn}
+                                    aria-labelledby="sw-list"
+                                    className={styles.switch}
+                                    disabled={busy}
+                                    onClick={() => void flip(SHOPPING_LIST, !listOn)}
+                                >
+                                    <span
+                                        className={`${styles.track} ${listOn ? styles.trackOn : ""}`}
+                                        aria-hidden="true"
+                                    >
+                                        <span className={styles.knob} />
+                                    </span>
+                                </button>
+                            </div>
                             <div className={styles.quiet}>
                                 Quiet from 21:30 to 07:30: nothing is sent overnight.
                             </div>
@@ -198,7 +227,7 @@ export function ThisPhoneCard({ api, env }: { api: Api; env?: PushEnvironment })
                     <>
                         <div className={styles.text}>
                             Get a notification when stock is added or removed and you didn't see it in the
-                            app.
+                            app, or when something goes on the shopping list.
                         </div>
                         <button
                             type="button"

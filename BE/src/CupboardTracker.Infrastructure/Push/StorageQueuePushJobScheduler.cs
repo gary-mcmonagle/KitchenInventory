@@ -74,3 +74,42 @@ public sealed class StorageQueueStockPushScheduler(IConfiguration config, TokenC
 
     private sealed record Message(Guid BatchId);
 }
+
+/// <summary>
+/// When to run a list push (#86): messages on the <c>list-push</c> queue, hidden until due. <c>{ kind: "batch", batchId }</c>
+/// for the household batch (each add sends one; the job sends only when the batch is due and open), and
+/// <c>{ kind: "followUp", personId, dueAt }</c> for one person's send held back by the minimum gap.
+/// </summary>
+public sealed class StorageQueueListPushScheduler(IConfiguration config, TokenCredential credential) : IListPushScheduler
+{
+    public const string QueueName = "list-push";
+
+    public const string Batch = "batch";
+    public const string FollowUp = "followUp";
+
+    private readonly Lazy<Task<QueueClient>> client = PushQueues.Client(config, credential, QueueName);
+
+    public Task ScheduleBatchAsync(Guid batchId, TimeSpan delay, CancellationToken cancellationToken) =>
+        SendAsync(new ListPushMessage(Batch, batchId, null, null), delay, cancellationToken);
+
+    public Task ScheduleFollowUpAsync(Guid personId, DateTimeOffset dueAt, TimeSpan delay, CancellationToken cancellationToken) =>
+        SendAsync(new ListPushMessage(FollowUp, null, personId, dueAt), delay, cancellationToken);
+
+    private async Task SendAsync(ListPushMessage message, TimeSpan delay, CancellationToken cancellationToken)
+    {
+        var queue = await client.Value;
+        await queue.SendMessageAsync(Serialize(message), visibilityTimeout: delay > TimeSpan.Zero ? delay : TimeSpan.Zero, cancellationToken: cancellationToken);
+    }
+
+    public static string Serialize(ListPushMessage message) => JsonSerializer.Serialize(message, StorageQueuePushJobScheduler.Json);
+
+    /// <summary>Null for anything that isn't a whole batch or follow-up message.</summary>
+    public static ListPushMessage? Deserialize(string message) =>
+        JsonSerializer.Deserialize<ListPushMessage>(message, StorageQueuePushJobScheduler.Json) is { } m
+        && (m.Kind == Batch ? m.BatchId is { } b && b != Guid.Empty
+            : m.Kind == FollowUp && m.PersonId is { } p && p != Guid.Empty && m.DueAt is not null)
+            ? m
+            : null;
+}
+
+public sealed record ListPushMessage(string Kind, Guid? BatchId, Guid? PersonId, DateTimeOffset? DueAt);

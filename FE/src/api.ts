@@ -762,6 +762,11 @@ export class ApiClient {
         return this.send("POST", "/api/push/test");
     }
 
+    /** This person is looking at the List now (#86): nothing on it so far is new to them in a list push. 204. */
+    shoppingListViewed(): Promise<void> {
+        return this.send("POST", "/api/shopping-list/viewed");
+    }
+
     /** The shared shopping list (#84); with `since`, only what changed (removed items as tombstones). */
     shoppingList(since?: string): Promise<ShoppingListAnswer> {
         return this.get(

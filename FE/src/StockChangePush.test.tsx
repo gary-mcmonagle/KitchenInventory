@@ -281,7 +281,7 @@ describe("the This phone card", () => {
         expect(screen.queryByRole("button")).not.toBeInTheDocument();
     });
 
-    test("off: permission is asked only from the Turn on tap, and stock changes are on by default", async () => {
+    test("off: permission is asked only from the Turn on tap, and stock changes and the list are on by default", async () => {
         const { api, notification, json } = phone();
         const turnOn = await screen.findByRole("button", { name: "Turn on notifications" });
         expect(card()).toHaveTextContent("Off for this phone");
@@ -293,9 +293,38 @@ describe("the This phone card", () => {
         expect(api.putPushSubscription).toHaveBeenCalledWith(
             expect.objectContaining({ endpoint: json.endpoint }),
         );
-        expect(api.setPushPreferences).toHaveBeenCalledWith(json.endpoint, { stockChanges: true });
+        expect(api.setPushPreferences).toHaveBeenCalledWith(json.endpoint, {
+            stockChanges: true,
+            shoppingList: true,
+        });
         expect(screen.getByRole("switch", { name: "Stock changes" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.getByRole("switch", { name: "Shopping list" })).toHaveAttribute("aria-checked", "true");
         expect(card()).toHaveTextContent("On for this phone");
+    });
+
+    test("off: the card says what notifications are for, as drawn", async () => {
+        phone();
+        await screen.findByRole("button", { name: "Turn on notifications" });
+        expect(card()).toHaveTextContent(
+            "Get a notification when stock is added or removed and you didn't see it in the app, or when something goes on the shopping list.",
+        );
+    });
+
+    test("on: the Shopping list switch is on until turned off (#86), and saves this device's choice", async () => {
+        const { api, json } = phone({
+            permission: "granted",
+            existing: true,
+            preferences: { stockChanges: true },
+        });
+        const toggle = await screen.findByRole("switch", { name: "Shopping list" });
+        expect(toggle).toHaveAttribute("aria-checked", "true"); // turned on before #86: no key yet
+        expect(card()).toHaveTextContent("When someone else adds to the list");
+
+        await act(async () => fireEvent.click(toggle));
+
+        expect(api.setPushPreferences).toHaveBeenCalledWith(json.endpoint, { shoppingList: false });
+        expect(toggle).toHaveAttribute("aria-checked", "false");
+        expect(screen.getByRole("switch", { name: "Stock changes" })).toHaveAttribute("aria-checked", "true");
     });
 
     test("turning on but saying no to the prompt shows blocked", async () => {

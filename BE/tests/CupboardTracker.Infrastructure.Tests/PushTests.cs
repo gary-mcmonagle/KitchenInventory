@@ -313,4 +313,64 @@ public sealed class StockChangePushStorageTests
         Assert.Equal(StockPushSettings.Default, With(new() { ["STOCK_PUSH_DELAY_SECONDS"] = "0", ["STOCK_PUSH_MAX_WAIT_SECONDS"] = "lots" }));
         Assert.Equal(TimeSpan.FromSeconds(90), With(new() { ["STOCK_PUSH_DELAY_SECONDS"] = "90", ["STOCK_PUSH_MAX_WAIT_SECONDS"] = "60" }).MaxWait);
     }
+
+    // ---- The shopping list push (#86)
+
+    [Fact]
+    public void A_list_batch_document_round_trips_and_expires_after_a_day()
+    {
+        var batch = new ListPushBatch(Guid.NewGuid(), new DateTimeOffset(2026, 10, 21, 13, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 10, 21, 13, 4, 0, TimeSpan.Zero), 3);
+
+        var document = CosmosListPushBatchRepository.ToDocument(batch);
+
+        Assert.Equal(("batch:list", "batch:list", "listPushBatch", 86400),
+            (document["id"]!.GetValue<string>(), document["eventKey"]!.GetValue<string>(), document["type"]!.GetValue<string>(), document["ttl"]!.GetValue<int>()));
+        Assert.Equal(batch, CosmosListPushBatchRepository.FromDocument(JsonNode.Parse(document.ToJsonString())!.AsObject()));
+    }
+
+    [Fact]
+    public void A_viewer_document_sits_in_the_household_list_partition_and_round_trips()
+    {
+        var person = Guid.Parse("caf87c93-9030-44e8-a25d-fed63261ea67");
+        var viewer = new ListViewer(person, new DateTimeOffset(2026, 10, 21, 13, 0, 0, 123, TimeSpan.Zero), null,
+            new DateTimeOffset(2026, 10, 21, 13, 30, 0, TimeSpan.Zero));
+
+        var document = CosmosListViewerRepository.ToDocument(viewer);
+
+        Assert.Equal(($"viewer:{person}", "household", "viewer"),
+            (document["id"]!.GetValue<string>(), document["listId"]!.GetValue<string>(), document["type"]!.GetValue<string>()));
+        Assert.False(document.ContainsKey("ttl"));
+        Assert.Equal(viewer, CosmosListViewerRepository.FromDocument(JsonNode.Parse(document.ToJsonString())!.AsObject()));
+    }
+
+    [Fact]
+    public void List_push_messages_are_a_batch_or_a_follow_up()
+    {
+        var id = Guid.NewGuid();
+        var dueAt = new DateTimeOffset(2026, 10, 21, 13, 30, 0, TimeSpan.Zero);
+
+        var batch = StorageQueueListPushScheduler.Deserialize(StorageQueueListPushScheduler.Serialize(new ListPushMessage("batch", id, null, null)));
+        var followUp = StorageQueueListPushScheduler.Deserialize(StorageQueueListPushScheduler.Serialize(new ListPushMessage("followUp", null, id, dueAt)));
+
+        Assert.Equal(new ListPushMessage("batch", id, null, null), batch);
+        Assert.Equal(new ListPushMessage("followUp", null, id, dueAt), followUp);
+        Assert.Null(StorageQueueListPushScheduler.Deserialize("{}"));
+        Assert.Null(StorageQueueListPushScheduler.Deserialize("{\"kind\":\"followUp\",\"personId\":\"" + id + "\"}"));
+        Assert.Null(StorageQueueListPushScheduler.Deserialize("{\"kind\":\"other\",\"batchId\":\"" + id + "\"}"));
+    }
+
+    [Fact]
+    public void List_push_settings_default_to_three_fifteen_and_thirty_minutes_and_ignore_nonsense()
+    {
+        static ListPushSettings With(Dictionary<string, string?> values) =>
+            ServiceCollectionExtensions.ListPushSettingsFromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(values).Build());
+
+        Assert.Equal(new ListPushSettings(TimeSpan.FromMinutes(3), TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(30)), With([]));
+        Assert.Equal(new ListPushSettings(TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(60), TimeSpan.FromMinutes(2)),
+            With(new() { ["LIST_PUSH_DELAY_SECONDS"] = "20", ["LIST_PUSH_MAX_WAIT_SECONDS"] = "60", ["LIST_PUSH_MIN_GAP_MINUTES"] = "2" }));
+        Assert.Equal(ListPushSettings.Default,
+            With(new() { ["LIST_PUSH_DELAY_SECONDS"] = "0", ["LIST_PUSH_MAX_WAIT_SECONDS"] = "lots", ["LIST_PUSH_MIN_GAP_MINUTES"] = "-1" }));
+        Assert.Equal(TimeSpan.FromSeconds(90), With(new() { ["LIST_PUSH_DELAY_SECONDS"] = "90", ["LIST_PUSH_MAX_WAIT_SECONDS"] = "60" }).MaxWait);
+    }
 }

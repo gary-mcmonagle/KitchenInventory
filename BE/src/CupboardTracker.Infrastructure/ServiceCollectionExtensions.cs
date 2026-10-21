@@ -124,6 +124,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IStockPushScheduler, StorageQueueStockPushScheduler>();
         services.AddTransient<AddStockChangeToPush>();
         services.AddTransient<SendStockChangePush>();
+        // Shopping list push (#86): the list batch in pushSeen, each person's state beside the list, the list-push queue.
+        services.AddSingleton(sp => ListPushSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<IListPushBatchRepository, CosmosListPushBatchRepository>();
+        services.AddSingleton<IListViewerRepository, CosmosListViewerRepository>();
+        services.AddSingleton<IListPushScheduler, StorageQueueListPushScheduler>();
+        services.AddTransient<AddListItemToPush>();
+        services.AddTransient<SendListPush>();
+        services.AddTransient<RecordListViewed>();
 
         // Recipe ideas (#73): gpt-4o on the same Foundry account, with a per-user hourly cost guard.
         services.AddSingleton(sp => RecipeGenerationOptions.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
@@ -229,6 +237,19 @@ public static class ServiceCollectionExtensions
         var delay = Seconds(config["STOCK_PUSH_DELAY_SECONDS"], 5, 600) ?? StockPushSettings.Default.Delay;
         var maxWait = Seconds(config["STOCK_PUSH_MAX_WAIT_SECONDS"], 5, 3600) ?? StockPushSettings.Default.MaxWait;
         return new StockPushSettings(delay, maxWait < delay ? delay : maxWait);
+    }
+
+    /// <summary>LIST_PUSH_DELAY_SECONDS (default 180), LIST_PUSH_MAX_WAIT_SECONDS (default 900) and
+    /// LIST_PUSH_MIN_GAP_MINUTES (default 30), for the shopping list push (#86). Out-of-range values use the default.</summary>
+    internal static ListPushSettings ListPushSettingsFromConfiguration(IConfiguration config)
+    {
+        static int? Number(string? value, int min, int max) =>
+            int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= min && n <= max ? n : null;
+
+        var delay = Number(config["LIST_PUSH_DELAY_SECONDS"], 5, 3600) is { } d ? TimeSpan.FromSeconds(d) : ListPushSettings.Default.Delay;
+        var maxWait = Number(config["LIST_PUSH_MAX_WAIT_SECONDS"], 5, 7200) is { } w ? TimeSpan.FromSeconds(w) : ListPushSettings.Default.MaxWait;
+        var gap = Number(config["LIST_PUSH_MIN_GAP_MINUTES"], 1, 1440) is { } g ? TimeSpan.FromMinutes(g) : ListPushSettings.Default.MinGap;
+        return new ListPushSettings(delay, maxWait < delay ? delay : maxWait, gap);
     }
 
     internal static PushTestSettings PushTestSettingsFromConfiguration(IConfiguration config) =>

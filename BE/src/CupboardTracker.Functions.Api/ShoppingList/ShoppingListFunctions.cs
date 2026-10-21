@@ -1,8 +1,10 @@
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
+using CupboardTracker.Application.Push;
 using CupboardTracker.Application.ShoppingList;
 using CupboardTracker.Functions.Api.Auth;
+using CupboardTracker.Infrastructure.Push;
 using CupboardTracker.Infrastructure.ShoppingList;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -240,4 +242,54 @@ public sealed class ShoppingListTimer(AssignListAisle aisles, ClearDoneShoppingL
         await aisles.RetryAsync(cancellationToken);
         await clear.ExecuteAsync(onlyOlderThanADay: true, cancellationToken);
     }
+}
+
+/// <summary><c>POST /api/shopping-list/viewed</c> (#86): the caller is looking at the List now, so nothing on it so far
+/// is new to them in a list push. No body; server time; idempotent. 204.</summary>
+public sealed class ShoppingListViewedFunction(RecordListViewed viewed)
+{
+    [Function("shoppingListViewed")]
+    public async Task<HttpResponseData> Viewed(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "shopping-list/viewed")] HttpRequestData request,
+        FunctionContext context, CancellationToken cancellationToken)
+    {
+        await viewed.ExecuteAsync(context.GetCurrentUser().ObjectId, cancellationToken);
+        return request.CreateResponse(HttpStatusCode.NoContent);
+    }
+}
+
+/// <summary>Runs list pushes when due (#86): a batch, or one person's follow-up. A bad message is logged and dropped.</summary>
+public sealed partial class ListPushFunction(SendListPush send, ILogger<ListPushFunction> logger)
+{
+    [Function("listPush")]
+    public async Task Run(
+        [QueueTrigger(StorageQueueListPushScheduler.QueueName, Connection = "AzureWebJobsStorage")] string message,
+        CancellationToken cancellationToken)
+    {
+        ListPushMessage? job;
+        try
+        {
+            job = StorageQueueListPushScheduler.Deserialize(message);
+        }
+        catch (JsonException)
+        {
+            job = null;
+        }
+
+        switch (job)
+        {
+            case { Kind: StorageQueueListPushScheduler.Batch, BatchId: { } batchId }:
+                await send.ExecuteBatchAsync(batchId, cancellationToken);
+                break;
+            case { Kind: StorageQueueListPushScheduler.FollowUp, PersonId: { } personId, DueAt: { } dueAt }:
+                await send.ExecuteFollowUpAsync(personId, dueAt, cancellationToken);
+                break;
+            default:
+                LogUnreadable();
+                break;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "A list push message couldn't be read; dropped.")]
+    private partial void LogUnreadable();
 }

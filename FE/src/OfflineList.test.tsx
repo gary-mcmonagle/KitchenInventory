@@ -94,6 +94,7 @@ function setup(server: ShoppingListItem[], saved: ListSnapshot | null = null) {
         }),
         clearTicked: vi.fn(async () => ({ cleared: [] })),
         listSuggestions: vi.fn(async () => ({ suggestions: [] })),
+        shoppingListViewed: vi.fn(async () => undefined),
         signInAgain: vi.fn(),
     };
     const persistence = memoryPersistence(saved);

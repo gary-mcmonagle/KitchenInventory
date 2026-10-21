@@ -29,6 +29,9 @@ public sealed class WiringTests
     [InlineData(typeof(EstimateShelfLivesTimer))]
     [InlineData(typeof(PushJobFunction))]
     [InlineData(typeof(PushExpiryTimer))]
+    [InlineData(typeof(Functions.Api.ShoppingList.ShoppingListFunctions))]
+    [InlineData(typeof(Functions.Api.ShoppingList.ShoppingListViewedFunction))]
+    [InlineData(typeof(Functions.Api.ShoppingList.ListPushFunction))]
     public async Task Functions_resolve(Type functions)
     {
         var services = new ServiceCollection();

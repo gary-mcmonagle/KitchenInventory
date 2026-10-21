@@ -143,6 +143,7 @@ function setup(
         })),
         clearTicked: vi.fn(async () => ({ cleared: [] })),
         listSuggestions: vi.fn(async () => ({ suggestions })),
+        shoppingListViewed: vi.fn(async () => undefined),
     };
     const connection = new FakeConnection();
     render(
@@ -391,4 +392,10 @@ test("an empty list says so", async () => {
     await flush();
     expect(screen.getByText("Nothing on the list. Nice.")).toBeInTheDocument();
     expect(screen.getByText("0 things to buy")).toBeInTheDocument();
+});
+
+test("the List tells the API it was viewed when it opens (#86)", async () => {
+    const { api } = setup();
+    await flush();
+    expect(api.shoppingListViewed).toHaveBeenCalledTimes(1);
 });

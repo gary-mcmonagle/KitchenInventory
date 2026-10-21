@@ -277,6 +277,10 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **"Add to the shopping list?" sheet** – the bottom sheet after a check-out (#89), opened by tapping a stock change push that says something was removed, or a green "Checked out" toast. One row per removed generic name with how many are left, **Add** or "On the list", then the offer to do it automatically.
 - In code: `RunOutSheet`, `GetRunOutChoices`, `/?removed=<batchId>`
 
+**List push** – one "Shopping list" push telling a person what others have added to the shopping list since they last looked (#86): sent 3 minutes after someone stops adding (at most 15 after they started), at most one per person every 30 minutes, and replacing the previous one. Only adds by a person start one (not "Add when we run out"). Turned on or off per device ("Shopping list" on the "This phone" card).
+
+**Last viewed (the List)** – when a person last had the List on screen (`listLastViewedAt`, server time), told by the app when the List opens, when the app comes back to it, and at most once a minute while live changes arrive. A list push only mentions items added after it.
+
 **Stock change push** – one "Cupboard updated" push saying what was added or removed (#80), sent to each person who didn't see those changes' green toasts in the app. Turned on or off per device ("Stock changes" on the "This phone" card).
 - In code: `SendStockChangePush`, `AddStockChangeToPush`, `StockChange`, preference `stockChanges`
 

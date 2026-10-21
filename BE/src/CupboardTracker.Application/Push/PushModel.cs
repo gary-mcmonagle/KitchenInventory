@@ -15,8 +15,12 @@ public sealed record PushSubscription(
     DateTimeOffset? LastSuccessAt,
     IReadOnlyDictionary<string, bool> Preferences)
 {
-    /// <summary>Opted in to a type: a type the features haven't set yet counts as off.</summary>
-    public bool Wants(string type) => Preferences.TryGetValue(type, out var on) && on;
+    /// <summary>Types that count as on until the device turns them off (#86: the shopping list).</summary>
+    public static readonly IReadOnlySet<string> OnByDefault = new HashSet<string>(StringComparer.Ordinal) { "shoppingList" };
+
+    /// <summary>Opted in to a type: a type the features haven't set yet counts as off, unless it's
+    /// <see cref="OnByDefault"/>.</summary>
+    public bool Wants(string type) => Preferences.TryGetValue(type, out var on) ? on : OnByDefault.Contains(type);
 }
 
 public enum PushUrgency

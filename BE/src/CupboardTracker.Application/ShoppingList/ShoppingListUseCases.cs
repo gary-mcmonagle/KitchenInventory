@@ -74,7 +74,7 @@ public abstract record ListChangeResult
 /// </summary>
 public sealed partial class AddToShoppingList(
     IShoppingListRepository list, IProductRepository products, IListAisleScheduler aisles, ShoppingListNotifier notify,
-    TimeProvider clock, ILogger<AddToShoppingList> logger)
+    TimeProvider clock, ILogger<AddToShoppingList> logger, Push.AddListItemToPush? push = null)
 {
     private const int MaxRounds = 5;
 
@@ -152,6 +152,11 @@ public sealed partial class AddToShoppingList(
             await RememberAsync(normalized, name, aisle, now, cancellationToken);
             LogAdded(item.Id, item.Source, aisleSource ?? "pending");
             await notify.ChangedAsync(item, cancellationToken);
+            if (push is not null)
+            {
+                await push.ExecuteAsync(item, cancellationToken); // #86: a person's add opens or extends the list batch
+            }
+
             if (aisle is null)
             {
                 await aisles.ScheduleAsync(item.Id, cancellationToken);

@@ -740,6 +740,10 @@ Body `{ "changeId": "…" }`. Tick off, put back, or remove (a tombstone). The s
 
 `/done` and `/undone` also take an optional **`at`** (ISO 8601 with offset; **400** if it isn't one): when the change was really made on the phone, for changes sent late from the **outbox** (#85). A tick or put-back made **at or before** the item's last tick or put-back changes nothing (200 with the item as it is), so a late offline change never undoes a newer one. A time in the future counts as now. Without `at`, the change counts as made now. The item stores it as `statusChangedAt`.
 
+### `POST /api/shopping-list/viewed`
+
+No body. The caller is looking at the List now (#86): their `listLastViewedAt` becomes the **server's** time, so a list push won't mention anything already on it. **204**; idempotent. The app calls it when the List screen opens or the app returns to it, and, while it's on screen, when the list changes (at most once a minute).
+
 ### `POST /api/shopping-list/clear-done`
 
 "Clear ticked": every ticked item becomes a tombstone. **200** `{ "cleared": ["…"] }`. A timer does the same for items ticked off more than a day ago.
@@ -808,3 +812,15 @@ No endpoint of their own: they use the subscription, preferences and seen receip
 - **Who:** each person with a device whose `preferences.stockChanges` is `true` gets **one** push for what they missed, on each such device: scanner changes they have **no** seen receipt for (from any of their devices), and app changes made by **someone else**. What's left is **netted per product** (a check-out and its undo cancel out; 2 added and 1 removed is 1 added). Nothing left → nothing.
 - **What:** title `Cupboard updated`, body like `Added Milk, Bread, Eggs and 4 more · Removed Hummus` (up to 3 names a side, repeats as `2 × Milk`, an empty side left out), topic and tag `stockChanges` (was `stock`, which Apple refused, #106), opens `/` (or `/?removed=<batchId>` when something was removed, #89), TTL 3 hours.
 - **Quiet hours** (21:30–07:30 UK): changes then aren't batched, and a batch falling due then is closed without sending, so night-time changes are never pushed later.
+
+### Shopping list pushes (#86)
+
+No endpoint of their own apart from `POST /api/shopping-list/viewed`: they use the subscription and preference endpoints above.
+
+- **What starts one:** an item **added by a person** (any source except `autoRunOut`; offline adds count when they reach the server). It opens or extends the household's **list batch**, due `LIST_PUSH_DELAY_SECONDS` (default 180) after the last add but no later than `LIST_PUSH_MAX_WAIT_SECONDS` (default 900) after the first. Automatic adds, adds merged into an open item, ticks, unticks and removals don't; nor do adds in quiet hours.
+- **Messages:** the API app's `list-push` queue, hidden until due: `{ "kind": "batch", "batchId": "…" }` (one per add; only the one for an open, due batch sends) and `{ "kind": "followUp", "personId": "…", "dueAt": "…" }`.
+- **Who, when a batch is due:** each person with a device whose `preferences.shoppingList` isn't `false`. For each, the **unseen items**: open items added by **someone else** after their `listLastViewedAt` (all of them if they've never looked), oldest first. Ticked or removed items aren't mentioned, and your own adds never are. Nothing unseen → nothing.
+- **At most one per `LIST_PUSH_MIN_GAP_MINUTES`** (default 30) per person: if their last list push is more recent, it's held back and **one follow-up** is scheduled for when the gap ends (repeat scheduling is a no-op while one waits). The follow-up looks again then and sends whatever is unseen at that point.
+- **What:** title `Shopping list`, body `3 new things on the list: Milk, Bin bags and Bread`, `1 new thing on the list: Milk`, or past 3 `Milk, Bin bags, Bread and 2 more`; topic and tag `list`, so a newer one replaces the older one; opens `/list`; TTL 6 hours.
+- **Quiet hours:** a batch or follow-up falling due then sends nothing. Night-time adds still count as unseen in the next push someone gets.
+- **Logs:** `List push: …` (joins, per-batch counts, follow-ups). A push failure never affects the list.

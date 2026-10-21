@@ -163,6 +163,9 @@ export type PhoneNotifications =
 /** Stock change pushes (#80): the preference key on this device's subscription. */
 export const STOCK_CHANGES = "stockChanges";
 
+/** Shopping list pushes (#86): on until the device turns it off (the server counts a missing key as on). */
+export const SHOPPING_LIST = "shoppingList";
+
 const WORKER_WAIT_MS = 5000;
 
 /**

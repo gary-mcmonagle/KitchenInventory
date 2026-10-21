@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SignInRequiredError, type ApiClient, type ListSuggestion, type ShoppingListItem } from "./api";
 import { groupByAisle, listWhen, type ListGroup } from "./shoppingList";
+import { useListViewed } from "./listViewed";
 import { useShoppingList, type ShoppingList } from "./useShoppingList";
 import styles from "./List.module.css";
 
@@ -36,6 +37,10 @@ type Suggestion = Omit<ListSuggestion, "inStock"> & { inStock: number | null };
  */
 export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
     const list = useShoppingList();
+    useListViewed(
+        api,
+        useMemo(() => [list.open, list.done], [list.open, list.done]),
+    );
     const [query, setQuery] = useState("");
     const [suggestions, setSuggestions] = useState<ListSuggestion[]>([]);
     const [byAisle, setByAisle] = useState(storedByAisle);

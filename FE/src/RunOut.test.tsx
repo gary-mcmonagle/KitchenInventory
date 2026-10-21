@@ -367,6 +367,7 @@ test("automatic adds show the Auto tag and when the last one was used", async ()
             ],
         })),
         listSuggestions: vi.fn(async () => ({ suggestions: [] })),
+        shoppingListViewed: vi.fn(async () => undefined),
     };
     render(
         <ShoppingListProvider

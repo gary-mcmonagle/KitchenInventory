@@ -54,6 +54,21 @@ param jevModel string = 'jev-1.13.0'
 @minValue(1)
 param offlineThresholdMinutes int = 20
 
+@description('Shopping list push (#86): seconds after the last add before the push goes.')
+@minValue(5)
+@maxValue(3600)
+param listPushDelaySeconds int = 180
+
+@description('Shopping list push (#86): the most seconds a push waits after the first add.')
+@minValue(5)
+@maxValue(7200)
+param listPushMaxWaitSeconds int = 900
+
+@description('Shopping list push (#86): the fewest minutes between two list pushes to one person.')
+@minValue(1)
+@maxValue(1440)
+param listPushMinGapMinutes int = 30
+
 @description('Custom domains set up on the Static Web App by hand (e.g. kitchen.garymcmonagle.com): allowed in CORS for the API and SignalR, next to its default hostname.')
 param customDomains array = []
 
@@ -228,6 +243,10 @@ module api 'modules/functionApp.bicep' = {
       VAPID_PUBLIC_KEY: vapidPublicKey
       VAPID_PRIVATE_KEY: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=vapid-private-key)'
       PUSH_APP_ORIGIN: 'https://kitchen.garymcmonagle.com'
+      // Shopping list push (#86): one push a few minutes after someone stops adding, at most one per person per gap.
+      LIST_PUSH_DELAY_SECONDS: string(listPushDelaySeconds)
+      LIST_PUSH_MAX_WAIT_SECONDS: string(listPushMaxWaitSeconds)
+      LIST_PUSH_MIN_GAP_MINUTES: string(listPushMinGapMinutes)
     }, signalRSettings)
   }
 }
