@@ -47,7 +47,7 @@ const BEANS: QuickIdea = {
     how: "Microwave the beans; toast the bread.",
     appliance: "microwave",
     minutes: 5,
-    uses: [use("beans", "Test beans"), use("bread", "Test bread")],
+    uses: [usedItem("beans", "Test beans"), usedItem("bread", "Test bread")],
     alsoNeeded: null,
 };
 
@@ -65,7 +65,11 @@ const CHEESY: QuickIdea = {
     how: "Toast the bread with the cheddar and beans.",
     appliance: "toaster",
     minutes: 6,
-    uses: [use("beans", "Test beans"), use("bread", "Test bread"), use("cheddar", "Test cheddar")],
+    uses: [
+        usedItem("beans", "Test beans"),
+        usedItem("bread", "Test bread"),
+        usedItem("cheddar", "Test cheddar"),
+    ],
     alsoNeeded: null,
 };
 
