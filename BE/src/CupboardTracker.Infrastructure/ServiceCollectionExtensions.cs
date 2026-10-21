@@ -126,6 +126,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(sp => RecipeSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddSingleton<RecipeRateLimit>();
         services.AddTransient<SuggestRecipe>();
+        services.AddTransient<AdjustRecipe>(); // #104
+        services.AddSingleton(sp => RecipeAdditionSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddTransient<IRecipeAdditionRanker, JevRecipeAdditionRanker>();
+        services.AddTransient<SuggestRecipeAdditions>();
 
         services.AddSingleton<IScanEventRepository, CosmosScanEventRepository>();
         services.AddSingleton<IDeviceRepository, CosmosDeviceRepository>();
@@ -233,6 +237,11 @@ public static class ServiceCollectionExtensions
             ? c : GenericNameSettings.DefaultMatchMinConfidence,
         int.TryParse(config["GENERIC_NAME_BATCH_SIZE"], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var b) && b is > 0 and <= 254
             ? b : GenericNameSettings.DefaultBatchSize);
+
+    /// <summary>RECIPE_ADDITION_MIN_CONFIDENCE (default 0.1, #104): below it, Jev's pick isn't suggested.</summary>
+    internal static RecipeAdditionSettings RecipeAdditionSettingsFromConfiguration(IConfiguration config) => new(
+        double.TryParse(config["RECIPE_ADDITION_MIN_CONFIDENCE"], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var c) && c is >= 0 and <= 1
+            ? c : RecipeAdditionSettings.DefaultMinConfidence);
 
     /// <summary>RECIPE_REQUESTS_PER_HOUR (default 30): the per-user cost guard on recipe suggestions (#73).</summary>
     internal static RecipeSettings RecipeSettingsFromConfiguration(IConfiguration config)

@@ -29,6 +29,16 @@ internal sealed class FakeRecipeGenerator : IRecipeGenerator
         return Task.FromResult(Ideas?.Invoke(request) ?? new QuickIdeasResult.Suggested([]));
     }
 
+    public List<RecipeAdjustmentRequest> Adjustments { get; } = [];
+
+    public Func<RecipeAdjustmentRequest, RecipeResult>? Adjusted { get; set; }
+
+    public Task<RecipeResult> AdjustAsync(RecipeAdjustmentRequest request, CancellationToken cancellationToken)
+    {
+        Adjustments.Add(request);
+        return Task.FromResult(Adjusted?.Invoke(request) ?? new RecipeResult.Suggested(request.Current));
+    }
+
     public static Recipe Recipe(IReadOnlyList<RecipeIngredient> ingredients, IReadOnlyList<Guid>? usesUp = null, IReadOnlyList<Guid>? couldNotFitIn = null) =>
         new("Creamy penne", "A quick pasta.", RecipeMeal.Dinner, 2, 25, ingredients, ["Cook the penne."], usesUp ?? [], ["1 onion"], couldNotFitIn ?? []);
 }

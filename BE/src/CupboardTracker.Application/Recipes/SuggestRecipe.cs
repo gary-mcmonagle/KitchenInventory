@@ -15,6 +15,8 @@ public sealed record RecipeIngredientView(string Name, string Amount, Guid? Prod
 /// <summary>An in-stock product the recipe uses up, with what its badge needs.</summary>
 public sealed record RecipeProductView(Guid ProductId, string DisplayName, int? DaysUntilSoonest, DateOnly? SoonestEstimatedExpiryDate);
 
+/// <summary>A recipe as the app shows it. After an adjustment (#104), <see cref="CouldNotAdd"/> and
+/// <see cref="CouldNotRemove"/> say what the model couldn't do ("Couldn't add: …").</summary>
 public sealed record RecipeView(
     string Title,
     string Summary,
@@ -25,7 +27,9 @@ public sealed record RecipeView(
     IReadOnlyList<string> Steps,
     IReadOnlyList<RecipeProductView> UsesUp,
     IReadOnlyList<string> AlsoNeeded,
-    IReadOnlyList<string> CouldNotFitIn);
+    IReadOnlyList<string> CouldNotFitIn,
+    IReadOnlyList<string>? CouldNotAdd = null,
+    IReadOnlyList<string>? CouldNotRemove = null);
 
 /// <summary>An in-stock product a Ready now idea uses, with what its link and dot need.</summary>
 public sealed record QuickIdeaProductView(
@@ -144,7 +148,7 @@ public sealed partial class SuggestRecipe(
             .Select(p => new QuickIdeaProductView(p.ProductId, p.DisplayName, p.UseFirst, p.DaysUntilSoonest, p.SoonestEstimatedExpiryDate))],
         idea.AlsoNeeded);
 
-    private static RecipeView ToView(Recipe recipe, Dictionary<Guid, StockProduct> byId) => new(
+    internal static RecipeView ToView(Recipe recipe, Dictionary<Guid, StockProduct> byId) => new(
         recipe.Title,
         recipe.Summary,
         recipe.Meal,

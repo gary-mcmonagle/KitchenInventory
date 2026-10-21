@@ -127,4 +127,77 @@ public sealed class RecipeFunctionsTests
         Assert.Equal(("none", "Hot chocolate powder"),
             (json.GetProperty("ideas")[1].GetProperty("appliance").GetString(), json.GetProperty("ideas")[1].GetProperty("alsoNeeded").GetString()));
     }
+
+    // ---- Adjust (#104)
+
+    [Theory]
+    [InlineData("Adjust")]
+    [InlineData("SuggestAdditions")]
+    public void Adjust_and_suggested_additions_need_a_signed_in_user(string method) =>
+        Assert.True(FunctionAuthPolicy.RequiresUser($"CupboardTracker.Functions.Api.Recipes.RecipeFunctions.{method}"));
+
+    private const string RecipeJson = """
+        {"title":"Creamy penne","summary":"Quick.","meal":"dinner","servings":2,"totalMinutes":25,
+         "ingredients":[{"name":"Penne","amount":"200 g","productId":"22222222-2222-2222-2222-222222222222","useFirst":false},
+                        {"name":"Onion","amount":"1","productId":null}],
+         "steps":["Cook it."],"alsoNeeded":["1 garlic clove"],"usesUp":[],"couldNotFitIn":[]}
+        """;
+
+    [Fact]
+    public void An_adjustment_body_parses_the_recipe_and_the_changes()
+    {
+        var body = System.Text.Encoding.UTF8.GetBytes($$"""
+            {"recipe":{{RecipeJson}},"add":{"productIds":["33333333-3333-3333-3333-333333333333"],"typed":["chilli flakes"]},
+             "remove":["Onion"],"tweak":"spicier"}
+            """);
+
+        var (choices, error) = RecipeFunctions.ParseAdjust(body);
+
+        Assert.Null(error);
+        Assert.Equal(("Creamy penne", RecipeMeal.Dinner, 2), (choices!.Current.Title, choices.Current.Meal, choices.Current.Ingredients.Count));
+        Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), choices.Current.Ingredients[0].ProductId);
+        Assert.Null(choices.Current.Ingredients[1].ProductId);
+        Assert.Equal([Guid.Parse("33333333-3333-3333-3333-333333333333")], choices.AddProductIds);
+        Assert.Equal(["chilli flakes"], choices.AddTyped);
+        Assert.Equal(["Onion"], choices.Remove);
+        Assert.Equal("spicier", choices.Tweak);
+    }
+
+    [Theory]
+    [InlineData("""{"add":{}}""")]
+    [InlineData("""{"recipe":{"title":"x","meal":"dinner","ingredients":[]}}""")]
+    [InlineData("""{"recipe":{"title":"x","meal":"supper","ingredients":[{"name":"a"}]}}""")]
+    [InlineData("""{"recipe":{"title":"x","meal":"dinner","ingredients":[{"name":"a"}]},"add":{"productIds":["nope"]}}""")]
+    [InlineData("""{"recipe":{"title":"x","meal":"dinner","ingredients":[{"name":"a"}]},"remove":"Onion"}""")]
+    [InlineData("""{"recipe":{"title":"x","meal":"dinner","ingredients":[{"name":"a"}]},"tweak":5}""")]
+    [InlineData("not json")]
+    public void Bad_adjustment_bodies_are_400(string body) =>
+        Assert.NotNull(RecipeFunctions.ParseAdjust(System.Text.Encoding.UTF8.GetBytes(body)).Error);
+
+    [Fact]
+    public void Suggested_additions_take_just_the_recipe()
+    {
+        var (recipe, error) = RecipeFunctions.ParseRecipeOnly(System.Text.Encoding.UTF8.GetBytes($$"""{"recipe":{{RecipeJson}}}"""));
+        Assert.Null(error);
+        Assert.Equal("Penne", recipe!.Ingredients[0].Name);
+        Assert.NotNull(RecipeFunctions.ParseRecipeOnly("{}"u8).Error);
+    }
+
+    [Fact]
+    public void Adjustment_responses()
+    {
+        var view = new RecipeView("Spicy penne", "Quick.", RecipeMeal.Dinner, 2, 25, [], ["Cook it."], [], [], [], ["Chorizo"], ["Onion"]);
+        var (status, body) = RecipeFunctions.ToResponse(new AdjustRecipeResult.Adjusted(view, new AdjustmentSummary(["Chorizo"], ["Onion"], "spicier")));
+        var json = JsonSerializer.SerializeToElement(body, WebJson);
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal("Spicy penne", json.GetProperty("recipe").GetProperty("title").GetString());
+        Assert.Equal("Chorizo", json.GetProperty("recipe").GetProperty("couldNotAdd")[0].GetString());
+        Assert.Equal("Onion", json.GetProperty("recipe").GetProperty("couldNotRemove")[0].GetString());
+        Assert.Equal("spicier", json.GetProperty("adjustmentSummary").GetProperty("tweak").GetString());
+        Assert.Equal(HttpStatusCode.OK, RecipeFunctions.ToResponse(new AdjustRecipeResult.Unavailable()).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, RecipeFunctions.ToResponse(new AdjustRecipeResult.Invalid("x")).Status);
+        Assert.Equal((HttpStatusCode)429, RecipeFunctions.ToResponse(new AdjustRecipeResult.TooManyRequests()).Status);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, RecipeFunctions.ToResponse(new AdjustRecipeResult.NothingInStock()).Status);
+    }
 }

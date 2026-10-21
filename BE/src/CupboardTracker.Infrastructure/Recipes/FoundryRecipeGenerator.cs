@@ -293,6 +293,145 @@ public sealed partial class FoundryRecipeGenerator(
         return new RecipeResult.Suggested(recipe);
     }
 
+    internal const string AdjustInstructions = Instructions + "\n"
+        + "You are now UPDATING the recipe under 'Current recipe', not suggesting a new one. Keep it the same dish where "
+        + "possible and change only what the changes need (amounts, steps, timings, title and summary when they no longer fit). "
+        + "Every product under 'Must include' is an addition: use it. Every item under 'Add (not in stock)' goes in "
+        + "alsoNeeded with an amount; they count towards its 3 items. Nothing under 'Remove' may appear anywhere in the "
+        + "recipe (ingredients or steps). The household's preferences are the tweak they asked for (e.g. 'spicier', "
+        + "'for 4 people'): follow it within the same rules.";
+
+    public async Task<RecipeResult> AdjustAsync(RecipeAdjustmentRequest request, CancellationToken cancellationToken)
+    {
+        if (options.Endpoint is null)
+        {
+            return new RecipeResult.Unavailable("not configured");
+        }
+
+        var started = Stopwatch.GetTimestamp();
+        var messages = new JsonArray(
+            new JsonObject { ["role"] = "system", ["content"] = AdjustInstructions },
+            new JsonObject { ["role"] = "user", ["content"] = AdjustPrompt(request) });
+        var usage = (Prompt: 0, Completion: 0);
+        var calls = 0;
+        Recipe? recipe = null;
+        for (var round = 1; round <= 2; round++)
+        {
+            calls++;
+            var answer = await CallAsync(messages, Temperature, Schema, cancellationToken);
+            if (answer.Failure is { } failure)
+            {
+                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, $"adjust: {failure}");
+                return new RecipeResult.Unavailable(failure);
+            }
+
+            usage = (usage.Prompt + answer.PromptTokens, usage.Completion + answer.CompletionTokens);
+            try
+            {
+                recipe = CheckChanges(Validate(answer.Content!, request.Context), request.Changes);
+            }
+            catch (JsonException)
+            {
+                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, "adjust: unreadable answer");
+                return new RecipeResult.Unavailable("unreadable answer");
+            }
+
+            var problems = Problems(recipe, request.Context).ToList();
+            if (problems.Count == 0 || round == 2)
+            {
+                break;
+            }
+
+            // Ask once more, naming what it got wrong.
+            messages.Add(new JsonObject { ["role"] = "assistant", ["content"] = answer.Content });
+            messages.Add(new JsonObject
+            {
+                ["role"] = "user",
+                ["content"] = "That update doesn't follow the changes: " + string.Join("; ", problems)
+                    + ". Update the recipe again, following every change and all the same rules.",
+            });
+        }
+
+        var done = Problems(recipe!, request.Context).Any() ? "adjusted with notes" : "adjusted";
+        LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, done);
+        return new RecipeResult.Suggested(recipe!);
+    }
+
+    /// <summary>The adjustment's user message: the suggestion prompt (meal, the products to add as "Must include", the
+    /// stock, and the tweak as preferences), plus the current recipe and the other changes.</summary>
+    internal static string AdjustPrompt(RecipeAdjustmentRequest request)
+    {
+        var current = request.Current;
+        var json = new JsonObject
+        {
+            ["title"] = current.Title,
+            ["summary"] = current.Summary,
+            ["servings"] = current.Servings,
+            ["totalMinutes"] = current.TotalMinutes,
+            ["ingredients"] = new JsonArray([.. current.Ingredients.Select(i => (JsonNode)new JsonObject
+            {
+                ["name"] = i.Name,
+                ["amount"] = i.Amount,
+                ["productId"] = i.ProductId is { } id && request.Context.Stock.Any(s => s.ProductId == id) ? Ref(request.Context, id) : null,
+            })]),
+            ["steps"] = new JsonArray([.. current.Steps.Select(st => (JsonNode)JsonValue.Create(st)!)]),
+            ["alsoNeeded"] = new JsonArray([.. current.AlsoNeeded.Select(a => (JsonNode)JsonValue.Create(a)!)]),
+        };
+        var text = new StringBuilder();
+        text.AppendLine("Current recipe (JSON):").AppendLine(Delimiters().Replace(json.ToJsonString(), " ")).AppendLine();
+        if (request.Changes.AddTyped.Count > 0)
+        {
+            text.AppendLine("Add (not in stock: put each in alsoNeeded):");
+            foreach (var item in request.Changes.AddTyped)
+            {
+                text.Append("- ").AppendLine(OneLine(Delimiters().Replace(item, " ")));
+            }
+        }
+
+        if (request.Changes.Remove.Count > 0)
+        {
+            text.AppendLine("Remove (must not appear):");
+            foreach (var item in request.Changes.Remove)
+            {
+                text.Append("- ").AppendLine(OneLine(item.Name));
+            }
+        }
+
+        return text.AppendLine().Append(Prompt(request.Context)).ToString();
+    }
+
+    /// <summary>Notes what the model still got wrong: typed additions missing (from the ingredients and alsoNeeded),
+    /// and removed ingredients still there (by product, or by name).</summary>
+    internal static Recipe CheckChanges(Recipe recipe, RecipeChanges changes)
+    {
+        static string Key(string text) => text.Trim().ToLowerInvariant();
+        var everything = recipe.Ingredients.Select(i => Key(i.Name)).Concat(recipe.AlsoNeeded.Select(Key)).ToList();
+        var notAdded = changes.AddTyped.Where(t => !everything.Any(e => e.Contains(Key(t), StringComparison.Ordinal))).ToList();
+        var notRemoved = changes.Remove
+            .Where(r => recipe.Ingredients.Any(i => (r.ProductId is { } id && i.ProductId == id) || Key(i.Name) == Key(r.Name)))
+            .Select(r => r.Name)
+            .ToList();
+        return recipe with { CouldNotAddTyped = notAdded, CouldNotRemove = notRemoved };
+    }
+
+    private static IEnumerable<string> Problems(Recipe recipe, RecipeRequest context)
+    {
+        if (recipe.CouldNotFitIn.Count > 0)
+        {
+            yield return "it leaves out " + string.Join(", ", recipe.CouldNotFitIn.Select(id => $"{Ref(context, id)} {Name(context, id)}"));
+        }
+
+        if (recipe.CouldNotAddTyped is { Count: > 0 } typed)
+        {
+            yield return "alsoNeeded is missing " + string.Join(", ", typed.Select(OneLine));
+        }
+
+        if (recipe.CouldNotRemove is { Count: > 0 } removed)
+        {
+            yield return "it still uses " + string.Join(", ", removed.Select(OneLine));
+        }
+    }
+
     /// <summary>The user message: the choices, the stock, and the comments in their own delimited section.</summary>
     internal static string Prompt(RecipeRequest request)
     {

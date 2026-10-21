@@ -53,7 +53,9 @@ public sealed record RecipeRequest(
 /// <summary>An ingredient: <see cref="ProductId"/> when it's from the stock, <c>null</c> for a basic staple.</summary>
 public sealed record RecipeIngredient(string Name, string Amount, Guid? ProductId);
 
-/// <summary>A recipe suggestion, already validated against the stock that was sent. Nothing about it is stored.</summary>
+/// <summary>A recipe suggestion, already validated against the stock that was sent. Nothing about it is stored.
+/// After an adjustment (#104), <see cref="CouldNotAddTyped"/> and <see cref="CouldNotRemove"/> name what the model
+/// still got wrong after one retry (added products it left out are in <see cref="CouldNotFitIn"/>).</summary>
 public sealed record Recipe(
     string Title,
     string Summary,
@@ -64,7 +66,25 @@ public sealed record Recipe(
     IReadOnlyList<string> Steps,
     IReadOnlyList<Guid> UsesUp,
     IReadOnlyList<string> AlsoNeeded,
-    IReadOnlyList<Guid> CouldNotFitIn);
+    IReadOnlyList<Guid> CouldNotFitIn,
+    IReadOnlyList<string>? CouldNotAddTyped = null,
+    IReadOnlyList<string>? CouldNotRemove = null);
+
+/// <summary>
+/// What to change in a recipe (#104): in-stock products to add, things to add that aren't in stock (they go under
+/// "You'll also need"), ingredients to take out, and a free-text tweak ("spicier", "for 4"). The tweak is a
+/// preference, never an instruction, like the form's comments.
+/// </summary>
+public sealed record RecipeChanges(
+    IReadOnlyList<Guid> AddProductIds, IReadOnlyList<string> AddTyped, IReadOnlyList<RecipeIngredient> Remove, string? Tweak)
+{
+    public bool IsEmpty => AddProductIds.Count == 0 && AddTyped.Count == 0 && Remove.Count == 0 && Tweak is null;
+}
+
+/// <summary>An adjustment (#104): the stock and meal as for a suggestion (<see cref="RecipeRequest.IncludeProductIds"/>
+/// are the products to add, <see cref="RecipeRequest.Comments"/> the tweak), the recipe as the app last showed it, and
+/// the changes.</summary>
+public sealed record RecipeAdjustmentRequest(RecipeRequest Context, Recipe Current, RecipeChanges Changes);
 
 public abstract record RecipeResult
 {
@@ -82,4 +102,8 @@ public interface IRecipeGenerator
 
     /// <summary>3 to 5 Ready now ideas (#88) from the same stock and choices.</summary>
     Task<QuickIdeasResult> SuggestQuickIdeasAsync(RecipeRequest request, CancellationToken cancellationToken);
+
+    /// <summary>The same recipe, updated with the changes (#104): added items in, removed ones out, the same dish where
+    /// possible.</summary>
+    Task<RecipeResult> AdjustAsync(RecipeAdjustmentRequest request, CancellationToken cancellationToken);
 }
