@@ -262,7 +262,7 @@ public sealed partial class FoundryRecipeGenerator(
                 how,
                 appliance.Value,
                 Math.Clamp(Int(node?["minutes"]) ?? 5, 1, MaxIdeaMinutes),
-                [.. Strings(node?["uses"], 64).Select(s => Resolve(s, request)).OfType<Guid>().Distinct()],
+                [.. Refs(node?["uses"]).Select(s => Resolve(s, request)).OfType<Guid>().Distinct()],
                 Strings(node?["alsoNeeded"], 60).FirstOrDefault());
     }
 
@@ -696,7 +696,7 @@ public sealed partial class FoundryRecipeGenerator(
                 continue;
             }
 
-            var productId = Clean(node?["productId"], 64) is { } reference ? Resolve(reference, request) : null;
+            var productId = node?["productId"] is JsonValue p && p.TryGetValue<string>(out var reference) ? Resolve(reference, request) : null;
             ingredients.Add(new RecipeIngredient(name, Clean(node?["amount"], 40) ?? "", productId));
         }
 
@@ -709,7 +709,7 @@ public sealed partial class FoundryRecipeGenerator(
             Math.Clamp(Int(answer["totalMinutes"]) ?? 30, 1, 600),
             [.. ingredients.Take(MaxIngredients)],
             [.. Strings(answer["steps"], MaxStep).Take(MaxSteps)],
-            [.. Strings(answer["usesUp"], 64).Select(s => Resolve(s, request) ?? Guid.Empty)
+            [.. Refs(answer["usesUp"]).Select(s => Resolve(s, request) ?? Guid.Empty)
                 .Where(used.Contains).Distinct()],
             [.. Strings(answer["alsoNeeded"], 60).Take(MaxAlsoNeeded)],
             [.. request.IncludeProductIds.Where(id => !used.Contains(id))],
@@ -838,12 +838,16 @@ public sealed partial class FoundryRecipeGenerator(
 
     private static int? Int(JsonNode? node) => node is JsonValue v && v.TryGetValue<int>(out var n) ? n : null;
 
+    /// <summary>Product refs as the model wrote them (not cleaned of refs, unlike prose).</summary>
+    private static IEnumerable<string> Refs(JsonNode? node) =>
+        (node as JsonArray ?? []).Select(n => n is JsonValue v && v.TryGetValue<string>(out var s) ? s.Trim() : null).OfType<string>().Where(s => s.Length is > 0 and <= 64);
+
     private static IEnumerable<string> Strings(JsonNode? node, int max) =>
         (node as JsonArray ?? []).Select(n => Clean(n, max)).OfType<string>();
 
     private static string? Clean(JsonNode? node, int max)
     {
-        var text = node is JsonValue v && v.TryGetValue<string>(out var s) ? s.Trim() : null;
+        var text = node is JsonValue v && v.TryGetValue<string>(out var s) ? WithoutRefs(s).Trim() : null;
         if (string.IsNullOrEmpty(text) || text.Equals("null", StringComparison.OrdinalIgnoreCase))
         {
             return null;
@@ -851,6 +855,20 @@ public sealed partial class FoundryRecipeGenerator(
 
         return text.Length > max ? text[..max].TrimEnd() : text;
     }
+
+    /// <summary>
+    /// The model sometimes copies the stock refs into the prose ("chop the kale (p1)", "(productId: p29)") or gives a
+    /// bare ref as an extra item ("p129"): people never see refs, so they're taken out. A whole value that's only a ref
+    /// becomes empty (and is dropped); product fields resolve refs separately, before this.
+    /// </summary>
+    internal static string WithoutRefs(string text) =>
+        BareRef().IsMatch(text.Trim()) ? "" : InlineRef().Replace(text, "");
+
+    [GeneratedRegex(@"\s*\((?:productId:\s*|ref:\s*)?p\d+\)", RegexOptions.IgnoreCase)]
+    private static partial Regex InlineRef();
+
+    [GeneratedRegex(@"^p\d+$", RegexOptions.IgnoreCase)]
+    private static partial Regex BareRef();
 
     /// <summary>Tags that could close or reopen the comments' section.</summary>
     [GeneratedRegex("</?\\s*preferences\\s*>", RegexOptions.IgnoreCase)]

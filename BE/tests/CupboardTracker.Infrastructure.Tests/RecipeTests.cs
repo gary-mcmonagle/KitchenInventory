@@ -673,6 +673,27 @@ public sealed class FoundryRecipeGeneratorTests
         Assert.Equal((Appliance.AirFryer, 15), (idea.Appliance, idea.Minutes));
         Assert.Contains("about 15 with the air fryer", FoundryRecipeGenerator.IdeasInstructions, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("Chop the kale (p1) and spinach (p3).", "Chop the kale and spinach.")]
+    [InlineData("Add the mince (productId: p29) to the slow cooker.", "Add the mince to the slow cooker.")]
+    [InlineData("p129", "")]
+    [InlineData("Serve with 2 pittas", "Serve with 2 pittas")]
+    public void Stock_refs_are_taken_out_of_prose(string text, string shown) => Assert.Equal(shown, FoundryRecipeGenerator.WithoutRefs(text));
+
+    [Fact]
+    public async Task Refs_in_steps_and_extras_never_reach_the_app_but_products_still_resolve()
+    {
+        var leaky = Recorded.Replace("Cook the penne for 10–12 minutes.", "Cook the penne (p2) for 10–12 minutes.", StringComparison.Ordinal)
+            .Replace("\"1 onion\",", "\"p3\",", StringComparison.Ordinal);
+        var (generator, _, _) = Make(Options, () => Status(200, Answer(leaky)));
+
+        var recipe = Assert.IsType<RecipeResult.Suggested>(await generator.SuggestAsync(Request(), CancellationToken.None)).Recipe;
+
+        Assert.Equal("Cook the penne for 10–12 minutes.", recipe.Steps[0]);
+        Assert.DoesNotContain(recipe.AlsoNeeded, a => a.StartsWith('p'));
+        Assert.Contains(recipe.Ingredients, i => i.ProductId == Penne);
+    }
 }
 
 public sealed class JevRecipeAdditionRankerTests
