@@ -690,7 +690,7 @@ Body `{ "changeId": "…" }`. Tick off, put back, or remove (a tombstone). The s
 
 ### `GET /api/shopping-list/suggestions?q=`
 
-**200** `{ "suggestions": [{ "name": "Semi-skimmed milk", "inStock": 3, "productId": "…" | null }] }`, at most 8: names containing `q` from products' **generic names** (display names when they have none) and past list items. Ranked by names starting with `q`, then generic names, then how often and how recently they were used. `inStock` sums units across **every product with that generic name**. Names already open are left out.
+**200** `{ "suggestions": [{ "name": "Semi-skimmed milk", "inStock": 3, "productId": "…" | null }] }`, at most 8: names containing `q` from products' **generic names** (display names when they have none) and past list items. Ranked by names starting with `q`, then generic names, then how often and how recently they were used. `inStock` sums units across **every product with that generic name**. Names already open are left out (checked fresh on every request). The names and counts come from an index each API instance keeps in memory for up to a minute (#109), so `inStock` can lag by up to a minute; a list change on the same instance refreshes it at once. The app asks from 2 characters, after a 300 ms pause in typing.
 
 ### Live updates (SignalR)
 

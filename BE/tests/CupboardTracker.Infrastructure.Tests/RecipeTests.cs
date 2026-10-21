@@ -328,6 +328,18 @@ public sealed class FoundryRecipeGeneratorTests
         Assert.Throws<InvalidOperationException>(() => ServiceCollectionExtensions.RecipeSettingsFromConfiguration(With("0")));
     }
 
+    [Fact]
+    public void The_suggestion_cache_lasts_a_minute_unless_set()
+    {
+        static IConfiguration With(string? value) =>
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["SUGGESTION_CACHE_SECONDS"] = value }).Build();
+
+        Assert.Equal(TimeSpan.FromSeconds(60), ServiceCollectionExtensions.SuggestionCacheSettingsFromConfiguration(With(null)).Ttl);
+        Assert.Equal(TimeSpan.FromSeconds(120), ServiceCollectionExtensions.SuggestionCacheSettingsFromConfiguration(With("120")).Ttl);
+        Assert.Equal(TimeSpan.Zero, ServiceCollectionExtensions.SuggestionCacheSettingsFromConfiguration(With("0")).Ttl); // off
+        Assert.Equal(TimeSpan.FromSeconds(60), ServiceCollectionExtensions.SuggestionCacheSettingsFromConfiguration(With("soon")).Ttl);
+    }
+
     // ---- Ready now (#88)
 
     private static string Ideas(params string[] ideas) => $$"""{"ideas":[{{string.Join(",", ideas)}}]}""";

@@ -332,6 +332,99 @@ public sealed class ShoppingListTests
         Assert.Equal(["Bread", "Breadsticks", "Garlic bread", "Wholemeal bread"], names);
     }
 
+    // ---- Suggestion index cache (#109)
+
+    private readonly ListLogger<SuggestionIndexCache> cacheLogs = new();
+
+    private SuggestionIndexCache Cache() => new(SuggestionCacheSettings.Default, clock, cacheLogs);
+
+    private int Rebuilds => cacheLogs.Entries.Count(e => e.Message.StartsWith("Suggestion index rebuilt", StringComparison.Ordinal));
+
+    private SuggestListItems CachedSuggester(SuggestionIndexCache cache) =>
+        new(list, products, new GetStock(stockQueries, products, TestSettings.Stock(), clock), cache);
+
+    [Fact]
+    public async Task The_index_is_built_once_a_minute_and_typing_reuses_it()
+    {
+        Product("Asda Semi Skimmed Milk", aisle: "dairyEggs", generic: "Semi-skimmed milk", inStock: 2);
+        var cache = Cache();
+
+        foreach (var q in new[] { "m", "mi", "mil", "milk", "semi" })
+        {
+            await CachedSuggester(cache).ExecuteAsync(q, CancellationToken.None);
+        }
+
+        Assert.Equal(1, Rebuilds);
+        Product("Coop Semi-Skimmed Milk", aisle: "dairyEggs", generic: "Semi-skimmed milk", inStock: 1);
+        Assert.Equal(2, (await CachedSuggester(cache).ExecuteAsync("milk", CancellationToken.None)).Single().InStock); // up to a minute stale
+
+        clock.Now = Now.AddSeconds(61);
+        Assert.Equal(3, (await CachedSuggester(cache).ExecuteAsync("milk", CancellationToken.None)).Single().InStock);
+        Assert.Equal(2, Rebuilds);
+    }
+
+    [Fact]
+    public async Task A_name_just_added_is_never_suggested_and_the_write_clears_the_index()
+    {
+        Product("Oat milk", aisle: "dairyEggs", generic: "Oat milk");
+        var cache = Cache();
+        Assert.Single(await CachedSuggester(cache).ExecuteAsync("oat", CancellationToken.None));
+
+        await new AddToShoppingList(list, products, scheduler, new ShoppingListNotifier(publisher, notifyLogs, cache), clock, new ListLogger<AddToShoppingList>())
+            .ExecuteAsync(new AddListItem(Guid.NewGuid(), "c1", "Oat milk", null, null, ListItemSources.Typed), Gary, CancellationToken.None);
+
+        Assert.Empty(await CachedSuggester(cache).ExecuteAsync("oat", CancellationToken.None)); // open names are read fresh
+        Assert.Equal(2, Rebuilds); // the add cleared the index (its memory changed)
+    }
+
+    [Fact]
+    public async Task Keystrokes_arriving_together_wait_for_one_build()
+    {
+        var cache = Cache();
+        var release = new TaskCompletionSource<IReadOnlyList<SuggestionCandidate>>();
+        var builds = 0;
+        Task<IReadOnlyList<SuggestionCandidate>> Build(CancellationToken _)
+        {
+            Interlocked.Increment(ref builds);
+            return release.Task;
+        }
+
+        var waiting = Enumerable.Range(0, 5).Select(_ => cache.GetAsync(Build, CancellationToken.None)).ToList();
+        release.SetResult([new SuggestionCandidate("milk", "Milk", false, 1, 1, null, null)]);
+        await Task.WhenAll(waiting);
+
+        Assert.Equal(1, builds);
+        Assert.All(waiting, w => Assert.Equal("Milk", Assert.Single(w.Result).Name));
+    }
+
+    [Fact]
+    public async Task A_failed_build_isnt_kept_and_the_next_keystroke_tries_again()
+    {
+        var cache = Cache();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            cache.GetAsync(_ => throw new InvalidOperationException("Cosmos is down"), CancellationToken.None));
+
+        var index = await cache.GetAsync(_ => Task.FromResult<IReadOnlyList<SuggestionCandidate>>([]), CancellationToken.None);
+
+        Assert.Empty(index);
+        Assert.Equal(1, Rebuilds);
+    }
+
+    [Fact]
+    public async Task A_change_while_building_isnt_cached_as_fresh()
+    {
+        var cache = Cache();
+        await cache.GetAsync(_ =>
+        {
+            cache.Invalidate(); // a write lands while the index is being read
+            return Task.FromResult<IReadOnlyList<SuggestionCandidate>>([]);
+        }, CancellationToken.None);
+
+        await cache.GetAsync(_ => Task.FromResult<IReadOnlyList<SuggestionCandidate>>([]), CancellationToken.None);
+
+        Assert.Equal(2, Rebuilds);
+    }
+
     // ---- Aisles
 
     [Fact]

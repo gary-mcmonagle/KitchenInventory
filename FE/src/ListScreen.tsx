@@ -23,7 +23,9 @@ function rememberByAisle(on: boolean) {
     }
 }
 
-const SUGGEST_DELAY_MS = 200;
+/** Suggestions wait for a pause in typing, and at least 2 characters (#109: each request reads the suggestion index). */
+export const SUGGEST_DELAY_MS = 300;
+export const SUGGEST_MIN_CHARS = 2;
 
 /** A suggestion as shown: offline ones (#85) have no stock count. */
 type Suggestion = Omit<ListSuggestion, "inStock"> & { inStock: number | null };
@@ -43,7 +45,7 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
     const offline = list.offline;
     useEffect(() => {
         const q = query.trim();
-        if (!q || offline) {
+        if (q.length < SUGGEST_MIN_CHARS || offline) {
             setSuggestions([]);
             return;
         }

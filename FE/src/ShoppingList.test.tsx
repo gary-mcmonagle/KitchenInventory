@@ -2,7 +2,7 @@ import { HubConnectionState } from "@microsoft/signalr";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ApiClient, ShoppingListItem } from "./api";
 import { BottomNav } from "./BottomNav";
-import { BY_AISLE_KEY, ListScreen } from "./ListScreen";
+import { BY_AISLE_KEY, ListScreen, SUGGEST_DELAY_MS } from "./ListScreen";
 import { applyItem, applyRemoved, EMPTY_LIST, groupByAisle, listWhen, replaceAll } from "./shoppingList";
 import type { FeedConnection } from "./useScanFeed";
 import { ShoppingListProvider } from "./useShoppingList";
@@ -234,7 +234,7 @@ test("suggestions show stock across brands, None in stock in amber, and a pick a
         fireEvent.change(screen.getByRole("combobox", { name: "Add to the list" }), {
             target: { value: "milk" },
         });
-        await act(async () => vi.advanceTimersByTime(250));
+        await act(async () => vi.advanceTimersByTime(SUGGEST_DELAY_MS + 1));
 
         const options = within(screen.getByRole("listbox", { name: "Suggestions" })).getAllByRole("option");
         expect(options.map((o) => o.textContent)).toEqual([
@@ -247,6 +247,31 @@ test("suggestions show stock across brands, None in stock in amber, and a pick a
         expect(api.addToList.mock.calls[0][1]).toEqual(
             expect.objectContaining({ name: "Semi-skimmed milk", productId: "p-milk", source: "suggestion" }),
         );
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+test("suggestions wait for 2 characters and a pause in typing, then ask once (#109)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+        const { api } = setup([], [{ name: "Semi-skimmed milk", inStock: 3, productId: "p-milk" }]);
+        await flush();
+        const box = screen.getByRole("combobox", { name: "Add to the list" });
+
+        fireEvent.change(box, { target: { value: "m" } });
+        await act(async () => vi.advanceTimersByTime(1000));
+        expect(api.listSuggestions).not.toHaveBeenCalled(); // 1 character: no request
+
+        for (const value of ["mi", "mil", "milk"]) {
+            fireEvent.change(box, { target: { value } });
+            await act(async () => vi.advanceTimersByTime(SUGGEST_DELAY_MS - 50)); // still typing
+        }
+        expect(api.listSuggestions).not.toHaveBeenCalled();
+
+        await act(async () => vi.advanceTimersByTime(100));
+        expect(api.listSuggestions).toHaveBeenCalledTimes(1);
+        expect(api.listSuggestions).toHaveBeenCalledWith("milk");
     } finally {
         vi.useRealTimers();
     }

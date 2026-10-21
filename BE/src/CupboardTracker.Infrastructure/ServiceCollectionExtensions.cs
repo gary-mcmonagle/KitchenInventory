@@ -76,6 +76,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ClearDoneShoppingListItems>();
         services.AddTransient<GetShoppingList>();
         services.AddTransient<SuggestListItems>();
+        services.AddSingleton(sp => SuggestionCacheSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>())); // #109
+        services.AddSingleton<SuggestionIndexCache>();
         services.AddTransient<AssignListAisle>();
         services.AddTransient<ScanFeedNotifier>();
         services.AddSingleton<IScanFeedQueries, CosmosScanFeedQueries>();
@@ -237,6 +239,12 @@ public static class ServiceCollectionExtensions
             ? c : GenericNameSettings.DefaultMatchMinConfidence,
         int.TryParse(config["GENERIC_NAME_BATCH_SIZE"], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var b) && b is > 0 and <= 254
             ? b : GenericNameSettings.DefaultBatchSize);
+
+    /// <summary>SUGGESTION_CACHE_SECONDS (default 60, #109): how long the shopping list's suggestion index is reused.</summary>
+    internal static SuggestionCacheSettings SuggestionCacheSettingsFromConfiguration(IConfiguration config) =>
+        int.TryParse(config["SUGGESTION_CACHE_SECONDS"], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var s) && s is >= 0 and <= 3600
+            ? new SuggestionCacheSettings(TimeSpan.FromSeconds(s))
+            : SuggestionCacheSettings.Default;
 
     /// <summary>RECIPE_ADDITION_MIN_CONFIDENCE (default 0.1, #104): below it, Jev's pick isn't suggested.</summary>
     internal static RecipeAdditionSettings RecipeAdditionSettingsFromConfiguration(IConfiguration config) => new(

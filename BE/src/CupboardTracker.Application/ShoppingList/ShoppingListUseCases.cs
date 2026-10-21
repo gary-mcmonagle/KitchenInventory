@@ -10,17 +10,28 @@ namespace CupboardTracker.Application.ShoppingList;
 /// <summary>
 /// Best-effort live updates (#84), like <see cref="ScanFeed.ScanFeedNotifier"/>: called after a write succeeds; a failure
 /// is a warning and never fails the change (apps catch up with <c>since</c>).
+/// Every list write passes through here, so it also clears this instance's suggestion index (#109).
 /// </summary>
-public sealed partial class ShoppingListNotifier(IShoppingListPublisher publisher, ILogger<ShoppingListNotifier> logger)
+public sealed partial class ShoppingListNotifier(
+    IShoppingListPublisher publisher, ILogger<ShoppingListNotifier> logger, SuggestionIndexCache? suggestions = null)
 {
-    public Task ChangedAsync(ShoppingListItem item, CancellationToken cancellationToken) =>
-        Try(() => publisher.ItemChangedAsync(item, cancellationToken), "shoppingListItemChanged", item.Id.ToString());
+    public Task ChangedAsync(ShoppingListItem item, CancellationToken cancellationToken)
+    {
+        suggestions?.Invalidate();
+        return Try(() => publisher.ItemChangedAsync(item, cancellationToken), "shoppingListItemChanged", item.Id.ToString());
+    }
 
-    public Task RemovedAsync(ShoppingListItem item, CancellationToken cancellationToken) =>
-        Try(() => publisher.ItemRemovedAsync(item.Id, item.Version, cancellationToken), "shoppingListItemRemoved", item.Id.ToString());
+    public Task RemovedAsync(ShoppingListItem item, CancellationToken cancellationToken)
+    {
+        suggestions?.Invalidate();
+        return Try(() => publisher.ItemRemovedAsync(item.Id, item.Version, cancellationToken), "shoppingListItemRemoved", item.Id.ToString());
+    }
 
-    public Task ClearedAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken) =>
-        Try(() => publisher.ClearedAsync(ids, cancellationToken), "shoppingListCleared", $"{ids.Count} items");
+    public Task ClearedAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+    {
+        suggestions?.Invalidate();
+        return Try(() => publisher.ClearedAsync(ids, cancellationToken), "shoppingListCleared", $"{ids.Count} items");
+    }
 
     private async Task Try(Func<Task> send, string name, string key)
     {
@@ -312,12 +323,13 @@ public sealed class GetShoppingList(IShoppingListRepository list, TimeProvider c
 public sealed record ListSuggestion(string Name, int InStock, Guid? ProductId);
 
 /// <summary>
-/// <c>GET /api/shopping-list/suggestions?q=</c> (#84): up to 8 names containing the text, from products' generic names
-/// (display names when they have none) and past list items, ranked by names starting with it, generic names, how often
-/// and how recently they were used. <c>InStock</c> sums units across every product with that generic name. Names
-/// already open are left out.
+/// <c>GET /api/shopping-list/suggestions?q=</c> (#84): up to 8 names containing the query, from products' generic names
+/// (display names when they have none) and past list items, ranked by names starting with it, then generic names, then
+/// how often and how recently used. In-stock counts sum every product with that name. Names already open are left out.
+/// The index is built from every product, the stock and the list memory, and kept in memory for a minute (#109); the
+/// open names are read fresh for every query, so a name just added is never suggested.
 /// </summary>
-public sealed class SuggestListItems(IShoppingListRepository list, IProductRepository products, GetStock stock)
+public sealed class SuggestListItems(IShoppingListRepository list, IProductRepository products, GetStock stock, SuggestionIndexCache? cache = null)
 {
     public const int Max = 8;
 
@@ -332,6 +344,25 @@ public sealed class SuggestListItems(IShoppingListRepository list, IProductRepos
         var open = (await list.ListAsync(cancellationToken))
             .Where(i => i.Value is { Removed: false, Status: ListItemStatus.Open })
             .Select(i => i.Value.NormalizedName).ToHashSet();
+        var index = cache is null ? await BuildAsync(cancellationToken) : await cache.GetAsync(BuildAsync, cancellationToken);
+
+        return
+        [
+            .. index
+                .Where(c => c.Key.Contains(q, StringComparison.Ordinal) && !open.Contains(c.Key))
+                .OrderBy(c => c.Key.StartsWith(q, StringComparison.Ordinal) ? 0 : 1)
+                .ThenBy(c => c.Generic ? 0 : 1)
+                .ThenByDescending(c => c.Uses)
+                .ThenByDescending(c => c.LastUsed)
+                .ThenBy(c => c.Key, StringComparer.Ordinal)
+                .Take(Max)
+                .Select(c => new ListSuggestion(c.Name, c.InStock, c.ProductId)),
+        ];
+    }
+
+    /// <summary>Every name that could be suggested: the expensive part (~265 RU), so it's cached.</summary>
+    internal async Task<IReadOnlyList<SuggestionCandidate>> BuildAsync(CancellationToken cancellationToken)
+    {
         var counts = (await stock.ExecuteAsync(cancellationToken)).Aisles.SelectMany(a => a.Products)
             .ToDictionary(p => p.ProductId, p => p.Count);
         var memory = (await list.ListMemoryAsync(cancellationToken)).ToDictionary(m => m.NormalizedName);
@@ -359,18 +390,7 @@ public sealed class SuggestListItems(IShoppingListRepository list, IProductRepos
             c.LastUsed = Latest(c.LastUsed, m.LastAddedAt);
         }
 
-        return
-        [
-            .. candidates
-                .Where(kv => kv.Key.Contains(q, StringComparison.Ordinal) && !open.Contains(kv.Key))
-                .OrderBy(kv => kv.Key.StartsWith(q, StringComparison.Ordinal) ? 0 : 1)
-                .ThenBy(kv => kv.Value.Generic ? 0 : 1)
-                .ThenByDescending(kv => kv.Value.Uses)
-                .ThenByDescending(kv => kv.Value.LastUsed)
-                .ThenBy(kv => kv.Key, StringComparer.Ordinal)
-                .Take(Max)
-                .Select(kv => new ListSuggestion(kv.Value.Name, kv.Value.InStock, kv.Value.ProductId)),
-        ];
+        return [.. candidates.Select(kv => new SuggestionCandidate(kv.Key, kv.Value.Name, kv.Value.Generic, kv.Value.InStock, kv.Value.Uses, kv.Value.LastUsed, kv.Value.ProductId))];
     }
 
     private static DateTimeOffset? Latest(DateTimeOffset? a, DateTimeOffset? b) => a is null ? b : b is null ? a : a > b ? a : b;
