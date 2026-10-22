@@ -43,6 +43,18 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDeploymentInfo, ConfigurationDeploymentInfo>();
         services.AddTransient<GetPingStatus>();
 
+        // Measuring Cosmos (#115): every call's RUs as App Insights metrics, totals per invocation, index metrics when on.
+        services.AddSingleton(sp => CosmosTelemetrySettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<ICosmosCallSink>(sp =>
+            sp.GetService<Microsoft.ApplicationInsights.TelemetryClient>() is { } telemetry
+                ? new AppInsightsCosmosCallSink(telemetry)
+                : new NoCosmosCallSink());
+        services.AddSingleton<CosmosRecorder>();
+        services.AddSingleton<CosmosMetricsHandler>();
+        services.AddSingleton(sp => new CosmosInvocationReporter(
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<CosmosInvocationReporter>>(),
+            sp.GetService<Microsoft.ApplicationInsights.TelemetryClient>()));
+
         // Cosmos over Entra ID: the app's managed identity in Azure, your az login locally. No keys (local auth is off).
         services.AddSingleton(sp =>
         {
@@ -52,7 +64,11 @@ public static class ServiceCollectionExtensions
             var client = new CosmosClient(
                 endpoint,
                 new DefaultAzureCredential(),
-                new CosmosClientOptions { ApplicationName = "cupboard-tracker" });
+                new CosmosClientOptions
+                {
+                    ApplicationName = "cupboard-tracker",
+                    CustomHandlers = { sp.GetRequiredService<CosmosMetricsHandler>() },
+                });
             var database = config["COSMOS_DATABASE"]
                 ?? throw new InvalidOperationException("The COSMOS_DATABASE app setting is missing.");
             return new CosmosContainers(client, database);
@@ -312,6 +328,10 @@ public static class ServiceCollectionExtensions
 
         return new StockSettings(TimeZoneInfo.FindSystemTimeZoneById("Europe/London"), days);
     }
+
+    /// <summary>COSMOS_INDEX_METRICS (#115): "true" asks Cosmos for index metrics on queries; anything else is off.</summary>
+    internal static CosmosTelemetrySettings CosmosTelemetrySettingsFromConfiguration(IConfiguration config) =>
+        new(string.Equals(config["COSMOS_INDEX_METRICS"], "true", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>STILL_HERE_ASK_AGAIN_DAYS (default 2, #94): how long "Still here" quiets a unit.</summary>
     internal static StillGotThisSettings StillGotThisSettingsFromConfiguration(IConfiguration config)

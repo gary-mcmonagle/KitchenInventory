@@ -36,3 +36,6 @@ param verifierPrincipalId = readEnvironmentVariable('VERIFIER_PRINCIPAL_ID', '')
 // Who can set secrets by hand in the portal (#42): set by deploy/infra.sh to the signed-in user (Gary) unless
 // VAULT_OFFICER_PRINCIPAL_ID is already set.
 param vaultOfficerPrincipalId = readEnvironmentVariable('VAULT_OFFICER_PRINCIPAL_ID', '')
+
+// Measuring Cosmos (#115): index metrics on while #96 gathers a week of recommendations; #96 turns it off.
+param cosmosIndexMetrics = true

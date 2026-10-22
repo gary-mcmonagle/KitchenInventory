@@ -1,0 +1,79 @@
+// Measuring Cosmos (#115). Run against the Log Analytics workspace behind App Insights (log-cupboard-tracker), e.g.
+//   az monitor log-analytics query -w <workspace id> --analytics-query "$(sed -n '/^\/\/ 1\./,/^$/p' tools/perf/queries.kql)"
+// Each query is its own block, separated by a blank line. Change the ago() windows as needed.
+// Metrics are pre-aggregated per minute: ItemCount is the number of calls, Sum the total, so averages are Sum / ItemCount.
+
+// 1. RUs per day by container (and app)
+AppMetrics
+| where TimeGenerated > ago(7d) and Name == "Cosmos RU"
+| summarize RU = round(sum(Sum), 1), Calls = sum(ItemCount) by Day = bin(TimeGenerated, 1d), Container = tostring(Properties.container), App = AppRoleName
+| order by Day desc, RU desc
+
+// 2. Top 20 operations by total RU
+AppMetrics
+| where TimeGenerated > ago(7d) and Name == "Cosmos RU"
+| summarize RU = round(sum(Sum), 1), Calls = sum(ItemCount) by Operation = tostring(Properties.operation), Partition = tostring(Properties.partition)
+| extend RUPerCall = round(RU / Calls, 2)
+| top 20 by RU desc
+
+// 3. Top 20 operations by RU per call
+AppMetrics
+| where TimeGenerated > ago(7d) and Name == "Cosmos RU"
+| summarize RU = sum(Sum), Calls = sum(ItemCount) by Operation = tostring(Properties.operation), Partition = tostring(Properties.partition)
+| extend RUPerCall = round(RU / Calls, 2), RU = round(RU, 1)
+| top 20 by RUPerCall desc
+
+// 4. Cross-partition operations, with their pages and items per call
+AppMetrics
+| where TimeGenerated > ago(7d) and Name in ("Cosmos RU", "Cosmos pages", "Cosmos items") and tostring(Properties.partition) == "cross"
+| summarize Total = sum(Sum), Calls = sum(ItemCount) by Operation = tostring(Properties.operation), Name
+| extend PerCall = round(Total / Calls, 2)
+| evaluate pivot(Name, sum(PerCall), Operation, Calls)
+| order by ['Cosmos RU'] desc
+
+// 5. p50 and p95 duration per endpoint, warm and cold (cold: within 2 minutes of that instance's host starting)
+let starts = AppTraces
+    | where TimeGenerated > ago(7d) and Message startswith "Host started"
+    | project Started = TimeGenerated, AppRoleInstance;
+AppRequests
+| where TimeGenerated > ago(7d)
+| join kind=leftouter starts on AppRoleInstance
+| extend Cold = isnotnull(Started) and TimeGenerated between (Started .. (Started + 2m))
+| summarize Cold = max(Cold) by Id, Name, AppRoleName, DurationMs
+| summarize Requests = count(), P50 = round(percentile(DurationMs, 50)), P95 = round(percentile(DurationMs, 95)) by AppRoleName, Name, Start = iff(Cold, "cold", "warm")
+| order by AppRoleName asc, Name asc, Start desc
+
+// 6. RUs and Cosmos calls per request, by endpoint (the N+1 view)
+AppTraces
+| where TimeGenerated > ago(7d) and Message startswith "Cosmos usage:" and tostring(Properties.Trigger) == "http"
+| extend Function = tostring(Properties.Function), Calls = toint(Properties.CosmosCalls), RU = todouble(Properties.CosmosRu)
+| summarize Requests = count(), CallsP50 = percentile(Calls, 50), CallsMax = max(Calls), RUP50 = round(percentile(RU, 50), 1), RUMax = round(max(RU), 1) by Function
+| order by CallsMax desc
+
+// 7. RUs per timer, queue and change-feed run
+AppTraces
+| where TimeGenerated > ago(7d) and Message startswith "Cosmos usage:" and tostring(Properties.Trigger) != "http"
+| extend Function = tostring(Properties.Function), Trigger = tostring(Properties.Trigger), Calls = toint(Properties.CosmosCalls), RU = todouble(Properties.CosmosRu)
+| summarize Runs = count(), RUPerRunP50 = round(percentile(RU, 50), 1), RUPerRunMax = round(max(RU), 1), RUPerDay = round(sum(RU) / 7, 1), CallsMax = max(Calls) by Function, Trigger
+| order by RUPerDay desc
+
+// 8. Throttled calls (429 after the SDK's own retries)
+AppMetrics
+| where TimeGenerated > ago(7d) and Name == "Cosmos RU" and tostring(Properties.status) == "429"
+| summarize Calls = sum(ItemCount) by bin(TimeGenerated, 1h), Operation = tostring(Properties.operation)
+| order by TimeGenerated desc
+
+// 9. The latest index recommendations per operation (logged hourly while COSMOS_INDEX_METRICS is on)
+AppTraces
+| where TimeGenerated > ago(7d) and Message startswith "Cosmos index metrics for"
+| extend Operation = tostring(Properties.CosmosOperation), Metrics = tostring(Properties.IndexMetrics)
+| summarize arg_max(TimeGenerated, Metrics) by Operation
+| extend HasPotential = Metrics has "Potential"
+| order by HasPotential desc, Operation asc
+
+// 10. What this measuring adds to ingestion per day (the custom metrics and the two traces)
+union
+    (AppMetrics | where TimeGenerated > ago(7d) and Name startswith "Cosmos" | extend Kind = "metrics"),
+    (AppTraces | where TimeGenerated > ago(7d) and (Message startswith "Cosmos usage:" or Message startswith "Cosmos index metrics") | extend Kind = "traces")
+| summarize MB = round(sum(_BilledSize) / 1024.0 / 1024.0, 3), Rows = count() by Day = bin(TimeGenerated, 1d), Kind
+| order by Day desc

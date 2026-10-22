@@ -711,3 +711,26 @@ All agreed with Gary (card #29's comment, card #57, spike #28, and Gary's approv
 8. **Hub:** defined by the offline alert card (#44). **Confirmed.**
 9. **Display names:** used exactly as Open Food Facts returns them (spike #28). **Confirmed.**
 10. **Product statuses:** `known`, `noMatch`, `lookupFailed`, with `source` (`openFoodFacts`, `manual`, `photo`) saying where a known product's name came from, as the feature cards use them (#45 Check-in adds to stock, #51 Name an unknown item, #53 Item detail). Replaces the earlier `matched` / `named` / `identified`. **Confirmed.**
+
+## Measuring Cosmos (#115)
+
+Every Cosmos call either app makes is measured, for Faster back end (#96) and the cost guard (#107). Nothing changes what's read or written. KQL for each view is in [`tools/perf/queries.kql`](../tools/perf/queries.kql).
+
+- **How:** a Cosmos SDK request handler (`CosmosMetricsHandler`, on the one `CosmosClient`) sees every point read, create, upsert, replace, patch and delete. Queries through `CosmosJson.QueryAsync` are recorded **once per query**, over all their pages. A query sent any other way is recorded per page as `<container>.query`.
+- **Per call:** the operation name, container, RU charge (`RequestCharge`, summed over pages), items, pages, duration, partition scope (`single` / `cross`) and HTTP status (a 429 shows only once the SDK's own retries are spent). These go to App Insights as **pre-aggregated metrics** (`Cosmos RU`, `Cosmos duration ms`, `Cosmos items`, `Cosmos pages`; table `AppMetrics`, one row per minute per operation, container, scope and status), never one log line per call. **No document content, ids or query parameters.**
+- **Per invocation:** `CosmosUsageMiddleware` in each app totals the RUs and calls of each HTTP request and each timer, queue or change-feed run (an `AsyncLocal` per invocation). Reported as the metrics `Cosmos RU per invocation` / `Cosmos calls per invocation` by function and trigger, and one trace per invocation that touched Cosmos, `Cosmos usage: <function> (<trigger>) made n Cosmos calls costing x RU` (properties `Function`, `Trigger`, `CosmosCalls`, `CosmosRu`), carrying the request's operation id. In the isolated worker the request row itself is written by the host, so the totals sit on this correlated trace rather than on the request.
+- **Index metrics:** while the app setting `COSMOS_INDEX_METRICS` is `true`, queries ask Cosmos for index metrics (`PopulateIndexMetrics`), and each operation's are logged at most once an hour: `Cosmos index metrics for <operation>: …` (properties `CosmosOperation`, `IndexMetrics`: the utilised and potential single and composite indexes, as paths only).
+
+**Operation names.** Point operations: `<container>.<verb>` (`read`, `create`, `upsert`, `replace`, `patch`, `delete`), e.g. `products.read`, `inventoryItems.replace`. Queries: `<container>.<calling method>`, without `Get` and `Async`:
+
+| Container | Queries |
+|---|---|
+| `inventoryItems` | `inStock` (one product's units), `inStockWithoutExpiry`, `inStockEstimatePending`, `find` (a unit by id), `inStockUnits` (the stock list), `unitsForScans` (scan feed), `checkedOutSince` (Scanners), `digestInStock`, `digestCheckedIn`, `digestCheckedOut` |
+| `products` | `listKnown`, `needingShelfLife`, `needingClassification`, `needingAnimalContent`, `needingGenericName`, `needingStateEstimates`, `lookupFailed`, `list` (generic names), `listUnresolved` (store labels), `unnamedProducts` (scan feed) |
+| `devices` | `list` (hubs), `devices` (Scanners) |
+| `scanEvents` | `scansSince` (scan feed) |
+| `unmatchedCheckOuts` | `unmatched` (scan feed), `undismissedUnmatched` (Scanners) |
+| `pushSubscriptions` | `list` |
+| `pushSeen` | `usersWhoSaw` |
+| `shoppingList` | `list`, `listMemory` |
+| `savedRecipes` | `list` |

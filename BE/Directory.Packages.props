@@ -7,6 +7,8 @@
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.51.0" />
     <!-- Stay on 2.x: 3.x (OpenTelemetry-based) removed types Worker.ApplicationInsights still uses. -->
     <PackageVersion Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
+    <!-- Cosmos metrics (#115): TelemetryClient.GetMetric in Infrastructure; the same 2.x as WorkerService -->
+    <PackageVersion Include="Microsoft.ApplicationInsights" Version="2.23.0" />
     <!-- Shared abstractions -->
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />

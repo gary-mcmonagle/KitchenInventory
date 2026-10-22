@@ -26,6 +26,9 @@ builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
 
 builder.Services.AddCupboardTracker();
 
+// Cosmos RUs and calls per invocation (#115), outermost so it counts everything the function does.
+builder.UseMiddleware<CupboardTracker.Functions.Api.CosmosUsageMiddleware>();
+
 // Signed-in users (#36): bearer tokens checked in code for every HTTP function not marked [PublicEndpoint].
 builder.UseMiddleware<BearerAuthMiddleware>();
 builder.Services.AddSingleton(sp => EntraOptions.FromConfiguration(sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>()));

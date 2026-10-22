@@ -9,25 +9,27 @@ namespace CupboardTracker.Infrastructure.Cosmos;
 public sealed class CosmosDigestQueries(CosmosContainers containers) : IDigestQueries
 {
     public Task<IReadOnlyList<DigestUnit>> GetInStockAsync(CancellationToken cancellationToken) =>
-        QueryAsync(new QueryDefinition("SELECT c.productId, c.barcode, c.estimatedExpiryDate, c.expirySource, c.openedOn, c.defrostedOn FROM c WHERE c.status = 'inStock'"), cancellationToken);
+        QueryAsync(new QueryDefinition("SELECT c.productId, c.barcode, c.estimatedExpiryDate, c.expirySource, c.openedOn, c.defrostedOn FROM c WHERE c.status = 'inStock'"), cancellationToken,
+            "DigestInStock");
 
     public Task<IReadOnlyList<DigestUnit>> GetCheckedInAsync(DigestWindow window, CancellationToken cancellationToken) =>
         QueryAsync(InWindow("SELECT c.productId, c.barcode FROM c WHERE c.checkedInAt >= @start AND c.checkedInAt < @end", window),
-            cancellationToken);
+            cancellationToken, "DigestCheckedIn");
 
     public Task<IReadOnlyList<DigestUnit>> GetCheckedOutAsync(DigestWindow window, CancellationToken cancellationToken) =>
         QueryAsync(InWindow(
             "SELECT c.productId, c.barcode FROM c WHERE c.status = 'checkedOut' AND c.checkedOutAt >= @start AND c.checkedOutAt < @end",
-            window), cancellationToken);
+            window), cancellationToken, "DigestCheckedOut");
 
     private static QueryDefinition InWindow(string sql, DigestWindow window) =>
         new QueryDefinition(sql)
             .WithParameter("@start", CosmosJson.Timestamp(window.Start))
             .WithParameter("@end", CosmosJson.Timestamp(window.End));
 
-    private async Task<IReadOnlyList<DigestUnit>> QueryAsync(QueryDefinition query, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<DigestUnit>> QueryAsync(
+        QueryDefinition query, CancellationToken cancellationToken, [System.Runtime.CompilerServices.CallerMemberName] string caller = "")
     {
-        var rows = await CosmosJson.QueryAsync(containers.InventoryItems, query, partitionKey: null, max: null, cancellationToken);
+        var rows = await CosmosJson.QueryAsync(containers.InventoryItems, query, partitionKey: null, max: null, cancellationToken, caller);
         return rows.Select(ToUnit).ToList();
     }
 

@@ -25,4 +25,7 @@ builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
 
 builder.Services.AddCupboardTracker();
 
+// Cosmos RUs and calls per invocation (#115), outermost so it counts everything the function does.
+builder.UseMiddleware<CupboardTracker.Functions.Ingest.CosmosUsageMiddleware>();
+
 builder.Build().Run();

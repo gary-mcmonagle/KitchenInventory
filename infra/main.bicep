@@ -69,6 +69,9 @@ param listPushMaxWaitSeconds int = 900
 @maxValue(1440)
 param listPushMinGapMinutes int = 30
 
+@description('Measuring Cosmos (#115): ask Cosmos for index metrics on queries and log them hourly per operation. Both apps.')
+param cosmosIndexMetrics bool = false
+
 @description('Custom domains set up on the Static Web App by hand (e.g. kitchen.garymcmonagle.com): allowed in CORS for the API and SignalR, next to its default hostname.')
 param customDomains array = []
 
@@ -190,6 +193,7 @@ module ingest 'modules/functionApp.bicep' = {
       COMMIT_SHA: ingestCommitSha
       COSMOS_ENDPOINT: cosmos.outputs.endpoint
       COSMOS_DATABASE: cosmos.outputs.databaseName
+      COSMOS_INDEX_METRICS: string(cosmosIndexMetrics)
     }, signalRSettings)
   }
 }
@@ -214,6 +218,7 @@ module api 'modules/functionApp.bicep' = {
       COMMIT_SHA: apiCommitSha
       COSMOS_ENDPOINT: cosmos.outputs.endpoint
       COSMOS_DATABASE: cosmos.outputs.databaseName
+      COSMOS_INDEX_METRICS: string(cosmosIndexMetrics)
       // The scan-events change-feed trigger's identity-based connection (connection name COSMOS).
       COSMOS__accountEndpoint: cosmos.outputs.endpoint
       OFF_BASE_URL: 'https://world.openfoodfacts.org'
