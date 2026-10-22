@@ -20,6 +20,7 @@ import {
     savedScroll,
     SCANNERS_PATH,
     usePath,
+    useTabResets,
 } from "./router";
 import { ScannersScreen } from "./ScannersScreen";
 import { StockScreen } from "./StockScreen";
@@ -29,6 +30,7 @@ import { ShoppingListProvider } from "./useShoppingList";
  * product, adding items, saying what a store label was, or recipe ideas (#73). */
 export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     const path = usePath();
+    const resets = useTabResets(); // tapping the tab you're on remounts its screen (Gary, 2026-10-22)
     const [footer, setFooter] = useState(`UI ${buildSha}`);
 
     useEffect(() => {
@@ -76,14 +78,14 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
             <main className={styles.page}>
                 {(onStock || overStock) && (
                     <div hidden={!onStock} className={styles.layer}>
-                        <StockScreen api={api} visible={onStock} />
+                        <StockScreen key={resets} api={api} visible={onStock} />
                         <footer className={styles.footer}>{footer}</footer>
                         <BottomNav current="stock" />
                     </div>
                 )}
                 {(onRecipes || overRecipes) && (
                     <div hidden={!onRecipes} className={styles.layer}>
-                        <RecipesScreen api={api} />
+                        <RecipesScreen key={resets} api={api} />
                         <BottomNav current="recipes" />
                     </div>
                 )}
@@ -99,7 +101,7 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                     <AddScreen key={assigning} api={api} assignScanId={assigning} />
                 ) : path === LIST_PATH ? (
                     <>
-                        <ListScreen api={api} />
+                        <ListScreen key={resets} api={api} />
                         <BottomNav current="list" />
                     </>
                 ) : path === SCANNERS_PATH ? (

@@ -181,3 +181,72 @@ test("a problem outranks things to sort out, and the count covers both", () => {
     expect(scannerLabel(status)).toBe("Scanners and notifications: 2 need attention");
     expect(scannerLabel(null)).toBe("Scanners and notifications");
 });
+
+// Tapping the tab you're on starts that page afresh, as arriving from another tab does (Gary, 2026-10-22).
+describe("tapping the tab you're on", () => {
+    const tab = (name: string) =>
+        within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", {
+            name: new RegExp(`^${name}`),
+        });
+
+    test("Hungry? goes back to an empty form from wherever you were in it", async () => {
+        await at("/recipes");
+        fireEvent.change(screen.getByRole("textbox", { name: /Additional comments/i }), {
+            target: { value: "spicy" },
+        });
+        expect(screen.getByRole("textbox", { name: /Additional comments/i })).toHaveValue("spicy");
+
+        await act(async () => fireEvent.click(tab("Hungry\\?")));
+
+        expect(window.location.pathname).toBe("/recipes");
+        expect(screen.getByRole("textbox", { name: /Additional comments/i })).toHaveValue("");
+    });
+
+    test("Stock clears the search and goes back to the top", async () => {
+        const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+        const api = shellApi();
+        const milk = {
+            productId: "milk",
+            barcode: null,
+            displayName: "Milk",
+            brand: null,
+            size: null,
+            count: 1,
+            latestCheckedInAt: "2026-10-21T08:00:00.000Z",
+            status: "known",
+            section: "later",
+            soonestEstimatedExpiryDate: null,
+            daysUntilSoonest: null,
+            shelfLifeDays: null,
+            openedCount: 0,
+            frozenCount: 0,
+            soonestState: null,
+            soonestStateOn: null,
+            aisleId: "other",
+            icon: null,
+            useFirst: false,
+        };
+        (api as unknown as { stock: () => Promise<unknown> }).stock = async () => ({
+            generatedAt: "",
+            totalUnits: 1,
+            useFirstCount: 0,
+            products: [milk],
+        });
+        await at("/", api);
+        fireEvent.change(await screen.findByRole("searchbox", { name: "Search stock" }), {
+            target: { value: "milk" },
+        });
+
+        await act(async () => fireEvent.click(tab("Stock")));
+
+        expect(screen.getByRole("searchbox", { name: "Search stock" })).toHaveValue("");
+        expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+        scrollTo.mockRestore();
+    });
+
+    test("another tab still navigates as before", async () => {
+        await at("/recipes");
+        await act(async () => fireEvent.click(tab("List")));
+        expect(window.location.pathname).toBe("/list");
+    });
+});

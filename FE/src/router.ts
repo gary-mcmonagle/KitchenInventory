@@ -26,6 +26,44 @@ export function navigate(path: string): void {
     window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+const RESET_EVENT = "cupboard:tab-reset";
+
+/**
+ * A bottom-nav tab: on another page it navigates there; on that page already it starts the page afresh, as arriving
+ * from another tab does (Gary, 2026-10-22): the screen remounts, at the top.
+ */
+export function openTab(path: string): void {
+    if (window.location.pathname !== path) {
+        navigate(path);
+        return;
+    }
+    scrollPositions.delete(path);
+    window.dispatchEvent(new Event(RESET_EVENT));
+    window.scrollTo(0, 0);
+}
+
+const subscribeResets = (onChange: () => void) => {
+    const counted = () => {
+        resets++;
+        onChange();
+    };
+    window.addEventListener(RESET_EVENT, counted);
+    return () => window.removeEventListener(RESET_EVENT, counted);
+};
+let resets = 0;
+
+/** Runs before a reset's remount (e.g. to forget a remembered search). Returns the unsubscribe. */
+export function onTabReset(run: (path: string) => void): () => void {
+    const listener = () => run(window.location.pathname);
+    window.addEventListener(RESET_EVENT, listener);
+    return () => window.removeEventListener(RESET_EVENT, listener);
+}
+
+/** How many times a tab has been reset: use it as the tab screens' key, so a reset remounts them. */
+export function useTabResets(): number {
+    return useSyncExternalStore(subscribeResets, () => resets);
+}
+
 /** The screen this one was opened from, if it was opened inside the app (#103). */
 export const cameFrom = (): string | null => (window.history.state as { from?: string } | null)?.from ?? null;
 

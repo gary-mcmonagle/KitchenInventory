@@ -24,7 +24,7 @@ import { takeFlash } from "./flash";
 import { rememberItemPreview } from "./itemPreview";
 import { ProductTile } from "./ProductTile";
 import { createSeenReporter } from "./push";
-import { ADD_PATH, itemPath, LIST_PATH, namePath, navigate, SCANNERS_PATH } from "./router";
+import { ADD_PATH, itemPath, LIST_PATH, namePath, navigate, onTabReset, SCANNERS_PATH } from "./router";
 import { scannerLabel, scannerStatus, type ScannerStatus } from "./scannerStatus";
 import { matchesSearch, searchWords } from "./stockSearch";
 import styles from "./Stock.module.css";
@@ -154,6 +154,9 @@ let rememberedQuery = "";
 export const forgetStockSearch = () => {
     rememberedQuery = "";
 };
+
+// Tapping Stock while on the stock list starts it afresh, search included.
+onTabReset((path) => path === "/" && forgetStockSearch());
 
 export function StockScreen({
     api,

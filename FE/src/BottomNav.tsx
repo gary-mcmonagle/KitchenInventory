@@ -1,4 +1,4 @@
-import { LIST_PATH, navigate, RECIPES_PATH } from "./router";
+import { LIST_PATH, openTab, RECIPES_PATH } from "./router";
 import styles from "./BottomNav.module.css";
 import { useOpenCount } from "./useShoppingList";
 
@@ -14,7 +14,7 @@ export function BottomNav({ current, listCount }: { current: NavTab; listCount?:
     const badge = listCount ?? openCount; // the shopping list's open items (#84)
     const go = (path: string) => (e: React.MouseEvent) => {
         e.preventDefault();
-        navigate(path);
+        openTab(path); // the tab you're on starts afresh
     };
     const tab = (id: NavTab, path: string, label: string, icon: React.ReactNode, badge?: number) => (
         <a
