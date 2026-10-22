@@ -78,7 +78,7 @@ public sealed class SavedRecipeTests
     }
 
     private static SaveRecipeRequest Recipe(Guid id, string title, params SavedIngredient[] ingredients) =>
-        new(id, SavedRecipeKinds.Recipe, title, RecipeMeal.Dinner, 25, 2, ingredients, ["Cook it."], ["1 garlic clove"], null, null);
+        new(id, SavedRecipeKinds.Recipe, title, RecipeMeal.Dinner, 25, 2, ingredients, [new("Cook it.")], [new("1 garlic clove")], null, null);
 
     [Fact]
     public async Task Saving_keeps_a_snapshot_with_the_generic_names_and_is_idempotent()

@@ -50,7 +50,7 @@ internal sealed class FakeRecipeGenerator : IRecipeGenerator
     }
 
     public static Recipe Recipe(IReadOnlyList<RecipeIngredient> ingredients, IReadOnlyList<Guid>? usesUp = null, IReadOnlyList<Guid>? couldNotFitIn = null) =>
-        new("Creamy penne", "A quick pasta.", RecipeMeal.Dinner, 2, 25, ingredients, ["Cook the penne."], usesUp ?? [], ["1 onion"], couldNotFitIn ?? []);
+        new("Creamy penne", "A quick pasta.", RecipeMeal.Dinner, 2, 25, ingredients, [new("Cook the penne.")], usesUp ?? [], [new("1 onion")], couldNotFitIn ?? []);
 }
 
 public sealed class SuggestRecipeTests
@@ -261,7 +261,7 @@ public sealed class SuggestRecipeTests
             recipe.Ingredients);
         Assert.Equal([new RecipeProductView(milk, "Semi-skimmed milk", 1, Today.AddDays(1))], recipe.UsesUp);
         Assert.Equal(["Wholewheat penne"], recipe.CouldNotFitIn);
-        Assert.Equal(["1 onion"], recipe.AlsoNeeded);
+        Assert.Equal([new ExtraItem("1 onion")], recipe.AlsoNeeded);
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public sealed class SuggestRecipeTests
 
         var entry = Assert.Single(logger.Entries);
         Assert.Equal("Recipe suggested: meal Dinner, comments given True, 0 included, 0 couldn't be fitted in, "
-            + "equipment hob,ovenGrill,microwave,toaster,airFryer,slowCooker,riceCooker,soupMaker,blender, warning False.", entry.Message);
+            + "equipment hob,ovenGrill,microwave,toaster,airFryer,slowCooker,riceCooker,soupMaker,blender, warning False, diet any.", entry.Message);
     }
 
     [Fact]

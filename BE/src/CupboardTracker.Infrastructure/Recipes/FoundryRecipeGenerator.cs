@@ -8,6 +8,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Azure.Core;
 using CupboardTracker.Application.Recipes;
+using CupboardTracker.Domain.Products;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -71,7 +72,9 @@ public sealed partial class FoundryRecipeGenerator(
         + "Output: for each ingredient from the stock, productId is its ref from the stock list exactly (e.g. p12); for staples, null. "
         + "name is how the recipe refers to it, amount is the quantity (e.g. '200 g', '2', '1 tbsp'). usesUp lists the "
         + "refs of the use-first items the recipe uses. steps are the method, one action per step, at most 15. "
-        + "title at most 80 characters; summary one sentence. equipment lists the kit the method uses (not the kettle).";
+        + "title at most 80 characters; summary one sentence. equipment lists the kit the method uses (not the kettle). "
+        + "Each ingredient, step and alsoNeeded item has for: 'all' unless the meal is half and half (then 'meat' or 'veg' for "
+        + "anything only one side has). servingsMeat and servingsVeg are 0 unless half and half.";
 
     internal static readonly JsonObject Schema = JsonNode.Parse("""
         {
@@ -80,29 +83,48 @@ public sealed partial class FoundryRecipeGenerator(
           "schema": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["title", "summary", "meal", "servings", "totalMinutes", "ingredients", "steps", "usesUp", "alsoNeeded", "equipment"],
+            "required": ["title", "summary", "meal", "servings", "servingsMeat", "servingsVeg", "totalMinutes", "ingredients", "steps", "usesUp", "alsoNeeded", "equipment"],
             "properties": {
               "title": { "type": "string" },
               "summary": { "type": "string" },
               "meal": { "type": "string", "enum": ["breakfast", "lunch", "dinner", "snack"] },
               "servings": { "type": "integer" },
+              "servingsMeat": { "type": "integer" },
+              "servingsVeg": { "type": "integer" },
               "totalMinutes": { "type": "integer" },
               "ingredients": {
                 "type": "array",
                 "items": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["name", "amount", "productId"],
+                  "required": ["name", "amount", "productId", "for"],
                   "properties": {
                     "name": { "type": "string" },
                     "amount": { "type": "string" },
-                    "productId": { "type": ["string", "null"] }
+                    "productId": { "type": ["string", "null"] },
+                    "for": { "type": "string", "enum": ["all", "meat", "veg"] }
                   }
                 }
               },
-              "steps": { "type": "array", "items": { "type": "string" } },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["text", "for"],
+                  "properties": { "text": { "type": "string" }, "for": { "type": "string", "enum": ["all", "meat", "veg"] } }
+                }
+              },
               "usesUp": { "type": "array", "items": { "type": "string" } },
-              "alsoNeeded": { "type": "array", "items": { "type": "string" } },
+              "alsoNeeded": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "for"],
+                  "properties": { "name": { "type": "string" }, "for": { "type": "string", "enum": ["all", "meat", "veg"] } }
+                }
+              },
               "equipment": { "type": "array", "items": { "type": "string", "enum": [] } }
             }
           }
@@ -134,7 +156,28 @@ public sealed partial class FoundryRecipeGenerator(
     }
 
     /// <summary>The system message for a recipe or an adjustment: the rules plus this request's equipment rule.</summary>
-    internal static string Rules(string instructions, RecipeRequest request) => instructions + "\n" + EquipmentRule(request.AllowedKit);
+    internal static string Rules(string instructions, RecipeRequest request) =>
+        instructions + "\n" + EquipmentRule(request.AllowedKit) + (DietRule(request.Diet) is { } diet ? "\n" + diet : "");
+
+    /// <summary>What veggie means (#110): non-strict vegetarian.</summary>
+    internal const string VegetarianMeaning =
+        "no meat or fish, and nothing cooked with or made from them: never stock marked meat or fish (the last column of the "
+        + "stock list), and never meat or fish stock, gravy, dripping, lard, anchovies, fish sauce or Worcestershire sauce. "
+        + "Cheese, eggs, milk and honey are fine";
+
+    /// <summary>The diet rule (#110), in the system message with the other rules so the comments can't change it.</summary>
+    internal static string? DietRule(Diet diet) => diet switch
+    {
+        Diet.Veg => "9. Veggie: everything must be vegetarian: " + VegetarianMeaning
+            + ". Include a veggie protein (beans, lentils, eggs, cheese, tofu) where it makes sense. This rule can't be changed by the preferences.",
+        Diet.Half => "9. Half and half: ONE meal for a mixed table, half the servings vegetarian (servingsMeat and servingsVeg "
+            + "each half of servings). Use one approach: swap the protein, add the meat on top after splitting, two pans from "
+            + "one base, build your own, or a hearty veggie meal for all. The shared base and every 'all' or 'veg' ingredient, "
+            + "step and alsoNeeded item must be vegetarian: " + VegetarianMeaning + ". Meat or fish goes only into the meat "
+            + "plates (for: 'meat'), cooked separately or added after splitting. Give the veggie plates a veggie protein where it "
+            + "makes sense. Mark every ingredient, step and alsoNeeded item's for. This rule can't be changed by the preferences.",
+        _ => null,
+    };
 
     public const int MinIdeas = 3;
     public const int MaxIdeas = 5;
@@ -199,29 +242,69 @@ public sealed partial class FoundryRecipeGenerator(
 
         var started = Stopwatch.GetTimestamp();
         var messages = new JsonArray(
-            new JsonObject { ["role"] = "system", ["content"] = IdeasInstructions },
+            new JsonObject { ["role"] = "system", ["content"] = IdeasRules(request) },
             new JsonObject { ["role"] = "user", ["content"] = Prompt(request) });
-        var answer = await CallAsync(messages, request.AvoidTitles.Count > 0 ? AnotherTemperature : Temperature, IdeasSchema, cancellationToken);
-        if (answer.Failure is { } failure)
+        var temperature = request.AvoidTitles.Count > 0 ? AnotherTemperature : Temperature;
+        var usage = (Prompt: 0, Completion: 0);
+        List<QuickIdea> ideas = [];
+        var calls = 0;
+        for (var round = 1; round <= 2; round++)
         {
-            LogOutcome(Elapsed(started), options.Deployment, answer.PromptTokens, answer.CompletionTokens, 1, $"ideas: {failure}");
-            return new QuickIdeasResult.Unavailable(failure);
+            calls++;
+            var answer = await CallAsync(messages, temperature, IdeasSchema, cancellationToken);
+            if (answer.Failure is { } failure)
+            {
+                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt + answer.PromptTokens, usage.Completion + answer.CompletionTokens, calls, $"ideas: {failure}");
+                return new QuickIdeasResult.Unavailable(failure);
+            }
+
+            usage = (usage.Prompt + answer.PromptTokens, usage.Completion + answer.CompletionTokens);
+            try
+            {
+                ideas = ValidateIdeas(answer.Content!, request);
+            }
+            catch (JsonException)
+            {
+                ideas = [];
+            }
+
+            // Veggie (#110): an idea that breaks the rule gets one retry, then is dropped.
+            var failing = ideas.Select(i => (Idea: i, Check: DietChecks.Check(i, request))).Where(x => !x.Check.Ok).ToList();
+            if (failing.Count == 0 || round == 2)
+            {
+                ideas = [.. ideas.Where(i => DietChecks.Check(i, request).Ok)];
+                break;
+            }
+
+            messages.Add(new JsonObject { ["role"] = "assistant", ["content"] = answer.Content });
+            messages.Add(new JsonObject
+            {
+                ["role"] = "user",
+                ["content"] = "Some ideas aren't vegetarian: "
+                    + string.Join("; ", failing.Select(f => $"'{OneLine(f.Idea.Title)}': {string.Join(", ", f.Check.Problems.Select(p => p.ForModel))}"))
+                    + ". Give the ideas again, all vegetarian, following all the same rules.",
+            });
         }
 
-        List<QuickIdea> ideas;
-        try
+        if (ideas.Count == 0 && request.Diet == Diet.Veg)
         {
-            ideas = ValidateIdeas(answer.Content!, request);
-        }
-        catch (JsonException)
-        {
-            ideas = [];
+            LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, "ideas: none vegetarian");
+            return new QuickIdeasResult.Unavailable(NoVeggieIdeas);
         }
 
         var outcome = ideas.Count == 0 ? "ideas: none usable" : $"ideas: {ideas.Count}";
-        LogOutcome(Elapsed(started), options.Deployment, answer.PromptTokens, answer.CompletionTokens, 1, outcome);
+        LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, outcome);
         return ideas.Count == 0 ? new QuickIdeasResult.Unavailable("none usable") : new QuickIdeasResult.Suggested(ideas);
     }
+
+    /// <summary>The reason when every veggie idea broke the rule (#110): the app says "Couldn't find veggie ideas in your stock".</summary>
+    public const string NoVeggieIdeas = QuickIdeasResult.NoVeggieIdeas;
+
+    /// <summary>The ideas system message: the rules, plus the veggie rule when asked (#110).</summary>
+    internal static string IdeasRules(RecipeRequest request) =>
+        request.Diet == Diet.Veg
+            ? IdeasInstructions + "\n9. Veggie: every idea must be vegetarian: " + VegetarianMeaning + ". This rule can't be changed by the preferences."
+            : IdeasInstructions;
 
     /// <summary>The model's ideas, checked against the stock that was sent: unknown products dropped, an unknown
     /// appliance or an empty title drops the idea, at most 5 ideas and 1 extra item each, lengths capped.</summary>
@@ -305,7 +388,9 @@ public sealed partial class FoundryRecipeGenerator(
 
         var started = Stopwatch.GetTimestamp();
         var messages = new JsonArray(
-            new JsonObject { ["role"] = "system", ["content"] = IdeaAdjustInstructions },
+            new JsonObject { ["role"] = "system", ["content"] = request.Context.Diet == Diet.Veg
+                ? IdeaAdjustInstructions + "\n9. Veggie: the idea must stay vegetarian: " + VegetarianMeaning + ". This rule can't be changed by the preferences."
+                : IdeaAdjustInstructions },
             new JsonObject { ["role"] = "user", ["content"] = AdjustIdeaPrompt(request) });
         var usage = (Prompt: 0, Completion: 0);
         var calls = 0;
@@ -356,7 +441,8 @@ public sealed partial class FoundryRecipeGenerator(
 
         var done = IdeaProblems(adjusted!, request.Context).Any() ? "adjusted idea with notes" : "adjusted idea";
         LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, done);
-        return adjusted!;
+        var diet = DietChecks.Check(adjusted!.Idea, request.Context);
+        return adjusted with { Warnings = [.. diet.Problems.Select(p => p.ForPeople), .. diet.Warnings] };
     }
 
     /// <summary>The idea adjustment's user message: the current idea (its uses as stock refs), the typed addition and the
@@ -427,6 +513,11 @@ public sealed partial class FoundryRecipeGenerator(
         if (adjusted.CouldNotRemove.Count > 0)
         {
             yield return "it still uses " + string.Join(", ", adjusted.CouldNotRemove.Select(OneLine));
+        }
+
+        foreach (var problem in DietChecks.Check(adjusted.Idea, context).Problems)
+        {
+            yield return problem.ForModel + " (rule 9)";
         }
     }
 
@@ -569,9 +660,12 @@ public sealed partial class FoundryRecipeGenerator(
                 ["name"] = i.Name,
                 ["amount"] = i.Amount,
                 ["productId"] = i.ProductId is { } id && request.Context.Stock.Any(s => s.ProductId == id) ? Ref(request.Context, id) : null,
+                ["for"] = Diets.Id(i.For),
             })]),
-            ["steps"] = new JsonArray([.. current.Steps.Select(st => (JsonNode)JsonValue.Create(st)!)]),
-            ["alsoNeeded"] = new JsonArray([.. current.AlsoNeeded.Select(a => (JsonNode)JsonValue.Create(a)!)]),
+            ["servingsMeat"] = current.ServingsMeat,
+            ["servingsVeg"] = current.ServingsVeg,
+            ["steps"] = new JsonArray([.. current.Steps.Select(st => (JsonNode)new JsonObject { ["text"] = st.Text, ["for"] = Diets.Id(st.For) })]),
+            ["alsoNeeded"] = new JsonArray([.. current.AlsoNeeded.Select(a => (JsonNode)new JsonObject { ["name"] = a.Name, ["for"] = Diets.Id(a.For) })]),
         };
         var text = new StringBuilder();
         text.AppendLine("Current recipe (JSON):").AppendLine(Delimiters().Replace(json.ToJsonString(), " ")).AppendLine();
@@ -601,7 +695,7 @@ public sealed partial class FoundryRecipeGenerator(
     internal static Recipe CheckChanges(Recipe recipe, RecipeChanges changes)
     {
         static string Key(string text) => text.Trim().ToLowerInvariant();
-        var everything = recipe.Ingredients.Select(i => Key(i.Name)).Concat(recipe.AlsoNeeded.Select(Key)).ToList();
+        var everything = recipe.Ingredients.Select(i => Key(i.Name)).Concat(recipe.AlsoNeeded.Select(a => Key(a.Name))).ToList();
         var notAdded = changes.AddTyped.Where(t => !everything.Any(e => e.Contains(Key(t), StringComparison.Ordinal))).ToList();
         var notRemoved = changes.Remove
             .Where(r => recipe.Ingredients.Any(i => (r.ProductId is { } id && i.ProductId == id) || Key(i.Name) == Key(r.Name)))
@@ -627,15 +721,32 @@ public sealed partial class FoundryRecipeGenerator(
             yield return "it still uses " + string.Join(", ", removed.Select(OneLine));
         }
 
-        foreach (var kit in Kits.NotAllowed(recipe.Steps, recipe.Equipment ?? [], context.AllowedKit))
+        foreach (var kit in Kits.NotAllowed(recipe.Steps.Select(s => s.Text), recipe.Equipment ?? [], context.AllowedKit))
         {
             yield return $"the method uses {Kits.InProse(kit)}, which isn't allowed (rule 8)";
+        }
+
+        foreach (var problem in DietChecks.Check(recipe, context).Problems)
+        {
+            yield return problem.ForModel + " (rule 9)";
         }
     }
 
     /// <summary>Kit the method still uses after the retry, as "Check before cooking" warnings (#111).</summary>
-    private static Recipe WithWarnings(Recipe recipe, RecipeRequest request) =>
-        recipe with { Warnings = [.. Kits.NotAllowed(recipe.Steps, recipe.Equipment ?? [], request.AllowedKit).Select(Kits.Warning)] };
+    private static Recipe WithWarnings(Recipe recipe, RecipeRequest request)
+    {
+        var diet = DietChecks.Check(recipe, request);
+        return recipe with
+        {
+            Warnings =
+            [
+                .. Kits.NotAllowed(recipe.Steps.Select(s => s.Text), recipe.Equipment ?? [], request.AllowedKit).Select(Kits.Warning),
+                .. diet.Problems.Select(p => p.ForPeople),
+                .. diet.Warnings,
+            ],
+            Diet = request.Diet,
+        };
+    }
 
     /// <summary>The user message: the choices, the stock, and the comments in their own delimited section.</summary>
     internal static string Prompt(RecipeRequest request)
@@ -661,7 +772,11 @@ public sealed partial class FoundryRecipeGenerator(
             }
         }
 
-        text.AppendLine().AppendLine("Stock (ref | name | quantity | estimated expiry | use first | aisle | opened):");
+        // Veggie and half & half (#110) need to know what's meat or fish: the last column then.
+        var animal = request.Diet != Diet.Any;
+        text.AppendLine().AppendLine(animal
+            ? "Stock (ref | name | quantity | estimated expiry | use first | aisle | opened | meat or fish):"
+            : "Stock (ref | name | quantity | estimated expiry | use first | aisle | opened):");
         for (var i = 0; i < request.Stock.Count; i++)
         {
             var item = request.Stock[i];
@@ -670,7 +785,13 @@ public sealed partial class FoundryRecipeGenerator(
                 .Append(Expiry(item.DaysUntilSoonest)).Append(" | ")
                 .Append(item.UseFirst ? "use first" : "-").Append(" | ")
                 .Append(item.AisleName).Append(" | ")
-                .AppendLine(item.OpenedCount > 0 ? $"{item.OpenedCount} opened" : "-");
+                .Append(item.OpenedCount > 0 ? $"{item.OpenedCount} opened" : "-");
+            if (animal)
+            {
+                text.Append(" | ").Append(item.AnimalContent is { } c ? AnimalContents.Id(c) : "unknown");
+            }
+
+            text.AppendLine();
         }
 
         if (request.Comments is { } comments)
@@ -697,8 +818,10 @@ public sealed partial class FoundryRecipeGenerator(
             }
 
             var productId = node?["productId"] is JsonValue p && p.TryGetValue<string>(out var reference) ? Resolve(reference, request) : null;
-            ingredients.Add(new RecipeIngredient(name, Clean(node?["amount"], 40) ?? "", productId));
+            ingredients.Add(new RecipeIngredient(name, Clean(node?["amount"], 40) ?? "", productId, Plate(node, request)));
         }
+
+        var half = request.Diet == Diet.Half;
 
         var used = ingredients.Where(i => i.ProductId is not null).Select(i => i.ProductId!.Value).ToHashSet();
         return new Recipe(
@@ -708,13 +831,25 @@ public sealed partial class FoundryRecipeGenerator(
             Math.Clamp(Int(answer["servings"]) ?? 2, 1, 12),
             Math.Clamp(Int(answer["totalMinutes"]) ?? 30, 1, 600),
             [.. ingredients.Take(MaxIngredients)],
-            [.. Strings(answer["steps"], MaxStep).Take(MaxSteps)],
+            [.. Items(answer["steps"], "text", MaxStep, request).Take(MaxSteps).Select(x => new RecipeStep(x.Text, x.For))],
             [.. Refs(answer["usesUp"]).Select(s => Resolve(s, request) ?? Guid.Empty)
                 .Where(used.Contains).Distinct()],
-            [.. Strings(answer["alsoNeeded"], 60).Take(MaxAlsoNeeded)],
+            [.. Items(answer["alsoNeeded"], "name", 60, request).Take(MaxAlsoNeeded).Select(x => new ExtraItem(x.Text, x.For))],
             [.. request.IncludeProductIds.Where(id => !used.Contains(id))],
-            Equipment: [.. Strings(answer["equipment"], 20).Select(Kits.Parse).OfType<Kit>().Distinct()]);
+            Equipment: [.. Strings(answer["equipment"], 20).Select(Kits.Parse).OfType<Kit>().Distinct()],
+            Diet: request.Diet,
+            ServingsMeat: half ? Math.Max(0, Int(answer["servingsMeat"]) ?? 0) : 0,
+            ServingsVeg: half ? Math.Max(0, Int(answer["servingsVeg"]) ?? 0) : 0);
     }
+
+    /// <summary>Which plates (#110): only half &amp; half has sides; everything else is for everyone.</summary>
+    private static PlateFor Plate(JsonNode? node, RecipeRequest request) =>
+        request.Diet == Diet.Half ? Diets.ParsePlate(Clean(node?["for"], 10)) : PlateFor.All;
+
+    /// <summary>Steps or extra items: objects with a text field and for (#110), or plain strings (older answers).</summary>
+    private static IEnumerable<(string Text, PlateFor For)> Items(JsonNode? node, string field, int max, RecipeRequest request) =>
+        (node as JsonArray ?? []).Select(n => n is JsonObject o ? (Clean(o[field], max), Plate(o, request)) : (Clean(n, max), PlateFor.All))
+            .Where(x => x.Item1 is not null).Select(x => (x.Item1!, x.Item2));
 
     private async Task<(string? Content, int PromptTokens, int CompletionTokens, string? Failure)> CallAsync(
         JsonArray messages, double temperature, JsonObject schema, CancellationToken cancellationToken)

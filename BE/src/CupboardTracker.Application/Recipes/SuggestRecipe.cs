@@ -7,10 +7,10 @@ namespace CupboardTracker.Application.Recipes;
 /// <summary>What the household chose on the Hungry? form (#73, #88).</summary>
 public sealed record RecipeChoices(
     RecipeMeal Meal, bool PreferUseFirst, IReadOnlyList<Guid> IncludeProductIds, string? Comments, IReadOnlyList<string> AvoidTitles,
-    RecipeMode Mode = RecipeMode.Cook, IReadOnlySet<Kit>? Equipment = null);
+    RecipeMode Mode = RecipeMode.Cook, IReadOnlySet<Kit>? Equipment = null, Diet Diet = Diet.Any);
 
 /// <summary>An ingredient as the app shows it: in-stock ones carry the product's current name and use-first flag.</summary>
-public sealed record RecipeIngredientView(string Name, string Amount, Guid? ProductId, bool UseFirst);
+public sealed record RecipeIngredientView(string Name, string Amount, Guid? ProductId, bool UseFirst, PlateFor For = PlateFor.All);
 
 /// <summary>An in-stock product the recipe uses up, with what its badge needs.</summary>
 public sealed record RecipeProductView(Guid ProductId, string DisplayName, int? DaysUntilSoonest, DateOnly? SoonestEstimatedExpiryDate);
@@ -24,21 +24,25 @@ public sealed record RecipeView(
     int Servings,
     int TotalMinutes,
     IReadOnlyList<RecipeIngredientView> Ingredients,
-    IReadOnlyList<string> Steps,
+    IReadOnlyList<RecipeStep> Steps,
     IReadOnlyList<RecipeProductView> UsesUp,
-    IReadOnlyList<string> AlsoNeeded,
+    IReadOnlyList<ExtraItem> AlsoNeeded,
     IReadOnlyList<string> CouldNotFitIn,
     IReadOnlyList<string>? CouldNotAdd = null,
     IReadOnlyList<string>? CouldNotRemove = null,
     IReadOnlyList<Kit>? Equipment = null,
-    IReadOnlyList<string>? Warnings = null);
+    IReadOnlyList<string>? Warnings = null,
+    Diet Diet = Diet.Any,
+    int ServingsMeat = 0,
+    int ServingsVeg = 0);
 
 /// <summary>An in-stock product a Ready now idea uses, with what its link and dot need.</summary>
 public sealed record QuickIdeaProductView(
     Guid ProductId, string DisplayName, bool UseFirst, int? DaysUntilSoonest, DateOnly? SoonestEstimatedExpiryDate);
 
 public sealed record QuickIdeaView(
-    string Title, string How, Appliance Appliance, int Minutes, IReadOnlyList<QuickIdeaProductView> Uses, string? AlsoNeeded);
+    string Title, string How, Appliance Appliance, int Minutes, IReadOnlyList<QuickIdeaProductView> Uses, string? AlsoNeeded,
+    Diet Diet = Diet.Any);
 
 public abstract record SuggestRecipeResult
 {
@@ -54,6 +58,9 @@ public abstract record SuggestRecipeResult
     public sealed record TooManyRequests : SuggestRecipeResult;
 
     public sealed record Unavailable : SuggestRecipeResult;
+
+    /// <summary>Veggie Ready now (#110): no idea was vegetarian.</summary>
+    public sealed record NoVeggieIdeas : SuggestRecipeResult;
 }
 
 /// <summary>
@@ -79,6 +86,11 @@ public sealed partial class SuggestRecipe(
         if (choices.IncludeProductIds.Count > MaxIncluded)
         {
             return new SuggestRecipeResult.Invalid($"Pick at most {MaxIncluded} ingredients.");
+        }
+
+        if (choices.Mode == RecipeMode.ReadyNow && choices.Diet == Diet.Half)
+        {
+            return new SuggestRecipeResult.Invalid("Half & half is for Cook something only.");
         }
 
         var view = await stock.ExecuteAsync(cancellationToken);
@@ -110,24 +122,31 @@ public sealed partial class SuggestRecipe(
             comments,
             [.. choices.AvoidTitles.Select(t => t.Trim()).Where(t => t.Length > 0)
                 .Select(t => t.Length > MaxTitleLength ? t[..MaxTitleLength] : t).TakeLast(MaxAvoidTitles)],
-            choices.Equipment);
+            choices.Equipment,
+            choices.Diet);
 
         if (choices.Mode == RecipeMode.ReadyNow)
         {
             var ideas = await generator.SuggestQuickIdeasAsync(request, cancellationToken);
+            if (ideas is QuickIdeasResult.Unavailable { Reason: QuickIdeasResult.NoVeggieIdeas })
+            {
+                LogUnavailable(choices.Mode, choices.Meal, comments is not null, QuickIdeasResult.NoVeggieIdeas);
+                return new SuggestRecipeResult.NoVeggieIdeas();
+            }
+
             if (ideas is not QuickIdeasResult.Suggested { Ideas: var list })
             {
                 LogUnavailable(choices.Mode, choices.Meal, comments is not null, ((QuickIdeasResult.Unavailable)ideas).Reason);
                 return new SuggestRecipeResult.Unavailable();
             }
 
-            var views = list.Select(i => ToView(i, byId)).ToList();
+            var views = list.Select(i => ToView(i, byId) with { Diet = choices.Diet }).ToList();
             if (choices.PreferUseFirst)
             {
                 views = [.. views.OrderBy(v => v.Uses.Any(u => u.UseFirst) ? 0 : 1)]; // stable: the model's order otherwise
             }
 
-            LogIdeas(choices.Meal, comments is not null, include.Count, views.Count);
+            LogIdeas(choices.Meal, comments is not null, include.Count, views.Count, Diets.Id(choices.Diet));
             return new SuggestRecipeResult.IdeasSuggested(choices.Meal, views);
         }
 
@@ -139,7 +158,7 @@ public sealed partial class SuggestRecipe(
         }
 
         LogSuggested(choices.Meal, comments is not null, include.Count, recipe.CouldNotFitIn.Count,
-            string.Join(",", request.AllowedKit.Order().Select(Kits.Id)), recipe.Warnings is { Count: > 0 });
+            string.Join(",", request.AllowedKit.Order().Select(Kits.Id)), recipe.Warnings is { Count: > 0 }, Diets.Id(choices.Diet));
         return new SuggestRecipeResult.Suggested(ToView(recipe, byId));
     }
 
@@ -159,23 +178,26 @@ public sealed partial class SuggestRecipe(
         recipe.Servings,
         recipe.TotalMinutes,
         [.. recipe.Ingredients.Select(i => i.ProductId is { } id && byId.TryGetValue(id, out var p)
-            ? new RecipeIngredientView(p.DisplayName, i.Amount, id, p.UseFirst)
-            : new RecipeIngredientView(i.Name, i.Amount, null, false))],
+            ? new RecipeIngredientView(p.DisplayName, i.Amount, id, p.UseFirst, i.For)
+            : new RecipeIngredientView(i.Name, i.Amount, null, false, i.For))],
         recipe.Steps,
         [.. recipe.UsesUp.Where(byId.ContainsKey).Select(id => byId[id])
             .Select(p => new RecipeProductView(p.ProductId, p.DisplayName, p.DaysUntilSoonest, p.SoonestEstimatedExpiryDate))],
         recipe.AlsoNeeded,
         [.. recipe.CouldNotFitIn.Where(byId.ContainsKey).Select(id => byId[id].DisplayName)],
         Equipment: recipe.Equipment ?? [],
-        Warnings: recipe.Warnings ?? []);
+        Warnings: recipe.Warnings ?? [],
+        Diet: recipe.Diet,
+        ServingsMeat: recipe.ServingsMeat,
+        ServingsVeg: recipe.ServingsVeg);
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Recipe suggested: meal {Meal}, comments given {CommentsGiven}, {Included} included, {NotFitted} couldn't be fitted in, equipment {Equipment}, warning {Warned}.")]
-    private partial void LogSuggested(RecipeMeal meal, bool commentsGiven, int included, int notFitted, string equipment, bool warned);
+        Message = "Recipe suggested: meal {Meal}, comments given {CommentsGiven}, {Included} included, {NotFitted} couldn't be fitted in, equipment {Equipment}, warning {Warned}, diet {Diet}.")]
+    private partial void LogSuggested(RecipeMeal meal, bool commentsGiven, int included, int notFitted, string equipment, bool warned, string diet);
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Ready now ideas suggested: meal {Meal}, comments given {CommentsGiven}, {Included} included, {Ideas} ideas.")]
-    private partial void LogIdeas(RecipeMeal meal, bool commentsGiven, int included, int ideas);
+        Message = "Ready now ideas suggested: meal {Meal}, comments given {CommentsGiven}, {Included} included, {Ideas} ideas, diet {Diet}.")]
+    private partial void LogIdeas(RecipeMeal meal, bool commentsGiven, int included, int ideas, string diet);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Recipe unavailable: mode {Mode}, meal {Meal}, comments given {CommentsGiven} ({Reason}); the app says try again.")]

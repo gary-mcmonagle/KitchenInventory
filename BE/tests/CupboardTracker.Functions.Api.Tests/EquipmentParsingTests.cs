@@ -45,4 +45,47 @@ public sealed class EquipmentParsingTests
 
         Assert.NotNull(RecipeFunctions.Parse(Encoding.UTF8.GetBytes("""{"meal":"dinner","equipment":[]}""")).Error);
     }
+
+    // ---- Meat or veg? (#110)
+
+    [Fact]
+    public void Diet_is_any_when_missing_and_half_is_cook_only()
+    {
+        Assert.Equal(Diet.Any, RecipeFunctions.Parse(Encoding.UTF8.GetBytes("""{"meal":"dinner"}""")).Choices!.Diet);
+        Assert.Equal(Diet.Veg, RecipeFunctions.Parse(Encoding.UTF8.GetBytes("""{"meal":"dinner","mode":"readyNow","diet":"veg"}""")).Choices!.Diet);
+        Assert.Equal(Diet.Half, RecipeFunctions.Parse(Encoding.UTF8.GetBytes("""{"meal":"dinner","diet":"half"}""")).Choices!.Diet);
+        Assert.NotNull(RecipeFunctions.Parse(Encoding.UTF8.GetBytes("""{"meal":"dinner","mode":"readyNow","diet":"half"}""")).Error);
+        Assert.NotNull(RecipeFunctions.Parse(Encoding.UTF8.GetBytes("""{"meal":"dinner","diet":"vegan"}""")).Error);
+    }
+
+    [Fact]
+    public void Adjust_reads_the_diet_and_the_new_recipe_shapes_with_old_string_steps_still_accepted()
+    {
+        var (adjust, error) = RecipeFunctions.ParseAdjust(Encoding.UTF8.GetBytes("""
+            {"recipe":{"title":"Pasta","summary":"","meal":"dinner","servings":2,"servingsMeat":1,"servingsVeg":1,"totalMinutes":20,"diet":"half",
+                       "ingredients":[{"name":"Bacon","amount":"2","productId":null,"for":"meat"}],
+                       "steps":[{"text":"Fry the bacon.","for":"meat"},"Cook it."],"alsoNeeded":[{"name":"1 onion","for":"all"}]},
+             "tweak":"add bacon","diet":"half"}
+            """));
+
+        Assert.Null(error);
+        Assert.Equal(Diet.Half, adjust!.Diet);
+        Assert.Equal([new RecipeStep("Fry the bacon.", PlateFor.Meat), new RecipeStep("Cook it.")], adjust.Current.Steps);
+        Assert.Equal(PlateFor.Meat, adjust.Current.Ingredients[0].For);
+        Assert.Equal((1, 1), (adjust.Current.ServingsMeat, adjust.Current.ServingsVeg));
+    }
+
+    [Fact]
+    public void Idea_adjust_refuses_half_and_half() =>
+        Assert.NotNull(IdeaAdjustFunctions.Parse(Encoding.UTF8.GetBytes("""
+            {"idea":{"title":"x","how":"y","appliance":"toaster","uses":[]},"meal":"snack","tweak":"z","diet":"half"}
+            """)).Error);
+
+    [Fact]
+    public void No_veggie_ideas_is_a_friendly_200()
+    {
+        var (status, body) = RecipeFunctions.ToResponse(new SuggestRecipeResult.NoVeggieIdeas());
+        Assert.Equal(System.Net.HttpStatusCode.OK, status);
+        Assert.Contains("find veggie ideas in your stock.", JsonSerializer.Serialize(body), StringComparison.Ordinal);
+    }
 }

@@ -85,17 +85,6 @@ public sealed class SavedRecipeFunctions(SavedRecipeUseCases saved)
 
         string? Text(JsonElement o, string name) => o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         int? Number(string name) => root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n) ? n : null;
-        List<string>? Strings(string name)
-        {
-            if (!root.TryGetProperty(name, out var v) || v.ValueKind == JsonValueKind.Null)
-            {
-                return [];
-            }
-
-            return v.ValueKind == JsonValueKind.Array && v.EnumerateArray().All(e => e.ValueKind == JsonValueKind.String)
-                ? [.. v.EnumerateArray().Select(e => e.GetString()!)]
-                : null;
-        }
 
         var kind = Text(root, "kind");
         RecipeMeal? meal = Text(root, "meal") switch
@@ -109,9 +98,9 @@ public sealed class SavedRecipeFunctions(SavedRecipeUseCases saved)
         var listName = kind == SavedRecipeKinds.ReadyNow ? "uses" : "ingredients";
         if (Text(root, "title") is not { } title || meal is null || Number("totalMinutes") is not { } minutes
             || !root.TryGetProperty(listName, out var list) || list.ValueKind != JsonValueKind.Array
-            || Strings("steps") is not { } steps || Strings("alsoNeeded") is not { } also)
+            || RecipeFunctions.PlateItems(root, "steps", "text") is not { } steps || RecipeFunctions.PlateItems(root, "alsoNeeded", "name") is not { } also)
         {
-            return (null, $"Body must be {{ kind, title, meal, totalMinutes, {listName}: [{{ name, amount?, productId?, genericName? }}], steps?, alsoNeeded?, how?, appliance?, note? }}.");
+            return (null, $"Body must be {{ kind, title, meal, totalMinutes, {listName}: [{{ name, amount?, productId?, genericName?, for? }}], steps?: [{{ text, for }}], alsoNeeded?: [{{ name, for }}], how?, appliance?, note?, diet?, servingsMeat?, servingsVeg? }}.");
         }
 
         var ingredients = new List<SavedIngredient>();
@@ -123,11 +112,19 @@ public sealed class SavedRecipeFunctions(SavedRecipeUseCases saved)
             }
 
             ingredients.Add(new SavedIngredient(name, Text(i, "amount"),
-                Guid.TryParse(Text(i, "productId"), out var p) ? p : null, Text(i, "genericName")));
+                Guid.TryParse(Text(i, "productId"), out var p) ? p : null, Text(i, "genericName"), Diets.ParsePlate(Text(i, "for"))));
         }
 
-        return (new SaveRecipeRequest(id, kind ?? "", title, meal.Value, minutes, Number("servings"), ingredients, steps, also,
-            Text(root, "how"), Text(root, "appliance"), Text(root, "note"), Text(root, "originalTitle")), null);
+        var (diet, dietError) = RecipeFunctions.ParseDiet(root);
+        if (dietError is not null)
+        {
+            return (null, dietError);
+        }
+
+        return (new SaveRecipeRequest(id, kind ?? "", title, meal.Value, minutes, Number("servings"), ingredients,
+            [.. steps.Select(x => new RecipeStep(x.Text, x.For))], [.. also.Select(x => new ExtraItem(x.Text, x.For))],
+            Text(root, "how"), Text(root, "appliance"), Text(root, "note"), Text(root, "originalTitle"),
+            diet, Number("servingsMeat") ?? 0, Number("servingsVeg") ?? 0), null);
     }
 
     internal static object ToJson(SavedRecipeView view)
@@ -139,6 +136,7 @@ public sealed class SavedRecipeFunctions(SavedRecipeUseCases saved)
             amount = i.Amount,
             productId = i.ProductId,
             genericName = i.GenericName,
+            @for = Diets.Id(i.For),
             status = s switch { IngredientStatus.Have => "have", IngredientStatus.UseFirst => "useFirst", _ => "missing" },
         });
         return new
@@ -151,8 +149,11 @@ public sealed class SavedRecipeFunctions(SavedRecipeUseCases saved)
             totalMinutes = r.TotalMinutes,
             servings = r.Servings,
             ingredients = items,
-            steps = r.Steps,
-            alsoNeeded = r.AlsoNeeded,
+            steps = r.Steps.Select(st => new { text = st.Text, @for = Diets.Id(st.For) }),
+            alsoNeeded = r.AlsoNeeded.Select(a => new { name = a.Name, @for = Diets.Id(a.For) }),
+            diet = Diets.Id(r.Diet),
+            servingsMeat = r.ServingsMeat,
+            servingsVeg = r.ServingsVeg,
             how = r.How,
             appliance = r.Appliance,
             note = r.Note,

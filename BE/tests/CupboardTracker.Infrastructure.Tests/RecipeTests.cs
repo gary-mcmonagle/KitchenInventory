@@ -130,7 +130,9 @@ public sealed class FoundryRecipeGeneratorTests
             schema["properties"]!.AsObject().Select(p => p.Key).Order(),
             schema["required"]!.AsArray().Select(r => r!.GetValue<string>()).Order());
         var ingredient = schema["properties"]!["ingredients"]!["items"]!;
-        Assert.Equal(["name", "amount", "productId"], ingredient["required"]!.AsArray().Select(r => r!.GetValue<string>()));
+        Assert.Equal(["name", "amount", "productId", "for"], ingredient["required"]!.AsArray().Select(r => r!.GetValue<string>()));
+        Assert.Equal(["text", "for"], schema["properties"]!["steps"]!["items"]!["required"]!.AsArray().Select(r => r!.GetValue<string>()));
+        Assert.Equal(["name", "for"], schema["properties"]!["alsoNeeded"]!["items"]!["required"]!.AsArray().Select(r => r!.GetValue<string>()));
         Assert.Equal(["string", "null"], ingredient["properties"]!["productId"]!["type"]!.AsArray().Select(t => t!.GetValue<string>()));
     }
 
@@ -186,7 +188,7 @@ public sealed class FoundryRecipeGeneratorTests
             ],
             recipe.Ingredients);
         Assert.Equal([Milk], recipe.UsesUp);
-        Assert.Equal(["1 onion", "1 garlic clove"], recipe.AlsoNeeded);
+        Assert.Equal(["1 onion", "1 garlic clove"], recipe.AlsoNeeded.Select(a => a.Name));
         Assert.Empty(recipe.CouldNotFitIn);
     }
 
@@ -211,8 +213,8 @@ public sealed class FoundryRecipeGeneratorTests
 
         Assert.Equal(80, recipe.Title.Length);
         Assert.Equal(15, recipe.Steps.Count);
-        Assert.All(recipe.Steps, s => Assert.True(s.Length <= 300));
-        Assert.Equal(["a", "b", "c"], recipe.AlsoNeeded);
+        Assert.All(recipe.Steps, s => Assert.True(s.Text.Length <= 300));
+        Assert.Equal(["a", "b", "c"], recipe.AlsoNeeded.Select(a => a.Name));
         Assert.Equal((12, 1), (recipe.Servings, recipe.TotalMinutes));
         Assert.Equal(RecipeMeal.Dinner, recipe.Meal); // the meal asked for, whatever the model says
     }
@@ -435,7 +437,7 @@ public sealed class FoundryRecipeGeneratorTests
         "Creamy cheddar penne", "A quick pasta.", RecipeMeal.Dinner, 2, 25,
         [new RecipeIngredient("Wholewheat penne", "200 g", Penne), new RecipeIngredient("Onion", "1", null),
          new RecipeIngredient("Old product", "1", Guid.Parse("88888888-8888-8888-8888-888888888888"))],
-        ["Cook the penne.", "Soften the onion."], [], ["1 garlic clove"], []);
+        [new("Cook the penne."), new("Soften the onion.")], [], [new("1 garlic clove")], []);
 
     private static RecipeAdjustmentRequest Adjustment(
         IReadOnlyList<Guid>? add = null, IReadOnlyList<string>? typed = null, IReadOnlyList<RecipeIngredient>? remove = null, string? tweak = null) =>
@@ -690,9 +692,111 @@ public sealed class FoundryRecipeGeneratorTests
 
         var recipe = Assert.IsType<RecipeResult.Suggested>(await generator.SuggestAsync(Request(), CancellationToken.None)).Recipe;
 
-        Assert.Equal("Cook the penne for 10–12 minutes.", recipe.Steps[0]);
-        Assert.DoesNotContain(recipe.AlsoNeeded, a => a.StartsWith('p'));
+        Assert.Equal("Cook the penne for 10–12 minutes.", recipe.Steps[0].Text);
+        Assert.DoesNotContain(recipe.AlsoNeeded, a => a.Name.StartsWith('p'));
         Assert.Contains(recipe.Ingredients, i => i.ProductId == Penne);
+    }
+
+    // ---- Meat or veg? (#110)
+
+    private static readonly Guid Bacon = Guid.Parse("44444444-4444-4444-4444-444444444444");
+
+    private static RecipeRequest DietRequest(Diet diet) => new(RecipeMeal.Dinner, false,
+        [.. Stock, new RecipeStockItem(Bacon, "Smoked back bacon", 1, 3, false, "Meat & fish", 0, Domain.Products.AnimalContent.Meat)],
+        [], null, [], Diet: diet);
+
+    private const string HalfAnswer = """
+        {"title":"Two-pan cheddar penne","summary":"One base, two finishes.","meal":"dinner","servings":2,"servingsMeat":1,"servingsVeg":1,
+         "totalMinutes":25,"equipment":["hob"],
+         "ingredients":[
+           {"name":"Wholewheat penne","amount":"200 g","productId":"p2","for":"all"},
+           {"name":"Smoked back bacon","amount":"2 rashers","productId":"p4","for":"meat"},
+           {"name":"Mature cheddar","amount":"80 g","productId":"p3","for":"veg"}],
+         "steps":[{"text":"Cook the penne.","for":"all"},{"text":"Fry the bacon and stir it into one half.","for":"meat"},{"text":"Stir the cheddar into the other half.","for":"veg"}],
+         "usesUp":[],
+         "alsoNeeded":[{"name":"1 tsp Worcestershire sauce","for":"meat"}]}
+        """;
+
+    [Fact]
+    public async Task Half_and_half_sends_its_rule_and_the_meat_column_and_reads_the_sides()
+    {
+        var (generator, handler, _) = Make(Options, () => Status(200, Answer(HalfAnswer)));
+
+        var recipe = Assert.IsType<RecipeResult.Suggested>(await generator.SuggestAsync(DietRequest(Diet.Half), CancellationToken.None)).Recipe;
+
+        Assert.Equal((Diet.Half, 1, 1), (recipe.Diet, recipe.ServingsMeat, recipe.ServingsVeg));
+        Assert.Equal([PlateFor.All, PlateFor.Meat, PlateFor.Veg], recipe.Ingredients.Select(i => i.For));
+        Assert.Equal([PlateFor.All, PlateFor.Meat, PlateFor.Veg], recipe.Steps.Select(st => st.For));
+        Assert.Equal(new ExtraItem("1 tsp Worcestershire sauce", PlateFor.Meat), Assert.Single(recipe.AlsoNeeded));
+        Assert.Empty(recipe.Warnings!);
+        Assert.Single(handler.Requests);
+        var messages = JsonNode.Parse(handler.Requests[0].Body)!["messages"]!.AsArray();
+        Assert.Contains("9. Half and half: ONE meal for a mixed table", messages[0]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
+        var prompt = messages[1]!["content"]!.GetValue<string>();
+        Assert.Contains("| opened | meat or fish):", prompt, StringComparison.Ordinal);
+        Assert.Contains("Smoked back bacon | 1 | in 3 days | - | Meat & fish | - | meat", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Meat_and_veg_has_no_diet_rule_no_meat_column_and_everything_for_everyone()
+    {
+        var (generator, handler, _) = Make(Options, () => Status(200, Answer(HalfAnswer)));
+
+        var recipe = Assert.IsType<RecipeResult.Suggested>(await generator.SuggestAsync(DietRequest(Diet.Any), CancellationToken.None)).Recipe;
+
+        Assert.All(recipe.Ingredients, i => Assert.Equal(PlateFor.All, i.For));
+        Assert.Equal((0, 0), (recipe.ServingsMeat, recipe.ServingsVeg));
+        var messages = JsonNode.Parse(handler.Requests[0].Body)!["messages"]!.AsArray();
+        Assert.DoesNotContain("9. ", messages[0]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.DoesNotContain("meat or fish):", messages[1]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_veggie_recipe_with_meat_is_asked_for_again_once_then_comes_with_warnings()
+    {
+        var meaty = HalfAnswer.Replace("\"for\":\"meat\"", "\"for\":\"all\"", StringComparison.Ordinal);
+        var (generator, handler, _) = Make(Options, () => Status(200, Answer(meaty)), () => Status(200, Answer(meaty)));
+
+        var recipe = Assert.IsType<RecipeResult.Suggested>(await generator.SuggestAsync(DietRequest(Diet.Veg), CancellationToken.None)).Recipe;
+
+        Assert.Equal(2, handler.Requests.Count);
+        var retry = JsonNode.Parse(handler.Requests[1].Body)!["messages"]!.AsArray()[3]!["content"]!.GetValue<string>();
+        Assert.Contains("Smoked back bacon is meat (rule 9)", retry, StringComparison.Ordinal);
+        Assert.Contains("Smoked back bacon is meat, which isn't vegetarian.", recipe.Warnings!);
+        Assert.Contains("Worcestershire sauce usually contains anchovies, which isn't vegetarian.", recipe.Warnings!);
+        Assert.Contains("9. Veggie: everything must be vegetarian", JsonNode.Parse(handler.Requests[0].Body)!["messages"]![0]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Veggie_ideas_that_still_use_meat_after_a_retry_are_dropped_and_none_left_is_no_veggie_ideas()
+    {
+        var mixed = Ideas(Idea("Bacon toastie", uses: "\"p4\""), Idea("Cheese on toast", uses: "\"p3\""));
+        var (generator, handler, _) = Make(Options, () => Status(200, Answer(mixed)), () => Status(200, Answer(mixed)));
+
+        var ideas = Assert.IsType<QuickIdeasResult.Suggested>(await generator.SuggestQuickIdeasAsync(DietRequest(Diet.Veg), CancellationToken.None)).Ideas;
+
+        Assert.Equal(["Cheese on toast"], ideas.Select(i => i.Title));
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("'Bacon toastie': Smoked back bacon is meat", JsonNode.Parse(handler.Requests[1].Body)!["messages"]!.AsArray()[3]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
+
+        var allMeat = Ideas(Idea("Bacon toastie", uses: "\"p4\""));
+        var (none, _, _) = Make(Options, () => Status(200, Answer(allMeat)), () => Status(200, Answer(allMeat)));
+        Assert.Equal(new QuickIdeasResult.Unavailable(QuickIdeasResult.NoVeggieIdeas),
+            await none.SuggestQuickIdeasAsync(DietRequest(Diet.Veg), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task An_adjusted_veggie_idea_comes_back_with_warnings_when_it_still_uses_meat()
+    {
+        var answer = OneIdea("Bacon toastie", "Toast the bacon in.", "toaster", "\"p4\"");
+        var (generator, handler, _) = Make(Options, () => Status(200, Answer(answer)), () => Status(200, Answer(answer)));
+        var request = new IdeaAdjustmentRequest(DietRequest(Diet.Veg),
+            new QuickIdea("Cheese on toast", "Toast it.", Appliance.Toaster, 4, [Cheddar], null), new RecipeChanges([], [], [], "add bacon"));
+
+        var adjusted = Assert.IsType<IdeaResult.Adjusted>(await generator.AdjustIdeaAsync(request, CancellationToken.None));
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("Smoked back bacon is meat, which isn't vegetarian.", adjusted.Warnings!);
     }
 }
 

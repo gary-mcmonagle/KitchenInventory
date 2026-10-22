@@ -126,7 +126,7 @@ public sealed partial class SuggestRecipeAdditions(
 
     internal static RecipeSketch Sketch(Recipe recipe)
     {
-        var method = string.Join(" ", recipe.Steps).ReplaceLineEndings(" ");
+        var method = string.Join(" ", recipe.Steps.Select(s => s.Text)).ReplaceLineEndings(" ");
         if (method.Length > 300)
         {
             method = method[..300].TrimEnd() + "…";

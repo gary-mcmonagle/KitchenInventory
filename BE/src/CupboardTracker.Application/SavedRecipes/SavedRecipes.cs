@@ -15,7 +15,7 @@ public static class SavedRecipeKinds
 
 /// <summary>An ingredient of a saved recipe, or an item a saved Ready now idea uses (#105). The generic name is
 /// recorded at save time, so it can still be matched to stock after that product is used up.</summary>
-public sealed record SavedIngredient(string Name, string? Amount, Guid? ProductId, string? GenericName);
+public sealed record SavedIngredient(string Name, string? Amount, Guid? ProductId, string? GenericName, PlateFor For = PlateFor.All);
 
 /// <summary>
 /// A recipe or Ready now idea the household saved (#105): a snapshot of what was shown, never regenerated. One shared
@@ -31,8 +31,8 @@ public sealed record SavedRecipe(
     int TotalMinutes,
     int? Servings,
     IReadOnlyList<SavedIngredient> Ingredients,
-    IReadOnlyList<string> Steps,
-    IReadOnlyList<string> AlsoNeeded,
+    IReadOnlyList<RecipeStep> Steps,
+    IReadOnlyList<ExtraItem> AlsoNeeded,
     string? How,
     string? Appliance,
     string Note,
@@ -40,7 +40,10 @@ public sealed record SavedRecipe(
     string SavedByName,
     DateTimeOffset SavedAt,
     Guid UpdatedBy,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Diet Diet = Diet.Any,
+    int ServingsMeat = 0,
+    int ServingsVeg = 0);
 
 /// <summary>The savedRecipes container (#105): one household partition.</summary>
 public interface ISavedRecipeRepository
@@ -159,12 +162,15 @@ public sealed record SaveRecipeRequest(
     int TotalMinutes,
     int? Servings,
     IReadOnlyList<SavedIngredient> Ingredients,
-    IReadOnlyList<string> Steps,
-    IReadOnlyList<string> AlsoNeeded,
+    IReadOnlyList<RecipeStep> Steps,
+    IReadOnlyList<ExtraItem> AlsoNeeded,
     string? How,
     string? Appliance,
     string? Note = null,
-    string? OriginalTitle = null);
+    string? OriginalTitle = null,
+    Diet Diet = Diet.Any,
+    int ServingsMeat = 0,
+    int ServingsVeg = 0);
 
 public abstract record SavedRecipeResult
 {
@@ -228,12 +234,13 @@ public sealed partial class SavedRecipeUseCases(
             request.Id, request.Kind, title, Cap((request.OriginalTitle ?? title).Trim(), MaxTitle), request.Meal,
             Math.Clamp(request.TotalMinutes, 1, 600), request.Kind == SavedRecipeKinds.Recipe ? Math.Clamp(request.Servings ?? 2, 1, 12) : null,
             ingredients,
-            [.. request.Steps.Select(s => Cap(s.Trim(), MaxText)).Where(s => s.Length > 0)],
-            [.. request.AlsoNeeded.Select(a => Cap(a.Trim(), 60)).Where(a => a.Length > 0)],
+            [.. request.Steps.Select(s => s with { Text = Cap(s.Text.Trim(), MaxText) }).Where(s => s.Text.Length > 0)],
+            [.. request.AlsoNeeded.Select(a => a with { Name = Cap(a.Name.Trim(), 60) }).Where(a => a.Name.Length > 0)],
             request.How is null ? null : Cap(request.How.Trim(), MaxText),
             request.Appliance,
             Cap((request.Note ?? "").Trim(), MaxNote),
-            user.ObjectId, user.DisplayName, now, user.ObjectId, now);
+            user.ObjectId, user.DisplayName, now, user.ObjectId, now,
+            request.Diet, request.Diet == Diet.Half ? request.ServingsMeat : 0, request.Diet == Diet.Half ? request.ServingsVeg : 0);
         if (!await repository.TryCreateAsync(recipe, cancellationToken))
         {
             var raced = await repository.GetAsync(request.Id, cancellationToken);

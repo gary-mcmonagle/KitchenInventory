@@ -78,7 +78,7 @@ public sealed class RecipeFunctionsTests
         var milk = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var recipe = new RecipeView("Penne", "Quick.", RecipeMeal.Dinner, 2, 25,
             [new("Semi-skimmed milk", "300 ml", milk, true), new("Oil", "1 tbsp", null, false)],
-            ["Cook."], [new(milk, "Semi-skimmed milk", 2, new DateOnly(2026, 10, 20))], ["1 onion"], ["Cheddar"]);
+            [new("Cook.")], [new(milk, "Semi-skimmed milk", 2, new DateOnly(2026, 10, 20))], [new("1 onion")], ["Cheddar"]);
 
         var (status, body) = RecipeFunctions.ToResponse(new SuggestRecipeResult.Suggested(recipe));
 
@@ -186,7 +186,7 @@ public sealed class RecipeFunctionsTests
     [Fact]
     public void Adjustment_responses()
     {
-        var view = new RecipeView("Spicy penne", "Quick.", RecipeMeal.Dinner, 2, 25, [], ["Cook it."], [], [], [], ["Chorizo"], ["Onion"]);
+        var view = new RecipeView("Spicy penne", "Quick.", RecipeMeal.Dinner, 2, 25, [], [new("Cook it.")], [], [], [], ["Chorizo"], ["Onion"]);
         var (status, body) = RecipeFunctions.ToResponse(new AdjustRecipeResult.Adjusted(view, new AdjustmentSummary(["Chorizo"], ["Onion"], "spicier")));
         var json = JsonSerializer.SerializeToElement(body, WebJson);
 

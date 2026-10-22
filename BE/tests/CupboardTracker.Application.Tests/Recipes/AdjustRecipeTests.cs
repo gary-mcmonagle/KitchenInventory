@@ -43,7 +43,7 @@ public sealed class AdjustRecipeTests
 
     private static Recipe Current(params RecipeIngredient[] ingredients) =>
         new("Creamy chicken penne", "A quick pasta.", RecipeMeal.Dinner, 2, 25, ingredients,
-            ["Cook the penne.", "Fry the chicken until cooked through.", "Stir in the cheddar."], [], ["1 garlic clove"], []);
+            [new("Cook the penne."), new("Fry the chicken until cooked through."), new("Stir in the cheddar.")], [], [new("1 garlic clove")], []);
 
     private static AdjustChoices Choices(
         Recipe current, IReadOnlyList<Guid>? add = null, IReadOnlyList<string>? typed = null, IReadOnlyList<string>? remove = null, string? tweak = null) =>

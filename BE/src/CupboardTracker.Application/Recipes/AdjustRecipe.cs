@@ -8,7 +8,7 @@ namespace CupboardTracker.Application.Recipes;
 /// add, things to add that aren't in stock, ingredient names to remove, and a tweak.</summary>
 public sealed record AdjustChoices(
     Recipe Current, IReadOnlyList<Guid> AddProductIds, IReadOnlyList<string> AddTyped, IReadOnlyList<string> Remove, string? Tweak,
-    IReadOnlySet<Kit>? Equipment = null);
+    IReadOnlySet<Kit>? Equipment = null, Diet Diet = Diet.Any);
 
 /// <summary>What changed, for the line under the meta: <c>Adjusted: + Chorizo · − Onion · "spicier"</c>.</summary>
 public sealed record AdjustmentSummary(IReadOnlyList<string> Added, IReadOnlyList<string> Removed, string? Tweak);
@@ -95,7 +95,8 @@ public sealed partial class AdjustRecipe(GetStock stock, IRecipeGenerator genera
             add,
             tweak,
             [],
-            choices.Equipment); // #111: an adjustment keeps the same kit
+            choices.Equipment, // #111: an adjustment keeps the same kit
+            choices.Diet); // #110: and the same diet
         var result = await generator.AdjustAsync(new RecipeAdjustmentRequest(context, choices.Current, changes), cancellationToken);
         if (result is not RecipeResult.Suggested { Recipe: var recipe })
         {

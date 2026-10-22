@@ -15,7 +15,7 @@ public sealed class SavedRecipeStorageTests
     {
         var recipe = new SavedRecipe(Guid.NewGuid(), SavedRecipeKinds.Recipe, "Sam's traybake", "Halloumi traybake", RecipeMeal.Dinner, 40, 2,
             [new SavedIngredient("Peppers", "2", Guid.NewGuid(), "Peppers"), new SavedIngredient("Salt", null, null, null)],
-            ["Heat the oven.", "Roast."], ["225 g halloumi"], null, null, "Halve the chilli", Guid.NewGuid(), "Sam", At, Guid.NewGuid(), At.AddHours(1));
+            [new("Heat the oven."), new("Roast.")], [new("225 g halloumi")], null, null, "Halve the chilli", Guid.NewGuid(), "Sam", At, Guid.NewGuid(), At.AddHours(1));
 
         var document = CosmosSavedRecipeRepository.ToDocument(recipe);
 
@@ -40,5 +40,31 @@ public sealed class SavedRecipeStorageTests
         Assert.Equal(("microwave", "Microwave the beans."), (document["appliance"]!.GetValue<string>(), document["how"]!.GetValue<string>()));
         Assert.Null(document["steps"]);
         Assert.Equal("Baked beans", CosmosSavedRecipeRepository.FromDocument(JsonNode.Parse(document.ToJsonString())!.AsObject()).Ingredients[0].Name);
+    }
+
+    [Fact]
+    public void A_half_and_half_recipe_keeps_its_sides_and_one_saved_before_110_reads_as_for_everyone()
+    {
+        var at = new DateTimeOffset(2026, 10, 22, 8, 0, 0, TimeSpan.Zero);
+        var recipe = new SavedRecipe(Guid.NewGuid(), SavedRecipeKinds.Recipe, "Two-pan chilli", "Two-pan chilli", RecipeMeal.Dinner, 40, 2,
+            [new SavedIngredient("Beef mince", "250 g", null, null, PlateFor.Meat)],
+            [new("Brown the mince.", PlateFor.Meat), new("Simmer the sauce.")], [new("1 tsp Worcestershire sauce", PlateFor.Meat)],
+            null, null, "", Guid.NewGuid(), "Sam", at, Guid.NewGuid(), at, Diet.Half, 1, 1);
+
+        var back = CosmosSavedRecipeRepository.FromDocument(JsonNode.Parse(CosmosSavedRecipeRepository.ToDocument(recipe).ToJsonString())!.AsObject());
+
+        Assert.Equal((Diet.Half, 1, 1), (back.Diet, back.ServingsMeat, back.ServingsVeg));
+        Assert.Equal(recipe.Steps, back.Steps);
+        Assert.Equal(recipe.AlsoNeeded, back.AlsoNeeded);
+        Assert.Equal(PlateFor.Meat, back.Ingredients[0].For);
+
+        var old = JsonNode.Parse("""
+            {"id":"0f8fad5b-d9cb-469f-a165-70867728950e","kind":"recipe","title":"Old","meal":"dinner","totalMinutes":20,"servings":2,
+             "ingredients":[{"name":"Penne","amount":"200 g"}],"steps":["Cook it."],"alsoNeeded":["1 onion"],"note":""}
+            """)!.AsObject();
+        var read = CosmosSavedRecipeRepository.FromDocument(old);
+        Assert.Equal([new RecipeStep("Cook it.")], read.Steps);
+        Assert.Equal([new ExtraItem("1 onion")], read.AlsoNeeded);
+        Assert.Equal(Diet.Any, read.Diet);
     }
 }

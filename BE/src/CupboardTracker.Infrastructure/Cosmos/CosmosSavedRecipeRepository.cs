@@ -77,6 +77,7 @@ public sealed class CosmosSavedRecipeRepository(CosmosContainers containers) : I
             ["amount"] = i.Amount,
             ["productId"] = i.ProductId?.ToString("D"),
             ["genericName"] = i.GenericName,
+            ["for"] = Diets.Id(i.For),
         })]);
         var d = new JsonObject
         {
@@ -89,7 +90,8 @@ public sealed class CosmosSavedRecipeRepository(CosmosContainers containers) : I
             ["meal"] = r.Meal.ToString().ToLowerInvariant(),
             ["totalMinutes"] = r.TotalMinutes,
             [readyNow ? "uses" : "ingredients"] = items,
-            ["alsoNeeded"] = new JsonArray([.. r.AlsoNeeded.Select(a => (JsonNode)JsonValue.Create(a)!)]),
+            ["alsoNeeded"] = new JsonArray([.. r.AlsoNeeded.Select(a => (JsonNode)new JsonObject { ["name"] = a.Name, ["for"] = Diets.Id(a.For) })]),
+            ["diet"] = Diets.Id(r.Diet),
             ["note"] = r.Note,
             ["savedBy"] = r.SavedBy.ToString("D"),
             ["savedByName"] = r.SavedByName,
@@ -105,7 +107,9 @@ public sealed class CosmosSavedRecipeRepository(CosmosContainers containers) : I
         else
         {
             d["servings"] = r.Servings;
-            d["steps"] = new JsonArray([.. r.Steps.Select(s => (JsonNode)JsonValue.Create(s)!)]);
+            d["servingsMeat"] = r.ServingsMeat;
+            d["servingsVeg"] = r.ServingsVeg;
+            d["steps"] = new JsonArray([.. r.Steps.Select(s => (JsonNode)new JsonObject { ["text"] = s.Text, ["for"] = Diets.Id(s.For) })]);
         }
 
         return d;
@@ -114,7 +118,11 @@ public sealed class CosmosSavedRecipeRepository(CosmosContainers containers) : I
     internal static SavedRecipe FromDocument(JsonObject d)
     {
         var kind = CosmosJson.Text(d["kind"]) ?? SavedRecipeKinds.Recipe;
-        static List<string> Strings(JsonNode? n) => [.. (n as JsonArray ?? []).Select(CosmosJson.Text).OfType<string>()];
+        // Saved before #110, steps and extra items were plain strings: they read as for everyone.
+        static IEnumerable<(string Text, PlateFor For)> Items(JsonNode? n, string field) =>
+            (n as JsonArray ?? []).Select(x => x is JsonObject o
+                ? (CosmosJson.Text(o[field]) ?? "", Diets.ParsePlate(CosmosJson.Text(o["for"])))
+                : (CosmosJson.Text(x) ?? "", PlateFor.All)).Where(x => x.Item1.Length > 0);
         static int? Int(JsonNode? n) => n is JsonValue v && v.TryGetValue<int>(out var i) ? i : null;
         return new SavedRecipe(
             Guid.Parse(CosmosJson.Text(d["id"])!),
@@ -128,9 +136,10 @@ public sealed class CosmosSavedRecipeRepository(CosmosContainers containers) : I
                 CosmosJson.Text(i["name"]) ?? "",
                 CosmosJson.Text(i["amount"]),
                 Guid.TryParse(CosmosJson.Text(i["productId"]), out var p) ? p : null,
-                CosmosJson.Text(i["genericName"])))],
-            Strings(d["steps"]),
-            Strings(d["alsoNeeded"]),
+                CosmosJson.Text(i["genericName"]),
+                Diets.ParsePlate(CosmosJson.Text(i["for"]))))],
+            [.. Items(d["steps"], "text").Select(x => new RecipeStep(x.Text, x.For))],
+            [.. Items(d["alsoNeeded"], "name").Select(x => new ExtraItem(x.Text, x.For))],
             CosmosJson.Text(d["how"]),
             CosmosJson.Text(d["appliance"]),
             CosmosJson.Text(d["note"]) ?? "",
@@ -138,6 +147,9 @@ public sealed class CosmosSavedRecipeRepository(CosmosContainers containers) : I
             CosmosJson.Text(d["savedByName"]) ?? "",
             CosmosJson.ParseTimestamp(d["savedAt"]) ?? DateTimeOffset.MinValue,
             Guid.TryParse(CosmosJson.Text(d["updatedBy"]), out var ub) ? ub : Guid.Empty,
-            CosmosJson.ParseTimestamp(d["updatedAt"]) ?? DateTimeOffset.MinValue);
+            CosmosJson.ParseTimestamp(d["updatedAt"]) ?? DateTimeOffset.MinValue,
+            Diets.Parse(CosmosJson.Text(d["diet"])) ?? Diet.Any,
+            Int(d["servingsMeat"]) ?? 0,
+            Int(d["servingsVeg"]) ?? 0);
     }
 }

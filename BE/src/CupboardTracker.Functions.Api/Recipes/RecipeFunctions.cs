@@ -18,6 +18,8 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
 
     public const string TooManyMessage = "That's a lot of recipes for one hour. Try again a bit later.";
 
+    public const string NoVeggieIdeasMessage = "Couldn't find veggie ideas in your stock.";
+
     /// <summary><c>POST /api/recipes/suggest</c> with <c>{ mode, meal, preferUseFirst, includeProductIds, comments,
     /// avoidTitles }</c>. Nothing is stored.</summary>
     [Function("suggestRecipe")]
@@ -123,7 +125,9 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
             var changes = ParseChanges(root);
             return changes.Error is null
                 ? ParseEquipment(root) is var (kit, kitError) && kitError is null
-                    ? (new AdjustChoices(recipe, changes.AddIds!, changes.Typed!, changes.Remove!, changes.Tweak, kit), null)
+                    ? ParseDiet(root) is var (diet, dietError) && dietError is null
+                        ? (new AdjustChoices(recipe, changes.AddIds!, changes.Typed!, changes.Remove!, changes.Tweak, kit, diet), null)
+                        : (null, dietError)
                     : (null, kitError)
                 : (null, changes.Error);
         }
@@ -229,7 +233,7 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
     /// shape and size, not trusted (the stock is rebuilt from Cosmos).</summary>
     internal static (Recipe? Recipe, string? Error) ParseRecipe(JsonElement r)
     {
-        const string Shape = "recipe must be { title, summary, meal, servings, totalMinutes, ingredients: [{ name, amount, productId }], steps, alsoNeeded }.";
+        const string Shape = "recipe must be { title, summary, meal, servings, totalMinutes, ingredients: [{ name, amount, productId, for? }], steps: [{ text, for }], alsoNeeded: [{ name, for }], servingsMeat?, servingsVeg?, diet? }.";
         if (r.ValueKind != JsonValueKind.Object)
         {
             return (null, Shape);
@@ -250,7 +254,8 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
             _ => null,
         };
         if (title is null || meal is null || !r.TryGetProperty("ingredients", out var list) || list.ValueKind != JsonValueKind.Array
-            || list.GetArrayLength() is 0 or > 40 || Strings(r, "steps") is not { Count: <= 20 } steps || Strings(r, "alsoNeeded") is not { Count: <= 5 } also)
+            || list.GetArrayLength() is 0 or > 40 || PlateItems(r, "steps", "text") is not { Count: <= 20 } steps
+            || PlateItems(r, "alsoNeeded", "name") is not { Count: <= 5 } also)
         {
             return (null, Shape);
         }
@@ -265,10 +270,11 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
             }
 
             Guid? productId = i.TryGetProperty("productId", out var p) && p.ValueKind == JsonValueKind.String && Guid.TryParse(p.GetString(), out var g) ? g : null;
-            ingredients.Add(new RecipeIngredient(name, Text(i, "amount", 60) ?? "", productId));
+            ingredients.Add(new RecipeIngredient(name, Text(i, "amount", 60) ?? "", productId, Diets.ParsePlate(Text(i, "for", 10))));
         }
 
         static string Cap(string s, int max) => s.Length > max ? s[..max] : s;
+        var diet = Diets.Parse(Text(r, "diet", 10)) ?? Diet.Any;
         return (new Recipe(
             title,
             Cap(Text(r, "summary", 1000) ?? "", 300),
@@ -276,10 +282,60 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
             Math.Clamp(Number(r, "servings") ?? 2, 1, 12),
             Math.Clamp(Number(r, "totalMinutes") ?? 30, 1, 600),
             ingredients,
-            [.. steps.Select(s => Cap(s.Trim(), 400)).Where(s => s.Length > 0)],
+            [.. steps.Select(s => new RecipeStep(Cap(s.Text.Trim(), 400), s.For)).Where(s => s.Text.Length > 0)],
             [],
-            [.. also.Select(a => Cap(a.Trim(), 60)).Where(a => a.Length > 0)],
-            []), null);
+            [.. also.Select(a => new ExtraItem(Cap(a.Text.Trim(), 60), a.For)).Where(a => a.Name.Length > 0)],
+            [],
+            Diet: diet,
+            ServingsMeat: diet == Diet.Half ? Math.Clamp(Number(r, "servingsMeat") ?? 0, 0, 12) : 0,
+            ServingsVeg: diet == Diet.Half ? Math.Clamp(Number(r, "servingsVeg") ?? 0, 0, 12) : 0), null);
+    }
+
+    /// <summary>Steps or extra items (#110): objects <c>{ text|name, for }</c>, or plain strings (for everyone). An empty
+    /// list when missing or null; null when it isn't a list of those.</summary>
+    internal static List<(string Text, PlateFor For)>? PlateItems(JsonElement parent, string name, string field)
+    {
+        if (!parent.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return [];
+        }
+
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var items = new List<(string, PlateFor)>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                items.Add((item.GetString()!, PlateFor.All));
+            }
+            else if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty(field, out var t) && t.ValueKind == JsonValueKind.String)
+            {
+                items.Add((t.GetString()!, Diets.ParsePlate(item.TryGetProperty("for", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString() : null)));
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        return items;
+    }
+
+    /// <summary><c>diet</c> (#110): any (missing or null), veg or half; anything else is a 400.</summary>
+    internal static (Diet Diet, string? Error) ParseDiet(JsonElement root)
+    {
+        if (!root.TryGetProperty("diet", out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return (Diet.Any, null);
+        }
+
+        return value.ValueKind == JsonValueKind.String && Diets.Parse(value.GetString()) is { } diet
+            ? (diet, null)
+            : (Diet.Any, "diet must be \"any\", \"veg\" or \"half\".");
     }
 
     internal static (HttpStatusCode Status, object Body) ToResponse(AdjustRecipeResult result) => result switch
@@ -397,7 +453,15 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
             }
 
             var (equipment, kitError) = ParseEquipment(root);
-            return kitError is null ? (new RecipeChoices(meal.Value, prefer, include, comments, avoid, mode, equipment), null) : (null, kitError);
+            var (diet, dietError) = ParseDiet(root);
+            if ((kitError ?? dietError) is { } problem)
+            {
+                return (null, problem);
+            }
+
+            return mode == RecipeMode.ReadyNow && diet == Diet.Half
+                ? (null, "Half & half is for Cook something only.")
+                : (new RecipeChoices(meal.Value, prefer, include, comments, avoid, mode, equipment, diet), null);
         }
         catch (JsonException)
         {
@@ -416,6 +480,7 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
             ideas = i.Ideas.Select(ToJson),
         }),
         SuggestRecipeResult.Unavailable => (HttpStatusCode.OK, new { available = false, message = UnavailableMessage }),
+        SuggestRecipeResult.NoVeggieIdeas => (HttpStatusCode.OK, new { available = false, message = NoVeggieIdeasMessage }),
         SuggestRecipeResult.Invalid i => (HttpStatusCode.BadRequest, new { error = i.Error }),
         SuggestRecipeResult.NothingInStock => (HttpStatusCode.UnprocessableEntity, new { error = "There's nothing in stock to cook with." }),
         SuggestRecipeResult.TooManyRequests => ((HttpStatusCode)429, new { error = TooManyMessage }),
@@ -437,6 +502,7 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
             soonestEstimatedExpiryDate = u.SoonestEstimatedExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         }),
         alsoNeeded = i.AlsoNeeded,
+        diet = Diets.Id(i.Diet),
     };
 
     private static object ToJson(RecipeView r) => new
@@ -446,8 +512,8 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
         meal = r.Meal.ToString().ToLowerInvariant(),
         servings = r.Servings,
         totalMinutes = r.TotalMinutes,
-        ingredients = r.Ingredients.Select(i => new { name = i.Name, amount = i.Amount, productId = i.ProductId, useFirst = i.UseFirst }),
-        steps = r.Steps,
+        ingredients = r.Ingredients.Select(i => new { name = i.Name, amount = i.Amount, productId = i.ProductId, useFirst = i.UseFirst, @for = Diets.Id(i.For) }),
+        steps = r.Steps.Select(s => new { text = s.Text, @for = Diets.Id(s.For) }),
         usesUp = r.UsesUp.Select(u => new
         {
             productId = u.ProductId,
@@ -455,12 +521,15 @@ public sealed class RecipeFunctions(SuggestRecipe suggest, AdjustRecipe adjust, 
             daysUntilSoonest = u.DaysUntilSoonest,
             soonestEstimatedExpiryDate = u.SoonestEstimatedExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         }),
-        alsoNeeded = r.AlsoNeeded,
+        alsoNeeded = r.AlsoNeeded.Select(a => new { name = a.Name, @for = Diets.Id(a.For) }),
         couldNotFitIn = r.CouldNotFitIn,
         couldNotAdd = r.CouldNotAdd ?? [],
         couldNotRemove = r.CouldNotRemove ?? [],
         equipment = (r.Equipment ?? []).Select(Kits.Id),
         warnings = r.Warnings ?? [],
+        diet = Diets.Id(r.Diet),
+        servingsMeat = r.ServingsMeat,
+        servingsVeg = r.ServingsVeg,
     };
 
     private static async Task<HttpResponseData> JsonAsync(HttpRequestData request, HttpStatusCode status, object body)
@@ -556,9 +625,15 @@ public sealed class IdeaAdjustFunctions(AdjustIdea adjust)
             var minutes = i.TryGetProperty("minutes", out var m) && m.ValueKind == JsonValueKind.Number && m.TryGetInt32(out var n) ? n : 5;
             var current = new IdeaInput(title, how, appliance.Value, Math.Clamp(minutes, 1, 60), uses, Text(i, "alsoNeeded", 60));
             var changes = RecipeFunctions.ParseChanges(root);
-            return changes.Error is null
-                ? (new IdeaAdjustChoices(current, meal.Value, changes.AddIds!, changes.Typed!, changes.Remove!, changes.Tweak), null)
-                : (null, changes.Error);
+            var (diet, dietError) = RecipeFunctions.ParseDiet(root);
+            if ((changes.Error ?? dietError) is { } problem)
+            {
+                return (null, problem);
+            }
+
+            return diet == Diet.Half
+                ? (null, "Half & half is for Cook something only.")
+                : (new IdeaAdjustChoices(current, meal.Value, changes.AddIds!, changes.Typed!, changes.Remove!, changes.Tweak, diet), null);
         }
         catch (JsonException)
         {
@@ -588,6 +663,8 @@ public sealed class IdeaAdjustFunctions(AdjustIdea adjust)
                 alsoNeeded = a.Idea.AlsoNeeded,
                 couldNotAdd = a.CouldNotAdd,
                 couldNotRemove = a.CouldNotRemove,
+                warnings = a.Warnings ?? [],
+                diet = Diets.Id(a.Idea.Diet),
             },
             adjustmentSummary = new { added = a.Summary.Added, removed = a.Summary.Removed, tweak = a.Summary.Tweak },
         }),

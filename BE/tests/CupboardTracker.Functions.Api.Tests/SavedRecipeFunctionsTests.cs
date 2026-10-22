@@ -66,7 +66,7 @@ public sealed class SavedRecipeFunctionsTests
     {
         var recipe = new SavedRecipe(Guid.NewGuid(), "recipe", "Traybake", "Traybake", RecipeMeal.Dinner, 40, 2,
             [new SavedIngredient("Peppers", "2", null, null), new SavedIngredient("Halloumi", "225 g", null, null)],
-            ["Roast."], [], null, null, "", Guid.NewGuid(), "Sam", DateTimeOffset.UnixEpoch, Guid.NewGuid(), DateTimeOffset.UnixEpoch);
+            [new("Roast.")], [], null, null, "", Guid.NewGuid(), "Sam", DateTimeOffset.UnixEpoch, Guid.NewGuid(), DateTimeOffset.UnixEpoch);
         var view = new SavedRecipeView(recipe, [IngredientStatus.UseFirst, IngredientStatus.Missing], ["Halloumi"], ["Peppers"]);
 
         var json = JsonSerializer.SerializeToElement(SavedRecipeFunctions.ToJson(view), WebJson);

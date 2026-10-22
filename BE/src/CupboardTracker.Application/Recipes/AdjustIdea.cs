@@ -15,7 +15,7 @@ public sealed record IdeaInput(string Title, string How, Appliance Appliance, in
 /// <see cref="Remove"/> names things the idea uses.</summary>
 public sealed record IdeaAdjustChoices(
     IdeaInput Current, RecipeMeal Meal, IReadOnlyList<Guid> AddProductIds, IReadOnlyList<string> AddTyped, IReadOnlyList<string> Remove,
-    string? Tweak);
+    string? Tweak, Diet Diet = Diet.Any);
 
 /// <summary>An idea adjustment for the model: the stock and meal as for ideas (<see cref="RecipeRequest.IncludeProductIds"/>
 /// are the products to add, <see cref="RecipeRequest.Comments"/> the tweak), the idea as it was, and the changes.</summary>
@@ -25,7 +25,7 @@ public abstract record IdeaResult
 {
     /// <summary>The updated idea, with what the model still got wrong after one retry.</summary>
     public sealed record Adjusted(QuickIdea Idea, IReadOnlyList<Guid> CouldNotFitIn, IReadOnlyList<string> CouldNotAddTyped,
-        IReadOnlyList<string> CouldNotRemove) : IdeaResult;
+        IReadOnlyList<string> CouldNotRemove, IReadOnlyList<string>? Warnings = null) : IdeaResult;
 
     public sealed record Unavailable(string Reason) : IdeaResult;
 }
@@ -33,7 +33,7 @@ public abstract record IdeaResult
 public abstract record AdjustIdeaResult
 {
     public sealed record Adjusted(QuickIdeaView Idea, AdjustmentSummary Summary, IReadOnlyList<string> CouldNotAdd,
-        IReadOnlyList<string> CouldNotRemove) : AdjustIdeaResult;
+        IReadOnlyList<string> CouldNotRemove, IReadOnlyList<string>? Warnings = null) : AdjustIdeaResult;
 
     public sealed record Invalid(string Error) : AdjustIdeaResult;
 
@@ -66,6 +66,11 @@ public sealed partial class AdjustIdea(GetStock stock, IRecipeGenerator generato
         if (typed.Count > MaxTyped || typed.Any(t => t.Length > AdjustRecipe.MaxTypedLength))
         {
             return new AdjustIdeaResult.Invalid($"Add at most {MaxTyped} thing that isn't in stock, up to {AdjustRecipe.MaxTypedLength} characters.");
+        }
+
+        if (choices.Diet == Diet.Half)
+        {
+            return new AdjustIdeaResult.Invalid("Half & half is for Cook something only.");
         }
 
         var add = choices.AddProductIds.Distinct().ToList();
@@ -119,7 +124,8 @@ public sealed partial class AdjustIdea(GetStock stock, IRecipeGenerator generato
                 k.Product.DaysUntilSoonest, k.Product.UseFirst, k.Aisle.Name, k.Product.OpenedCount, k.Product.AnimalContent))],
             add,
             tweak,
-            []);
+            [],
+            Diet: choices.Diet);
         var current = new QuickIdea(choices.Current.Title, choices.Current.How, choices.Current.Appliance, choices.Current.Minutes,
             [.. choices.Current.Uses.Select(u => u.ProductId).Where(byId.ContainsKey)], choices.Current.AlsoNeeded);
         var result = await generator.AdjustIdeaAsync(new IdeaAdjustmentRequest(context, current, changes), cancellationToken);
@@ -135,7 +141,8 @@ public sealed partial class AdjustIdea(GetStock stock, IRecipeGenerator generato
             [.. remove.Select(r => r.Name)],
             tweak);
         LogAdjusted(add.Count, typed.Count, remove.Count, tweak is not null, adjusted.Idea.Appliance, couldNotAdd.Count, adjusted.CouldNotRemove.Count);
-        return new AdjustIdeaResult.Adjusted(SuggestRecipe.ToView(adjusted.Idea, byId), summary, couldNotAdd, adjusted.CouldNotRemove);
+        return new AdjustIdeaResult.Adjusted(SuggestRecipe.ToView(adjusted.Idea, byId) with { Diet = choices.Diet }, summary, couldNotAdd,
+            adjusted.CouldNotRemove, adjusted.Warnings ?? []);
     }
 
     [LoggerMessage(Level = LogLevel.Information,
