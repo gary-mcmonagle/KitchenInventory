@@ -92,6 +92,7 @@ test("a unit on its estimated day asks on its row, as drawn, in place of the but
 
     const row = (await screen.findByText("Still got this?")).closest("li")!;
     expect(row).toHaveTextContent(`Estimated to last until today. Bought 14 Oct.`);
+    expect(within(row).getByText("Est. today").className).toMatch(/expired/); // red while it asks
     expect(within(row).getByRole("button", { name: "Hummus: still here" })).toHaveTextContent("Still here");
     expect(within(row).getByRole("button", { name: "Hummus: gone" })).toHaveTextContent("Gone");
     expect(within(row).queryByRole("button", { name: "Remove one Hummus" })).not.toBeInTheDocument();

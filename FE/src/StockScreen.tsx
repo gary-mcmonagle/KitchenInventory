@@ -898,11 +898,16 @@ function KnownRow({
     const ask = product.ask ?? null;
     // Said to be still here today, and nothing else asking: Checked, for the rest of the day (#94).
     const checked = !ask && !!product.checkedToday;
+    const dated =
+        product.daysUntilSoonest !== null && product.soonestEstimatedExpiryDate !== null
+            ? expiryBadge(product.daysUntilSoonest, product.soonestEstimatedExpiryDate)
+            : null;
+    // While it asks, the badge is red even on the day itself (project/StillGotThis.dc.html).
     const badge = checked
         ? { text: "Checked", tone: "checked" as const }
-        : product.daysUntilSoonest !== null && product.soonestEstimatedExpiryDate !== null
-          ? expiryBadge(product.daysUntilSoonest, product.soonestEstimatedExpiryDate)
-          : null;
+        : dated && ask
+          ? { ...dated, tone: "expired" as const }
+          : dated;
     // An estimate from opening, freezing or defrosting says so (#65): working back to a bought date would be wrong.
     const note = checked
         ? "You said it's still here · we'll ask again in 2 days"
