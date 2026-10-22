@@ -50,7 +50,8 @@ public sealed partial class UndoCheckOut(
                     await runOut.UndoneAsync(unitId, checkedOutAt, cancellationToken); // an automatic add for it comes off the list (#89)
                 }
 
-                if (pushes is not null && user is not null)
+                // Undoing "Gone" (#94) pushes nothing, as the check-out didn't.
+                if (pushes is not null && user is not null && unit.CheckOutReason != CheckOutReasons.StockCheck)
                 {
                     var at = (clock ?? TimeProvider.System).GetUtcNow();
                     var name = (products is null ? null : await products.GetAsync(unit.ProductId, cancellationToken))?.DisplayName ?? "Unknown item";

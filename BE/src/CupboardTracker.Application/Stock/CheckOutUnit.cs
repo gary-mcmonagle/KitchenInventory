@@ -26,7 +26,9 @@ public sealed partial class CheckOutUnit(
     IProductRepository products, IUnitRepository units, TimeProvider clock, ILogger<CheckOutUnit> logger,
     AddStockChangeToPush? pushes = null, AddWhenRunOut? runOut = null)
 {
-    public async Task<CheckOutUnitResult> ExecuteAsync(Guid unitId, CurrentUser user, CancellationToken cancellationToken)
+    /// <param name="reason">Null for an ordinary check-out; <see cref="CheckOutReasons.StockCheck"/> for "Gone" (#94),
+    /// which counts as running out (#89) but pushes to nobody (#81): it's a correction, not news.</param>
+    public async Task<CheckOutUnitResult> ExecuteAsync(Guid unitId, CurrentUser user, CancellationToken cancellationToken, string? reason = null)
     {
         var current = await units.FindAsync(unitId, cancellationToken);
         if (current is null)
@@ -36,7 +38,7 @@ public sealed partial class CheckOutUnit(
 
         var now = clock.GetUtcNow();
         if (current.Value.Status != UnitStatus.InStock
-            || !await units.TryReplaceAsync(current, current.Value.CheckOutByUser(user.ObjectId, now), cancellationToken))
+            || !await units.TryReplaceAsync(current, current.Value.CheckOutByUser(user.ObjectId, now, reason), cancellationToken))
         {
             return new CheckOutUnitResult.NotInStock(unitId);
         }
@@ -44,12 +46,16 @@ public sealed partial class CheckOutUnit(
         var productId = current.Value.ProductId;
         var remaining = (await units.GetInStockAsync(productId, cancellationToken)).Count;
         var name = (await products.GetAsync(productId, cancellationToken))?.DisplayName ?? "Unknown item";
-        LogCheckedOut(unitId, productId, user.ObjectId);
-        await CheckOutFromApp.PushAsync(pushes, unitId, productId, name, user, now, cancellationToken);
+        LogCheckedOut(unitId, productId, user.ObjectId, reason ?? "used");
+        if (reason != CheckOutReasons.StockCheck)
+        {
+            await CheckOutFromApp.PushAsync(pushes, unitId, productId, name, user, now, cancellationToken);
+        }
+
         await CheckOutFromApp.RunOutAsync(runOut, unitId, productId, now, cancellationToken);
         return new CheckOutUnitResult.CheckedOut(unitId, productId, name, remaining);
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Checked out unit {UnitId} of product {ProductId} from item detail (user {UserId}).")]
-    private partial void LogCheckedOut(Guid unitId, Guid productId, Guid userId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Checked out unit {UnitId} of product {ProductId} from the app (user {UserId}, reason {Reason}).")]
+    private partial void LogCheckedOut(Guid unitId, Guid productId, Guid userId, string reason);
 }

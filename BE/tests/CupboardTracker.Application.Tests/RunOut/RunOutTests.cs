@@ -83,6 +83,19 @@ public sealed class RunOutTests
     }
 
     [Fact]
+    public async Task Gone_from_still_got_this_counts_as_running_out()
+    {
+        var asda = Product("Asda Semi Skimmed Milk", "Semi-skimmed milk", inStock: 1);
+        await TurnOn("Semi-skimmed milk");
+
+        var gone = await new CheckOutUnit(products, units, clock, new ListLogger<CheckOutUnit>(), runOut: RunOut())
+            .ExecuteAsync(units.InStock(asda).Single().UnitId, Sam, CancellationToken.None, CheckOutReasons.StockCheck);
+
+        Assert.IsType<CheckOutUnitResult.CheckedOut>(gone);
+        Assert.Equal("Semi-skimmed milk", Assert.Single(OnList()).Name);
+    }
+
+    [Fact]
     public async Task The_last_unit_across_every_brand_puts_the_generic_name_on_the_list_once()
     {
         var asda = Product("Asda Semi Skimmed Milk", "Semi-skimmed milk", inStock: 1);

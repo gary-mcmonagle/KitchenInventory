@@ -171,6 +171,11 @@ public static class ServiceCollectionExtensions
         services.AddTransient<EditProductDetails>();
         services.AddTransient<SetShelfLife>();
         services.AddTransient<CheckOutUnit>();
+        services.AddSingleton(sp => StillGotThisSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddTransient<MarkStillHere>();
+        services.AddTransient<GetExpiredUnits>();
+        services.AddSingleton<IStillGotThisPushLog, CosmosStillGotThisPushLog>();
+        services.AddTransient<SendStillGotThisPush>();
         services.AddTransient<SetUnitExpiry>();
         services.AddTransient<ChangeUnitState>(); // #65
         services.AddTransient<UndoUnitStateChange>();
@@ -306,6 +311,20 @@ public static class ServiceCollectionExtensions
         }
 
         return new StockSettings(TimeZoneInfo.FindSystemTimeZoneById("Europe/London"), days);
+    }
+
+    /// <summary>STILL_HERE_ASK_AGAIN_DAYS (default 2, #94): how long "Still here" quiets a unit.</summary>
+    internal static StillGotThisSettings StillGotThisSettingsFromConfiguration(IConfiguration config)
+    {
+        var days = StillGotThisSettings.DefaultAskAgainDays;
+        if (config["STILL_HERE_ASK_AGAIN_DAYS"] is { Length: > 0 } text
+            && (!int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out days)
+                || days is < 1 or > 60))
+        {
+            throw new InvalidOperationException("STILL_HERE_ASK_AGAIN_DAYS must be a whole number of days, 1 to 60.");
+        }
+
+        return new StillGotThisSettings(days);
     }
 
     /// <summary>OFFLINE_THRESHOLD_MINUTES (default 20) and the household's time zone, resolved now so a missing zone

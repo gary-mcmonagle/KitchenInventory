@@ -13,7 +13,10 @@ public sealed record StockUnit(
     ExpirySource? ExpirySource = null,
     DateOnly? OpenedOn = null,
     DateOnly? FrozenOn = null,
-    DateOnly? DefrostedOn = null)
+    DateOnly? DefrostedOn = null,
+    Guid UnitId = default,
+    DateTimeOffset? LastConfirmedAt = null,
+    Storage? CurrentStorage = null)
 {
     public bool Opened => OpenedOn is not null;
 
@@ -55,6 +58,9 @@ public enum StockSection
     WaitingForName,
 }
 
+/// <summary>"Still got this?" on a product's row (#94): its oldest asking unit, and how many of its units are asking.</summary>
+public sealed record StockAsk(Guid UnitId, DateOnly EstimatedExpiryDate, DateOnly BoughtOn, DateOnly? OpenedOn, int DaysOver, int AskingCount);
+
 /// <summary>One product in stock and how many units of it are in the house.</summary>
 public sealed record StockProduct(
     Guid ProductId,
@@ -76,14 +82,20 @@ public sealed record StockProduct(
     string AisleId = "other",
     string? Icon = null,
     string? GenericName = null,
-    AnimalContent? AnimalContent = null)
+    AnimalContent? AnimalContent = null,
+    StockAsk? Ask = null,
+    bool CheckedToday = false)
 {
     /// <summary>In Use first: expired or due within <see cref="StockSettings.UseFirstDays"/> (#52).</summary>
     public bool UseFirst => Section == StockSection.UseFirst;
 }
 
 /// <summary>One aisle of the stock list (#71): its products, use first first, and how many need using.</summary>
-public sealed record StockAisle(string AisleId, string Name, string Icon, int ItemCount, int UseFirstCount, bool AnyExpired, IReadOnlyList<StockProduct> Products);
+public sealed record StockAisle(string AisleId, string Name, string Icon, int ItemCount, int UseFirstCount, bool AnyExpired, IReadOnlyList<StockProduct> Products)
+{
+    /// <summary>Products asking "Still got this?" (#94): the aisle's "n to check" pill.</summary>
+    public int ToCheckCount => Products.Count(p => p.Ask is not null);
+}
 
 public sealed record StockView(
     DateTimeOffset GeneratedAt, int TotalUnits, IReadOnlyList<StockProduct> Products, int UseFirstCount = 0)
@@ -101,8 +113,11 @@ public sealed record StockView(
 /// or passed) and Later are sorted by soonest estimated expiry (no estimate last), then name ignoring case; Waiting
 /// for a name (no match, or lookup failed) by most recently scanned.
 /// </summary>
-public sealed class GetStock(IStockQueries queries, IProductRepository products, StockSettings settings, TimeProvider clock)
+public sealed class GetStock(
+    IStockQueries queries, IProductRepository products, StockSettings settings, TimeProvider clock, StillGotThisSettings? stillGotThis = null)
 {
+    private readonly StillGotThisSettings stillGotThis = stillGotThis ?? new StillGotThisSettings();
+
     public async Task<StockView> ExecuteAsync(CancellationToken cancellationToken)
     {
         var units = await queries.GetInStockUnitsAsync(cancellationToken);
@@ -143,7 +158,9 @@ public sealed class GetStock(IStockQueries queries, IProductRepository products,
                 Aisles.Of(product?.Aisle?.Id).Id,
                 product?.Icon?.Name,
                 product?.Generic?.Name,
-                product?.Animal?.Value));
+                product?.Animal?.Value,
+                status == StockProductStatus.Known ? AskOf(group, today) : null,
+                group.Any(u => StillGotThisRules.ConfirmedToday(u.LastConfirmedAt, today, settings))));
         }
 
         var sorted = BySoonest(rows.Where(r => r.Section == StockSection.UseFirst))
@@ -154,6 +171,21 @@ public sealed class GetStock(IStockQueries queries, IProductRepository products,
         {
             Aisles = ByAisle(rows.Where(r => r.Section != StockSection.WaitingForName)),
         };
+    }
+
+    /// <summary>The oldest unit asking "Still got this?" (#94), with how many are asking; null when none is.</summary>
+    private StockAsk? AskOf(IEnumerable<StockUnit> units, DateOnly today)
+    {
+        var asking = units.Where(u => StillGotThisRules.Asks(u.EstimatedExpiryDate, u.LastConfirmedAt, today, settings, stillGotThis))
+            .OrderBy(u => u.EstimatedExpiryDate).ThenBy(u => u.CheckedInAt).ToList();
+        if (asking is not [var first, ..])
+        {
+            return null;
+        }
+
+        var estimate = first.EstimatedExpiryDate!.Value;
+        return new StockAsk(first.UnitId, estimate, EstimatedExpiry.BoughtDate(first.CheckedInAt, settings.HomeTimeZone), first.OpenedOn,
+            -EstimatedExpiry.DaysUntil(estimate, today), asking.Count);
     }
 
     /// <summary>Aisles in shop order; within each, use first (soonest first), then the rest by soonest, then name.</summary>

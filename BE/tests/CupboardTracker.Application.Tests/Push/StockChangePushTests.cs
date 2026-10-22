@@ -471,6 +471,22 @@ public sealed class StockChangePushTests
     }
 
     [Fact]
+    public async Task Gone_from_still_got_this_pushes_nobody_and_neither_does_its_undo()
+    {
+        Device(Sam, "sam-phone");
+        var hummus = KnownProduct("Hummus", inStock: 1);
+        var unitId = units.InStock(hummus).Single().UnitId;
+
+        var gone = await new CheckOutUnit(products, units, clock, new ListLogger<CheckOutUnit>(), Add())
+            .ExecuteAsync(unitId, GaryUser, CancellationToken.None, CheckOutReasons.StockCheck);
+        await Undo().ExecuteAsync(unitId, CancellationToken.None, GaryUser);
+
+        Assert.IsType<CheckOutUnitResult.CheckedOut>(gone);
+        Assert.Null(batches.Open); // nothing joined a batch, so nothing will be pushed
+        Assert.Empty(sender.Sent);
+    }
+
+    [Fact]
     public async Task A_check_out_undone_in_the_same_batch_nets_out_and_nobody_is_pushed()
     {
         Device(Sam, "sam-phone");

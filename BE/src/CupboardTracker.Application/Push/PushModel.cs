@@ -15,8 +15,8 @@ public sealed record PushSubscription(
     DateTimeOffset? LastSuccessAt,
     IReadOnlyDictionary<string, bool> Preferences)
 {
-    /// <summary>Types that count as on until the device turns them off (#86: the shopping list).</summary>
-    public static readonly IReadOnlySet<string> OnByDefault = new HashSet<string>(StringComparer.Ordinal) { "shoppingList" };
+    /// <summary>Types that count as on until the device turns them off (#86: the shopping list; #94: still got this).</summary>
+    public static readonly IReadOnlySet<string> OnByDefault = new HashSet<string>(StringComparer.Ordinal) { "shoppingList", "stillGotThis" };
 
     /// <summary>Opted in to a type: a type the features haven't set yet counts as off, unless it's
     /// <see cref="OnByDefault"/>.</summary>

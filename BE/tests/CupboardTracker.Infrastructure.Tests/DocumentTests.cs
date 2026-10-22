@@ -28,6 +28,21 @@ public sealed class DocumentTests
     }
 
     [Fact]
+    public void Still_got_this_fields_round_trip_and_go_when_cleared()
+    {
+        var id = Guid.NewGuid();
+        var unit = new Unit(id, Guid.NewGuid(), null, UnitStatus.CheckedOut, id, "scanner-in", At, At, null, "ui", new DateOnly(2026, 10, 25),
+            ExpirySource: ExpirySource.ShelfLife, LastConfirmedAt: At, LastConfirmedVia: ConfirmedVia.Prompt, CheckOutReason: CheckOutReasons.StockCheck);
+
+        var document = Stored(CosmosUnitRepository.Write(unit, null));
+
+        Assert.Equal(("prompt", "stockCheck"), (document["lastConfirmedVia"]!.GetValue<string>(), document["checkOutReason"]!.GetValue<string>()));
+        Assert.Equal(unit, CosmosUnitRepository.ToUnit(document));
+        var cleared = Stored(CosmosUnitRepository.Write(unit.UndoCheckOut().WithoutConfirmation(), document));
+        Assert.False(cleared.ContainsKey("lastConfirmedAt") || cleared.ContainsKey("lastConfirmedVia") || cleared.ContainsKey("checkOutReason"));
+    }
+
+    [Fact]
     public void A_date_written_before_item_detail_reads_as_from_the_shelf_life()
     {
         var id = Guid.NewGuid();

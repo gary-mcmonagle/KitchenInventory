@@ -68,7 +68,10 @@ public sealed record Unit(
     DateOnly? DefrostedOn = null,
     Products.Storage? CurrentStorage = null,
     bool EstimatePending = false,
-    UnitEstimateSnapshot? BeforeStateChange = null)
+    UnitEstimateSnapshot? BeforeStateChange = null,
+    DateTimeOffset? LastConfirmedAt = null,
+    string? LastConfirmedVia = null,
+    string? CheckOutReason = null)
 {
     public bool IsOpened => OpenedOn is not null;
 
@@ -107,13 +110,20 @@ public sealed record Unit(
     public Unit CheckOut(Guid scanId, DateTimeOffset at, string source) =>
         this with { Status = UnitStatus.CheckedOut, CheckedOutAt = at, CheckOutScanId = scanId, CheckOutSource = source };
 
-    /// <summary>Checked out from the stock list by a signed-in user (no scan).</summary>
-    public Unit CheckOutByUser(Guid userId, DateTimeOffset at) =>
+    /// <summary>Checked out from the stock list by a signed-in user (no scan). <paramref name="reason"/> is null for an
+    /// ordinary check-out (used), or <see cref="CheckOutReasons.StockCheck"/> for "Gone" (#94).</summary>
+    public Unit CheckOutByUser(Guid userId, DateTimeOffset at, string? reason = null) =>
         this with
         {
             Status = UnitStatus.CheckedOut, CheckedOutAt = at, CheckOutScanId = null, CheckOutSource = AppSource,
-            CheckedOutBy = userId,
+            CheckedOutBy = userId, CheckOutReason = reason,
         };
+
+    /// <summary>Someone said it's still here (#94): it stops asking "Still got this?" for a while. The date is unchanged.</summary>
+    public Unit ConfirmedStillHere(DateTimeOffset at, string via) => this with { LastConfirmedAt = at, LastConfirmedVia = via };
+
+    /// <summary>Undo of "Still here" (#94): it asks again.</summary>
+    public Unit WithoutConfirmation() => this with { LastConfirmedAt = null, LastConfirmedVia = null };
 
     public Unit WithEstimatedExpiry(DateOnly date) =>
         this with { EstimatedExpiryDate = date, ExpirySource = Stock.ExpirySource.ShelfLife };
@@ -127,7 +137,23 @@ public sealed record Unit(
         this with
         {
             Status = UnitStatus.InStock, CheckedOutAt = null, CheckOutScanId = null, CheckOutSource = null, CheckedOutBy = null,
+            CheckOutReason = null,
         };
+}
+
+/// <summary>Why a unit was checked out (#94). Missing means used (the ordinary case).</summary>
+public static class CheckOutReasons
+{
+    /// <summary>"Gone" from a "Still got this?" prompt: a correction to the stock, not something used just now.</summary>
+    public const string StockCheck = "stockCheck";
+}
+
+/// <summary>How a unit was last confirmed as still in the house (#94; #98 adds the stock check by place).</summary>
+public static class ConfirmedVia
+{
+    public const string Prompt = "prompt";
+
+    public const string StockCheck = "stockCheck";
 }
 
 /// <summary>A check-out scan with no unit in stock to remove (unknown barcode, or nothing in stock).</summary>

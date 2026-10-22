@@ -123,6 +123,9 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         Set(document, "currentStorage", unit.CurrentStorage is { } storage ? ProductDocument.StorageName(storage) : null);
         Set(document, "estimatePending", unit.EstimatePending ? true : null);
         Set(document, "beforeStateChange", unit.BeforeStateChange is { } before ? WriteSnapshot(before) : null);
+        Set(document, "lastConfirmedAt", CosmosJson.Timestamp(unit.LastConfirmedAt));
+        Set(document, "lastConfirmedVia", unit.LastConfirmedVia);
+        Set(document, "checkOutReason", unit.CheckOutReason);
         return document;
     }
 
@@ -207,7 +210,10 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         ParseDate(d["defrostedOn"]),
         ProductDocument.ParseStorage(CosmosJson.Text(d["currentStorage"])),
         d["estimatePending"] is JsonValue p && p.TryGetValue<bool>(out var pending) && pending,
-        d["beforeStateChange"] is JsonObject before ? ReadSnapshot(before) : null);
+        d["beforeStateChange"] is JsonObject before ? ReadSnapshot(before) : null,
+        CosmosJson.ParseTimestamp(d["lastConfirmedAt"]),
+        CosmosJson.Text(d["lastConfirmedVia"]),
+        CosmosJson.Text(d["checkOutReason"]));
 }
 
 /// <summary>Unmatched check-outs (id = scan ID), partitioned by /id (docs/data-model.md).</summary>

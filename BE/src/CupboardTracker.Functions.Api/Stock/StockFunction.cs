@@ -38,6 +38,7 @@ public sealed class StockFunction(GetStock getStock)
             itemCount = a.ItemCount,
             useFirstCount = a.UseFirstCount,
             anyExpired = a.AnyExpired,
+            toCheckCount = a.ToCheckCount, // #94: the "n to check" pill
             products = a.Products.Select(Row),
         }),
         waitingForName = view.WaitingForName.Select(Row),
@@ -77,7 +78,20 @@ public sealed class StockFunction(GetStock getStock)
         animalContent = p.AnimalContent is { } ac ? Domain.Products.AnimalContents.Id(ac) : null, // #112; null until worked out
         icon = p.Icon,
         useFirst = p.UseFirst,
+        // "Still got this?" (#94): the unit to ask about, or null; and whether someone said it's still here today.
+        ask = p.Ask is { } a ? new
+        {
+            unitId = a.UnitId,
+            estimatedExpiryDate = Date(a.EstimatedExpiryDate),
+            boughtOn = Date(a.BoughtOn),
+            openedOn = a.OpenedOn is { } o ? Date(o) : null,
+            daysOver = a.DaysOver,
+            askingCount = a.AskingCount,
+        } : null,
+        checkedToday = p.CheckedToday,
     };
+
+    internal static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private static string Timestamp(DateTimeOffset value) =>
         value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);

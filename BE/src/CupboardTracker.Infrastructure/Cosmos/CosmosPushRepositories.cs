@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using CupboardTracker.Application.Push;
+using CupboardTracker.Application.Stock;
 using Microsoft.Azure.Cosmos;
 
 namespace CupboardTracker.Infrastructure.Cosmos;
@@ -140,4 +141,46 @@ public sealed class CosmosPushSeenRepository(CosmosContainers containers) : IPus
         ["seenAt"] = CosmosJson.Timestamp(at),
         ["ttl"] = (int)ReceiptTtl.TotalSeconds,
     };
+}
+
+/// <summary>
+/// The days the "Still got this?" push went out (#94), in the pushSeen container: one document per UK day, id =
+/// eventKey = <c>check:yyyy-MM-dd</c>, so a second claim conflicts. Kept 3 days.
+/// </summary>
+public sealed class CosmosStillGotThisPushLog(CosmosContainers containers) : IStillGotThisPushLog
+{
+    public static readonly TimeSpan Ttl = TimeSpan.FromDays(3);
+
+    public static string Key(DateOnly day) => $"check:{day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}";
+
+    public async Task<bool> TryClaimAsync(DateOnly day, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        var key = Key(day);
+        using var stream = CosmosJson.ToStream(new JsonObject
+        {
+            ["id"] = key,
+            ["eventKey"] = key,
+            ["type"] = "stillGotThisPush",
+            ["sentAt"] = CosmosJson.Timestamp(at),
+            ["ttl"] = (int)Ttl.TotalSeconds,
+        });
+        using var response = await containers.PushSeen.CreateItemStreamAsync(stream, new PartitionKey(key), cancellationToken: cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            return false;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return true;
+    }
+
+    public async Task ReleaseAsync(DateOnly day, CancellationToken cancellationToken)
+    {
+        var key = Key(day);
+        using var response = await containers.PushSeen.DeleteItemStreamAsync(key, new PartitionKey(key), cancellationToken: cancellationToken);
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            response.EnsureSuccessStatusCode();
+        }
+    }
 }
