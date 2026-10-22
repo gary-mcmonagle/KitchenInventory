@@ -744,6 +744,7 @@ public sealed class FoundryRecipeGeneratorTests
         Assert.Single(handler.Requests);
         var messages = JsonNode.Parse(handler.Requests[0].Body)!["messages"]!.AsArray();
         Assert.Contains("9. Half and half: ONE meal for a mixed table", messages[0]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("A step for 'all' must never name meat or fish, not even to serve it", messages[0]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
         var prompt = messages[1]!["content"]!.GetValue<string>();
         Assert.Contains("| opened | meat or fish):", prompt, StringComparison.Ordinal);
         Assert.Contains("Smoked back bacon | 1 | in 3 days | - | Meat & fish | - | meat", prompt, StringComparison.Ordinal);

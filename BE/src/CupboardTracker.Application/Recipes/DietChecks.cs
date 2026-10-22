@@ -169,7 +169,7 @@ public static partial class DietChecks
     }
 
     private static DietProblem WordProblem(string word, string where, bool half) => half
-        ? new($"{where} mentions {word}, which belongs on the meat plates only", $"{Warn(word)}: keep it to the meat plates.")
+        ? new($"{where} mentions {word}, which belongs on the meat plates only (split it into a step for 'meat' and one for 'veg')", $"{Warn(word)}: keep it to the meat plates.")
         : new($"{where} mentions {word}, which isn't vegetarian", $"{Warn(word)}, which isn't vegetarian.");
 
     private static List<DietProblem> Distinct(List<DietProblem> problems) => [.. problems.DistinctBy(p => p.ForPeople)];

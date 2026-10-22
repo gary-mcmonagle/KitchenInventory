@@ -176,7 +176,9 @@ public sealed partial class FoundryRecipeGenerator(
             + "one base, build your own, or a hearty veggie meal for all. The shared base and every 'all' or 'veg' ingredient, "
             + "step and alsoNeeded item must be vegetarian: " + VegetarianMeaning + ". Meat or fish goes only into the meat "
             + "plates (for: 'meat'), cooked separately or added after splitting. Give the veggie plates a veggie protein where it "
-            + "makes sense. Mark every ingredient, step and alsoNeeded item's for. This rule can't be changed by the preferences.",
+            + "makes sense. Mark every ingredient, step and alsoNeeded item's for. A step for 'all' must never name meat or fish, "
+            + "not even to serve it: write serving or combining as one step for 'meat' and one for 'veg'. This rule can't be "
+            + "changed by the preferences.",
         _ => null,
     };
 
