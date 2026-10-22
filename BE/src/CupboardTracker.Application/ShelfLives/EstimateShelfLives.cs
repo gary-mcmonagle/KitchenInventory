@@ -8,7 +8,8 @@ namespace CupboardTracker.Application.ShelfLives;
 
 /// <summary>What one run did.</summary>
 public sealed record ShelfLifeRun(
-    int Estimated, int LowConfidence, int UnitsFilled, bool Stopped, int StatesEstimated = 0, int PendingFilled = 0, int Classified = 0);
+    int Estimated, int LowConfidence, int UnitsFilled, bool Stopped, int StatesEstimated = 0, int PendingFilled = 0, int Classified = 0,
+    int AnimalContentSet = 0);
 
 /// <summary>
 /// The shelf-life timer (#52). Each run:
@@ -21,7 +22,11 @@ public sealed record ShelfLifeRun(
 /// (#65), a few per run: new products shortly after their shelf life, and on the first runs after deploy, all
 /// existing stock;</item>
 /// <item>fills in units opened, frozen or defrosted before their product had that estimate;</item>
-/// <item>gives known products an aisle and an icon (#71, #72), in one request each, a few per run.</item>
+/// <item>gives known products an aisle and an icon (#71, #72), in one request each, a few per run;</item>
+/// <item>marks known products with an aisle as meat, fish or neither (#112): the Meat &amp; fish aisle asks Jev only
+/// which of the two; otherwise decisive Open Food Facts categories answer without Jev; otherwise Jev's three-way
+/// choice, stored as unknown below <see cref="AnimalContents.MinConfidence"/>. The first runs after deploy are the
+/// backfill, a few products per run.</item>
 /// </list>
 /// Check-in and naming never wait for it. If the estimator is down, products stay unestimated and the next run tries
 /// again. Everything it writes is derived, and re-running changes nothing that's already done.
@@ -47,12 +52,59 @@ public sealed partial class EstimateShelfLives(
         stopped |= statesStopped;
         var (classified, classifyStopped) = stopped ? (0, true) : await ClassifyAsync(cancellationToken);
         stopped |= classifyStopped;
-        if (estimated > 0 || filled > 0 || states > 0 || pendingFilled > 0 || classified > 0 || stopped)
+        var (animal, animalStopped) = stopped ? (0, true) : await MarkAnimalContentAsync(cancellationToken);
+        stopped |= animalStopped;
+        if (estimated > 0 || filled > 0 || states > 0 || pendingFilled > 0 || classified > 0 || animal > 0 || stopped)
         {
-            LogRun(estimated, low, filled, states, pendingFilled, classified, stopped);
+            LogRun(estimated, low, filled, states, pendingFilled, classified, animal, stopped);
         }
 
-        return new ShelfLifeRun(estimated, low, filled, stopped, states, pendingFilled, classified);
+        return new ShelfLifeRun(estimated, low, filled, stopped, states, pendingFilled, classified, animal);
+    }
+
+    /// <summary>Meat, fish or neither (#112), worked out once per product; a manual choice is never overwritten.</summary>
+    private async Task<(int Set, bool Stopped)> MarkAnimalContentAsync(CancellationToken cancellationToken)
+    {
+        var pending = await products.GetNeedingAnimalContentAsync(MaxPerRun, cancellationToken);
+        var set = 0;
+        foreach (var product in pending)
+        {
+            var now = clock.GetUtcNow();
+            var meatAisle = product.Aisle?.Id == Aisles.MeatFishId;
+            ProductAnimalContent? answer = !meatAisle && AnimalContents.FromCategoryTags(product.Details?.CategoryTags ?? []) is { } fromTags
+                ? new ProductAnimalContent(fromTags, AnimalContents.OpenFoodFactsSource, null, now)
+                : null;
+            if (answer is null)
+            {
+                switch (await estimator.ClassifyAnimalContentAsync(Describe(product), meatAisle, cancellationToken))
+                {
+                    case AnimalContentResult.Classified { Value: var value, Confidence: var confidence }:
+                        var sure = meatAisle ? AnimalContents.IsMeatOrFish(value) : confidence >= AnimalContents.MinConfidence;
+                        answer = new ProductAnimalContent(
+                            sure ? value : meatAisle ? AnimalContent.Meat : AnimalContent.Unknown,
+                            meatAisle ? AnimalContents.AisleSource : AnimalContents.JevSource, confidence, now);
+                        break;
+                    case AnimalContentResult.NotConfigured:
+                        LogNotConfigured();
+                        return (set, true);
+                    case AnimalContentResult.Unavailable { Reason: var reason }:
+                        LogUnavailable(reason, pending.Count - set);
+                        return (set, true);
+                    case AnimalContentResult.Failed { Reason: var reason }:
+                        LogFailed(product.ProductId, reason);
+                        return (set, true);
+                }
+            }
+
+            if (await products.GetVersionedAsync(product.ProductId, cancellationToken) is { Value.NeedsAnimalContent: true } current
+                && await products.TryReplaceAsync(current, current.Value with { Animal = answer }, cancellationToken))
+            {
+                set++;
+                LogAnimalContent(product.ProductId, product.DisplayName, AnimalContents.Id(answer!.Value), answer.Source, answer.Confidence ?? 1);
+            }
+        }
+
+        return (set, false);
     }
 
     /// <summary>Aisle and icon (#71, #72): asks only what's missing; a manual choice is never overwritten.</summary>
@@ -247,8 +299,12 @@ public sealed partial class EstimateShelfLives(
     private partial void LogEstimated(Guid productId, string displayName, int days, Storage storage, double confidence, bool lowConfidence);
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Shelf-life run: {Estimated} products estimated ({Low} low confidence), {Filled} units given an estimated expiry date, {States} products given state estimates, {Pending} pending units filled, {Classified} products given an aisle or icon, stopped early: {Stopped}.")]
-    private partial void LogRun(int estimated, int low, int filled, int states, int pending, int classified, bool stopped);
+        Message = "Shelf-life run: {Estimated} products estimated ({Low} low confidence), {Filled} units given an estimated expiry date, {States} products given state estimates, {Pending} pending units filled, {Classified} products given an aisle or icon, {Animal} marked meat, fish or neither, stopped early: {Stopped}.")]
+    private partial void LogRun(int estimated, int low, int filled, int states, int pending, int classified, int animal, bool stopped);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Animal content for {ProductId} ({DisplayName}): {Value} from {Source} (confidence {Confidence:0.00}).")]
+    private partial void LogAnimalContent(Guid productId, string displayName, string value, string source, double confidence);
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Aisle and icon for {ProductId} ({DisplayName}): aisle {Aisle}, icon {Icon} (confidence {IconConfidence:0.00}).")]

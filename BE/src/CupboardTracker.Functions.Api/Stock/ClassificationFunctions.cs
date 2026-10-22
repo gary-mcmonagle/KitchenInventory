@@ -8,8 +8,24 @@ using Microsoft.Azure.Functions.Worker.Http;
 namespace CupboardTracker.Functions.Api.Stock;
 
 /// <summary>A product's aisle (#71) and icon (#72), chosen by hand in Edit details. Both need a signed-in user.</summary>
-public sealed class ClassificationFunctions(SetProductAisle setAisle, SetProductIcon setIcon)
+public sealed class ClassificationFunctions(SetProductAisle setAisle, SetProductIcon setIcon, SetProductAnimalContent setAnimal)
 {
+    /// <summary><c>PUT /api/products/{productId}/animal-content</c> with <c>{ "animalContent": "meat" | "fish" | "none" }</c> (#112).</summary>
+    [Function("setProductAnimalContent")]
+    public async Task<HttpResponseData> AnimalContent(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "products/{productId:guid}/animal-content")] HttpRequestData request,
+        Guid productId, FunctionContext context, CancellationToken cancellationToken)
+    {
+        var (value, error) = await ReadAsync(request, "animalContent", allowNull: false, cancellationToken);
+        if (error is not null)
+        {
+            return await JsonAsync(request, HttpStatusCode.BadRequest, new { error });
+        }
+
+        var (status, body) = ToResponse(await setAnimal.ExecuteAsync(productId, value, context.GetCurrentUser(), cancellationToken), "animalContent");
+        return await JsonAsync(request, status, body);
+    }
+
     /// <summary><c>PUT /api/products/{productId}/aisle</c> with <c>{ "aisle": "&lt;aisle id&gt;" }</c>.</summary>
     [Function("setProductAisle")]
     public async Task<HttpResponseData> Aisle(

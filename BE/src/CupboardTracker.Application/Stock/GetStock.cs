@@ -75,7 +75,8 @@ public sealed record StockProduct(
     DateOnly? SoonestStateOn = null,
     string AisleId = "other",
     string? Icon = null,
-    string? GenericName = null)
+    string? GenericName = null,
+    AnimalContent? AnimalContent = null)
 {
     /// <summary>In Use first: expired or due within <see cref="StockSettings.UseFirstDays"/> (#52).</summary>
     public bool UseFirst => Section == StockSection.UseFirst;
@@ -141,7 +142,8 @@ public sealed class GetStock(IStockQueries queries, IProductRepository products,
                 soonestState?.On,
                 Aisles.Of(product?.Aisle?.Id).Id,
                 product?.Icon?.Name,
-                product?.Generic?.Name));
+                product?.Generic?.Name,
+                product?.Animal?.Value));
         }
 
         var sorted = BySoonest(rows.Where(r => r.Section == StockSection.UseFirst))

@@ -45,6 +45,16 @@ internal sealed class FakeEstimator : IShelfLifeEstimator
         ClassifyCalls.Add((product, usualStorage, aisle, icon));
         return Task.FromResult(ClassifyAnswer(product));
     }
+
+    public List<(ProductDescription Product, bool MeatOrFish)> AnimalCalls { get; } = [];
+
+    public Func<ProductDescription, AnimalContentResult> AnimalAnswer { get; set; } = _ => new AnimalContentResult.Classified(AnimalContent.None, 0.9);
+
+    public Task<AnimalContentResult> ClassifyAnimalContentAsync(ProductDescription product, bool meatOrFish, CancellationToken cancellationToken)
+    {
+        AnimalCalls.Add((product, meatOrFish));
+        return Task.FromResult(AnimalAnswer(product));
+    }
 }
 
 public sealed class EstimateShelfLivesTests
@@ -86,7 +96,7 @@ public sealed class EstimateShelfLivesTests
 
         var run = await UseCase().ExecuteAsync(CancellationToken.None);
 
-        Assert.Equal(new ShelfLifeRun(1, 0, 2, false, StatesEstimated: 1, Classified: 1), run); // and its states (#65), aisle and icon (#71, #72)
+        Assert.Equal(new ShelfLifeRun(1, 0, 2, false, StatesEstimated: 1, Classified: 1, AnimalContentSet: 1), run); // and its states (#65), aisle and icon (#71, #72), animal content (#112)
         var call = Assert.Single(estimator.Calls); // once per product, not per unit
         Assert.Equal(("SEMI-SKIMMED BRITISH MILK", "Dairy Manor", "2.272 L"), (call.Name, call.Brand, call.Size));
         Assert.Equal(["en:dairies", "en:milks"], call.CategoryTags);
@@ -220,5 +230,88 @@ public sealed class EstimateShelfLivesTests
 
         Assert.Equal(EstimateShelfLives.MaxPerRun, (await UseCase().ExecuteAsync(CancellationToken.None)).Estimated);
         Assert.Equal(5, (await UseCase().ExecuteAsync(CancellationToken.None)).Estimated);
+    }
+
+    // ---- Meat, fish or neither (#112)
+
+    private Guid WithAisle(string name, string aisle, string[]? tags = null)
+    {
+        var id = Known(name, tags: tags ?? []);
+        products.Products[id] = products.Products[id].WithManualAisle(aisle, Now) with
+        {
+            ShelfLife = new ShelfLife(7, Storage.Fridge, 0.8, false, ShelfLife.JevSource, Now),
+            StateEstimates = ProductStateEstimates.None with { EstimatedAt = Now },
+            Icon = new ProductIcon("milk", ShelfLife.JevSource, 0.9, Now),
+        };
+        return id;
+    }
+
+    [Fact]
+    public async Task The_meat_and_fish_aisle_only_asks_which_of_the_two()
+    {
+        var salmon = WithAisle("Scottish salmon fillets", "meatFish");
+        estimator.AnimalAnswer = _ => new AnimalContentResult.Classified(AnimalContent.Fish, 0.55);
+
+        await UseCase().ExecuteAsync(CancellationToken.None);
+
+        Assert.True(Assert.Single(estimator.AnimalCalls).MeatOrFish);
+        Assert.Equal((AnimalContent.Fish, AnimalContents.AisleSource), (products.Products[salmon].Animal!.Value, products.Products[salmon].Animal!.Source));
+    }
+
+    [Theory]
+    [InlineData(new[] { "en:meals", "en:vegetarian-meals" }, AnimalContent.None)]
+    [InlineData(new[] { "en:canned-foods", "en:canned-fishes", "en:tunas" }, AnimalContent.Fish)]
+    [InlineData(new[] { "en:prepared-meats", "en:hams" }, AnimalContent.Meat)]
+    [InlineData(new[] { "en:meat-analogues", "en:vegetarian-sausages" }, AnimalContent.None)]
+    public async Task Decisive_open_food_facts_categories_answer_without_jev(string[] tags, AnimalContent expected)
+    {
+        var id = WithAisle("Something", "tinsJars", tags);
+
+        await UseCase().ExecuteAsync(CancellationToken.None);
+
+        Assert.Empty(estimator.AnimalCalls);
+        Assert.Equal((expected, AnimalContents.OpenFoodFactsSource), (products.Products[id].Animal!.Value, products.Products[id].Animal!.Source));
+    }
+
+    [Theory]
+    [InlineData(0.9, AnimalContent.Meat)]
+    [InlineData(0.5, AnimalContent.Unknown)]
+    public async Task Otherwise_jev_decides_and_an_unsure_answer_is_unknown(double confidence, AnimalContent expected)
+    {
+        var cubes = WithAisle("Chicken stock cubes", "tinsJars", ["en:plant-based-foods", "en:broths"]);
+        estimator.AnimalAnswer = _ => new AnimalContentResult.Classified(AnimalContent.Meat, confidence);
+
+        await UseCase().ExecuteAsync(CancellationToken.None);
+
+        Assert.False(Assert.Single(estimator.AnimalCalls).MeatOrFish);
+        Assert.Equal((expected, AnimalContents.JevSource), (products.Products[cubes].Animal!.Value, products.Products[cubes].Animal!.Source));
+    }
+
+    [Fact]
+    public async Task It_is_worked_out_once_a_manual_choice_is_never_overwritten_and_a_rerun_changes_nothing()
+    {
+        var pesto = WithAisle("Pesto", "tinsJars");
+        products.Products[pesto] = products.Products[pesto].WithManualAnimalContent(AnimalContent.None, Now);
+        var gravy = WithAisle("Gravy granules", "tinsJars");
+
+        await UseCase().ExecuteAsync(CancellationToken.None);
+        var second = await UseCase().ExecuteAsync(CancellationToken.None);
+
+        Assert.Equal(AnimalContents.ManualSource, products.Products[pesto].Animal!.Source);
+        Assert.Single(estimator.AnimalCalls); // gravy, once
+        Assert.NotNull(products.Products[gravy].Animal);
+        Assert.Equal(0, second.AnimalContentSet);
+    }
+
+    [Fact]
+    public async Task Jev_being_down_leaves_them_for_the_next_run()
+    {
+        var id = WithAisle("Gravy granules", "tinsJars");
+        estimator.AnimalAnswer = _ => new AnimalContentResult.Unavailable("timeout");
+
+        var run = await UseCase().ExecuteAsync(CancellationToken.None);
+
+        Assert.True(run.Stopped);
+        Assert.Null(products.Products[id].Animal);
     }
 }

@@ -283,4 +283,31 @@ public sealed class JevTests
     public void An_aisle_answer_that_isnt_an_aisle_is_a_failure() =>
         Assert.IsType<ClassificationResult.Failed>(JevShelfLifeEstimator.ReadClassification(
             JsonNode.Parse("""{"aisle":{"type":"choice","choice":"garden","confidence":0.9}}""")!.AsObject()));
+
+    // ---- Meat, fish or neither (#112)
+
+    [Fact]
+    public void The_animal_content_question_is_a_three_way_choice_or_just_meat_or_fish_for_the_meat_aisle()
+    {
+        var three = JevShelfLifeEstimator.AnimalContentQuestion(meatOrFish: false)["animal"]!;
+        var two = JevShelfLifeEstimator.AnimalContentQuestion(meatOrFish: true)["animal"]!;
+
+        Assert.Equal("choice", three["type"]!.GetValue<string>());
+        Assert.Equal(["meat", "fish", "neither"], three["criteria"]!.AsObject().Select(c => c.Key));
+        Assert.Equal(["meat", "fish"], two["criteria"]!.AsObject().Select(c => c.Key));
+        Assert.Contains("Worcestershire sauce", JevShelfLifeEstimator.AnimalContentInstructions, StringComparison.Ordinal);
+        Assert.Contains("Cheese (even with animal rennet)", JevShelfLifeEstimator.AnimalContentInstructions, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"animal":{"choice":"meat","confidence":0.82}}""", AnimalContent.Meat, 0.82)]
+    [InlineData("""{"animal":{"choice":"fish","confidence":0.7}}""", AnimalContent.Fish, 0.7)]
+    [InlineData("""{"animal":{"choice":"neither","confidence":0.95}}""", AnimalContent.None, 0.95)]
+    public void Answers_are_read_with_their_confidence(string json, AnimalContent value, double confidence) =>
+        Assert.Equal(new AnimalContentResult.Classified(value, confidence),
+            JevShelfLifeEstimator.ReadAnimalContent(System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject()));
+
+    [Fact]
+    public void An_unexpected_answer_is_a_failure() =>
+        Assert.IsType<AnimalContentResult.Failed>(JevShelfLifeEstimator.ReadAnimalContent(System.Text.Json.Nodes.JsonNode.Parse("""{"animal":{"choice":"vegan"}}""")!.AsObject()));
 }

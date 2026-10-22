@@ -105,7 +105,7 @@ public sealed partial class SuggestRecipe(
             choices.Meal,
             choices.PreferUseFirst,
             [.. known.Select(k => new RecipeStockItem(k.Product.ProductId, k.Product.DisplayName, k.Product.Count,
-                k.Product.DaysUntilSoonest, k.Product.UseFirst, k.Aisle.Name, k.Product.OpenedCount))],
+                k.Product.DaysUntilSoonest, k.Product.UseFirst, k.Aisle.Name, k.Product.OpenedCount, k.Product.AnimalContent))],
             include,
             comments,
             [.. choices.AvoidTitles.Select(t => t.Trim()).Where(t => t.Length > 0)

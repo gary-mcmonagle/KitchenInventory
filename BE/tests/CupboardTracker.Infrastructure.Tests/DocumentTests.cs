@@ -75,4 +75,24 @@ public sealed class HubDocumentTests
 
         Assert.Equal(hub.Scanners, read.Scanners);
     }
+
+    [Theory]
+    [InlineData(AnimalContent.Meat, "meat", "aisle")]
+    [InlineData(AnimalContent.Fish, "fish", "jev")]
+    [InlineData(AnimalContent.None, "none", "openFoodFacts")]
+    [InlineData(AnimalContent.Unknown, "unknown", "jev")]
+    public void Animal_content_round_trips_with_its_source(AnimalContent value, string stored, string source)
+    {
+        var at = new DateTimeOffset(2026, 10, 22, 1, 0, 0, TimeSpan.Zero);
+        var product = Product.Found(Guid.NewGuid(), "5000354922831", new ProductDetails("Gravy", null, null, null, []), at, 1) with
+        {
+            Animal = new ProductAnimalContent(value, source, 0.8, at),
+        };
+
+        var document = JsonNode.Parse(ProductDocument.Write(product, null).ToJsonString())!.AsObject();
+
+        Assert.Equal((stored, source), (document["animalContent"]!.GetValue<string>(), document["animalContentSource"]!.GetValue<string>()));
+        Assert.Equal(product.Animal, ProductDocument.ToProduct(document).Animal);
+        Assert.Null(ProductDocument.ToProduct(JsonNode.Parse(ProductDocument.Write(product with { Animal = null }, null).ToJsonString())!.AsObject()).Animal);
+    }
 }

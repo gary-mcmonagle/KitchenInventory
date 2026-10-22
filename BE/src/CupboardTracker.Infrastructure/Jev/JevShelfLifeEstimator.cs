@@ -88,6 +88,64 @@ public sealed class JevShelfLifeEstimator(JevClient client, JevOptions options) 
         };
     }
 
+    public async Task<AnimalContentResult> ClassifyAnimalContentAsync(ProductDescription product, bool meatOrFish, CancellationToken cancellationToken)
+    {
+        if (!options.IsConfigured)
+        {
+            return new AnimalContentResult.NotConfigured();
+        }
+
+        return await client.AskAsync(State(product), AnimalContentQuestion(meatOrFish), cancellationToken) switch
+        {
+            JevResponse.Answered { Answers: var answers } => ReadAnimalContent(answers),
+            JevResponse.Unavailable { Reason: var reason } => new AnimalContentResult.Unavailable(reason),
+            JevResponse.Refused { Reason: var reason } => new AnimalContentResult.Failed(reason),
+            var other => throw new InvalidOperationException($"Unexpected Jev response {other}."),
+        };
+    }
+
+    internal const string AnimalContentInstructions =
+        "Whether this food product contains meat or fish, or is made from them, as a vegetarian would see it. Meat includes "
+        + "poultry and anything made from meat: stock or stock cubes, gravy, lard, dripping, suet and gelatine. Fish includes "
+        + "seafood and anything made from fish: fish sauce, anchovies and Worcestershire sauce. Cheese (even with animal rennet), "
+        + "eggs, milk and honey are not meat or fish.";
+
+    /// <summary>"Meat, fish or neither?" (#112), or just "meat or fish?" for the Meat &amp; fish aisle.</summary>
+    internal static JsonObject AnimalContentQuestion(bool meatOrFish)
+    {
+        var criteria = new JsonObject
+        {
+            ["meat"] = "Contains meat or poultry, or is made from them",
+            ["fish"] = "Contains fish or seafood, or is made from them",
+        };
+        if (!meatOrFish)
+        {
+            criteria["neither"] = "Contains no meat or fish and nothing made from them";
+        }
+
+        return new JsonObject
+        {
+            ["animal"] = new JsonObject { ["type"] = "choice", ["instructions"] = AnimalContentInstructions, ["criteria"] = criteria },
+        };
+    }
+
+    internal static AnimalContentResult ReadAnimalContent(JsonObject answers)
+    {
+        if (answers["animal"] is not JsonObject o || o["choice"] is not JsonValue c || !c.TryGetValue<string>(out var choice))
+        {
+            return new AnimalContentResult.Failed("no animal content answer");
+        }
+
+        var confidence = o["confidence"] is JsonValue v && v.TryGetValue<double>(out var conf) ? conf : 0;
+        return choice switch
+        {
+            "meat" => new AnimalContentResult.Classified(AnimalContent.Meat, confidence),
+            "fish" => new AnimalContentResult.Classified(AnimalContent.Fish, confidence),
+            "neither" => new AnimalContentResult.Classified(AnimalContent.None, confidence),
+            _ => new AnimalContentResult.Failed($"unknown animal content answer {choice}"),
+        };
+    }
+
     internal static JsonObject ClassificationQuestions(bool aisle, bool icon)
     {
         var questions = new JsonObject();

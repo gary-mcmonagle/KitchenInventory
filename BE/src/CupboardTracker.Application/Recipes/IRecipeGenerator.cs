@@ -55,7 +55,8 @@ public abstract record QuickIdeasResult
 /// <summary>One in-stock known product, as the recipe generator sees it (#73). Built on the server from Cosmos, never
 /// from the app.</summary>
 public sealed record RecipeStockItem(
-    Guid ProductId, string Name, int Quantity, int? DaysUntilSoonest, bool UseFirst, string AisleName, int OpenedCount);
+    Guid ProductId, string Name, int Quantity, int? DaysUntilSoonest, bool UseFirst, string AisleName, int OpenedCount,
+    Domain.Products.AnimalContent? AnimalContent = null);
 
 /// <summary>What to ask for: the meal, the stock, and the household's choices. <see cref="Comments"/> are one-off
 /// preferences ("vegetarian", "no oven"), never instructions. <see cref="Equipment"/> (#111) is the kit a recipe may

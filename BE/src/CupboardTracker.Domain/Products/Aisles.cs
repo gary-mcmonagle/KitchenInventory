@@ -10,6 +10,9 @@ public sealed record Aisle(string Id, string Name, string Icon, string Descripti
 /// </summary>
 public static class Aisles
 {
+    /// <summary>Raw meat and fish (#112 uses it: anything here is meat or fish).</summary>
+    public const string MeatFishId = "meatFish";
+
     public static readonly Aisle FruitVeg = new("fruitVeg", "Fruit & veg", "vegetables", "Fruit & veg");
     public static readonly Aisle Other = new("other", "Other", "shopping-cart", "Other (not food, or nothing else fits)");
 
@@ -17,7 +20,7 @@ public static class Aisles
     [
         FruitVeg,
         new("bakery", "Bakery", "bread", "Bakery (bread, rolls, wraps, cakes)"),
-        new("meatFish", "Meat & fish", "fish", "Meat & fish (raw)"),
+        new(MeatFishId, "Meat & fish", "fish", "Meat & fish (raw)"),
         new("dairyEggs", "Dairy & eggs", "milk", "Dairy & eggs (milk, cheese, yogurt, butter, cream, eggs)"),
         new("chilledDeli", "Chilled & deli", "sandwich", "Chilled & deli (ready meals, dips, cooked meats, fresh pasta)"),
         new("frozen", "Frozen", "snowflake", "Frozen (sold frozen)"),

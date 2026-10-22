@@ -74,6 +74,7 @@ public sealed class StockFunction(GetStock getStock)
         soonestStateOn = p.SoonestStateOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         aisleId = p.AisleId,
         genericName = p.GenericName, // #91: the stock search matches it
+        animalContent = p.AnimalContent is { } ac ? Domain.Products.AnimalContents.Id(ac) : null, // #112; null until worked out
         icon = p.Icon,
         useFirst = p.UseFirst,
     };

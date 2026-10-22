@@ -116,7 +116,7 @@ public sealed partial class AdjustIdea(GetStock stock, IRecipeGenerator generato
             choices.Meal,
             false,
             [.. known.Select(k => new RecipeStockItem(k.Product.ProductId, k.Product.DisplayName, k.Product.Count,
-                k.Product.DaysUntilSoonest, k.Product.UseFirst, k.Aisle.Name, k.Product.OpenedCount))],
+                k.Product.DaysUntilSoonest, k.Product.UseFirst, k.Aisle.Name, k.Product.OpenedCount, k.Product.AnimalContent))],
             add,
             tweak,
             []);

@@ -43,6 +43,9 @@ public interface IProductRepository
     /// <summary>Known products with no aisle or no icon yet (#71, #72), up to <paramref name="max"/>.</summary>
     Task<IReadOnlyList<Product>> GetNeedingClassificationAsync(int max, CancellationToken cancellationToken);
 
+    /// <summary>Known products with an aisle and no animal content yet (#112), at most <paramref name="max"/>.</summary>
+    Task<IReadOnlyList<Product>> GetNeedingAnimalContentAsync(int max, CancellationToken cancellationToken);
+
     /// <summary>Known products with an aisle and no generic name yet (#90).</summary>
     Task<IReadOnlyList<Product>> GetNeedingGenericNameAsync(int max, CancellationToken cancellationToken);
 

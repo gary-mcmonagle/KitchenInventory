@@ -49,7 +49,8 @@ public sealed record ProductView(
     Storage? UsualStorage = null,
     ProductAisle? Aisle = null,
     ProductIcon? Icon = null,
-    ProductGenericName? Generic = null)
+    ProductGenericName? Generic = null,
+    ProductAnimalContent? Animal = null)
 {
     public int OpenedCount => InStockUnits.Count(u => u.OpenedOn is not null);
 
@@ -94,7 +95,8 @@ public sealed class GetProduct(
             product.ShelfLife?.UsualStorage,
             product.Aisle,
             product.Icon,
-            product.Generic);
+            product.Generic,
+            product.Animal);
     }
 
     private List<ProductUnitView> UnitViews(IEnumerable<Unit> inStock)

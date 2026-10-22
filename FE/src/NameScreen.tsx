@@ -52,6 +52,7 @@ export function NameScreen({
     const [brand, setBrand] = useState("");
     const [size, setSize] = useState("");
     const [aisle, setAisle] = useState("");
+    const [animal, setAnimal] = useState("");
     const [generic, setGeneric] = useState<GenericChoice | null>(null);
     const [errors, setErrors] = useState<Errors>({});
     const [formError, setFormError] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export function NameScreen({
                     setBrand(p.brand ?? "");
                     setSize(p.size ?? "");
                     setAisle(p.aisleId ?? "");
+                    setAnimal(p.animalContent && p.animalContent !== "unknown" ? p.animalContent : "");
                 }
             })
             .catch((error: unknown) => {
@@ -108,6 +110,12 @@ export function NameScreen({
                 await api.editDetails(productId, details);
                 // The aisle (#71) is saved with the form, only when it changed.
                 if (aisle && aisle !== product?.aisleId) await api.setAisle(productId, aisle);
+                // Meat, fish or neither (#112): only when chosen and changed.
+                if (
+                    (animal === "meat" || animal === "fish" || animal === "none") &&
+                    animal !== product?.animalContent
+                )
+                    await api.setAnimalContent(productId, animal);
                 // The generic name (#90): only when one was picked or typed.
                 if (generic?.kind === "existing" && generic.id !== product?.genericName?.id)
                     await api.setGenericName(productId, { genericNameId: generic.id });
@@ -242,6 +250,30 @@ export function NameScreen({
                                                 {a.name}
                                             </option>
                                         ))}
+                                    </select>
+                                </div>
+                            )}
+                            {editing && (
+                                <div className={styles.field}>
+                                    <label htmlFor="animal" className={styles.label}>
+                                        Meat / fish / neither
+                                    </label>
+                                    <select
+                                        id="animal"
+                                        className={styles.input}
+                                        value={animal}
+                                        onChange={(e) => setAnimal(e.target.value)}
+                                    >
+                                        {!animal && (
+                                            <option value="">
+                                                {product.animalContent === "unknown"
+                                                    ? "Not sure yet"
+                                                    : "Not sorted yet"}
+                                            </option>
+                                        )}
+                                        <option value="meat">Meat</option>
+                                        <option value="fish">Fish</option>
+                                        <option value="none">Neither</option>
                                     </select>
                                 </div>
                             )}

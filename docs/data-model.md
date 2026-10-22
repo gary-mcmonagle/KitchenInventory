@@ -248,6 +248,8 @@ One document per **generic name** (what you'd say to someone going to the shop: 
 
 On each **product**: `genericName` (display), `genericNameId` (the record's normalized id), `genericNameSource` (`jevMatch` | `foundry` | `manual` | `fallback`), `genericNameConfidence` (Jev's, when matched) and `genericNameEstimatedAt`. Filled by the estimate timer after the aisle is known; `manual` is never overwritten.
 
+**Animal content (#112)**, on each known **product**: `animalContent` (`meat` | `fish` | `none` | `unknown`), `animalContentSource` (`aisle` | `openFoodFacts` | `jev` | `manual`), `animalContentConfidence` (Jev's, when it answered) and `animalContentAt`. Whether the product is or contains meat or fish, or is made from them (stock cubes, meat gravy, lard, gelatine, anchovy sauces); cheese and rennet, eggs, milk and honey are not. Fish counts as meat for "veg", but the value says which. Worked out once by the estimate timer after the aisle is known, in order: the **Meat & fish aisle** → Jev's choice between meat and fish only (`aisle`); otherwise **decisive Open Food Facts categories** (vegetarian / vegan / meat-analogue → `none`, fish or seafood → `fish`, meat → `meat`; only `categoryTags` are cached, not labels or ingredients) (`openFoodFacts`); otherwise **Jev's** meat / fish / neither choice (`jev`), stored as `unknown` below confidence 0.6. Set by hand in Edit details as `manual`, never overwritten. The timer's first runs after #112 were the backfill (40 products a run, every 5 minutes).
+
 ### Barcode lookup document
 
 Maps one barcode to its product, so "which product is this barcode?" is a single point read.

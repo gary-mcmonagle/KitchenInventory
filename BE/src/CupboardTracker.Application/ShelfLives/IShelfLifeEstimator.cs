@@ -55,6 +55,18 @@ public abstract record ClassificationResult
     public sealed record NotConfigured : ClassificationResult;
 }
 
+/// <summary>Jev's answer to "meat, fish or neither?" (#112), with its confidence.</summary>
+public abstract record AnimalContentResult
+{
+    public sealed record Classified(AnimalContent Value, double Confidence) : AnimalContentResult;
+
+    public sealed record Unavailable(string Reason) : AnimalContentResult;
+
+    public sealed record Failed(string Reason) : AnimalContentResult;
+
+    public sealed record NotConfigured : AnimalContentResult;
+}
+
 /// <summary>Estimates how long a product usually keeps. Implemented with Jev in Infrastructure.</summary>
 public interface IShelfLifeEstimator
 {
@@ -68,4 +80,8 @@ public interface IShelfLifeEstimator
     /// in one request (#71, #72). <paramref name="usualStorage"/> when known.</summary>
     Task<ClassificationResult> ClassifyAsync(
         ProductDescription product, Storage? usualStorage, bool aisle, bool icon, CancellationToken cancellationToken);
+
+    /// <summary>Whether it's meat, fish or neither (#112). <paramref name="meatOrFish"/>: it's in the Meat &amp; fish
+    /// aisle, so the only question is which.</summary>
+    Task<AnimalContentResult> ClassifyAnimalContentAsync(ProductDescription product, bool meatOrFish, CancellationToken cancellationToken);
 }

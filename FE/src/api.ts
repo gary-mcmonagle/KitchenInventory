@@ -34,6 +34,8 @@ export type StockStatus = "known" | "noMatch" | "lookupFailed";
 export type StockSection = "useFirst" | "later" | "waitingForName";
 
 export interface StockProduct {
+    /** Meat, fish or neither (#112); null until worked out. */
+    animalContent?: AnimalContent | null;
     productId: string;
     barcode: string | null;
     displayName: string;
@@ -126,6 +128,9 @@ export interface Product {
     /** #71, #72: null until Jev has chosen; source "jev" or "manual". */
     aisleId: string | null;
     aisleSource: string | null;
+    /** Meat, fish or neither (#112): null until worked out; "unknown" when Jev wasn't sure. */
+    animalContent?: AnimalContent | null;
+    animalContentSource?: string | null;
     icon: string | null;
     iconSource: string | null;
     /** #90: the shopping-list name; null until worked out. source: jevMatch, foundry, manual or fallback. */
@@ -262,6 +267,9 @@ export type RecipeMeal = "breakfast" | "lunch" | "dinner" | "snack";
 
 /** Hungry? (#88): a proper recipe, or quick Ready now ideas. */
 export type RecipeMode = "cook" | "readyNow";
+
+/** Whether a product is or contains meat or fish (#112). Fish counts as meat for "veg". */
+export type AnimalContent = "meat" | "fish" | "none" | "unknown";
 
 export type Appliance = "toaster" | "microwave" | "kettle" | "airFryer" | "none";
 
@@ -620,6 +628,16 @@ export class ApiClient {
     /** Puts a unit's estimate back as it was before its last state change (#65). */
     undoStateChange(unitId: string): Promise<{ productId: string; unit: ProductUnit }> {
         return this.send("POST", `/api/units/${encodeURIComponent(unitId)}/undo-state-change`);
+    }
+
+    /** Meat, fish or neither, by hand (#112); never overwritten. */
+    setAnimalContent(
+        productId: string,
+        animalContent: Exclude<AnimalContent, "unknown">,
+    ): Promise<{ productId: string; animalContent: string }> {
+        return this.send("PUT", `/api/products/${encodeURIComponent(productId)}/animal-content`, {
+            animalContent,
+        });
     }
 
     /** Puts a product in an aisle by hand (#71); Jev never overwrites it. */

@@ -67,6 +67,30 @@ public sealed partial class SetProductIcon(IProductRepository products, TimeProv
     private partial void LogSet(Guid productId, string icon, Guid userId);
 }
 
+/// <summary>Meat, fish or neither set by hand in Edit details (#112): manual, never overwritten.</summary>
+public sealed partial class SetProductAnimalContent(IProductRepository products, TimeProvider clock, ILogger<SetProductAnimalContent> logger)
+{
+    public async Task<SetClassificationResult> ExecuteAsync(Guid productId, string? value, CurrentUser user, CancellationToken cancellationToken)
+    {
+        if (AnimalContents.Parse(value) is not { } content || content == AnimalContent.Unknown)
+        {
+            return new SetClassificationResult.Invalid("animalContent must be meat, fish or none.");
+        }
+
+        var result = await ProductEdits.ReplaceKnownAsync(products, productId, p => p.WithManualAnimalContent(content, clock.GetUtcNow()), cancellationToken);
+        if (result is SetClassificationResult.Saved)
+        {
+            LogSet(productId, AnimalContents.Id(content), user.ObjectId);
+            return new SetClassificationResult.Saved(productId, AnimalContents.Id(content));
+        }
+
+        return result;
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Product {ProductId} marked {AnimalContent} in the app by user {UserId}.")]
+    private partial void LogSet(Guid productId, string animalContent, Guid userId);
+}
+
 internal static class ProductEdits
 {
     /// <summary>An ETag-guarded change to a known product.</summary>

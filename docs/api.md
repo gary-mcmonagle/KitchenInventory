@@ -260,6 +260,10 @@ The latest action decides, and a manual date is replaced (Undo brings it back; e
 - **404** `{ "error": "No such unit." }`
 - **409** `{ "error": "…" }`: not in stock, Defrosted on a unit that isn't frozen, or changed while saving.
 
+### `PUT /api/products/{productId}/animal-content`
+
+`{ "animalContent": "meat" | "fish" | "none" }` (#112): set by hand in Edit details (`animalContentSource: manual`), never overwritten. `unknown` or anything else → **400**; **404** no such product; **409** not known yet, or it changed meanwhile. **200** `{ "productId": "…", "animalContent": "fish" }`. `GET /api/stock` products and `GET /api/products/{productId}` carry `animalContent` (null until worked out); the product also has `animalContentSource`.
+
 ### `PUT /api/products/{productId}/aisle`
 
 Puts a known product in an aisle by hand (#71): `{ "aisle": "bakery" }`, one of the 14 aisle IDs (`fruitVeg`, `bakery`, `meatFish`, `dairyEggs`, `chilledDeli`, `frozen`, `pastaRiceGrains`, `tinsJars`, `saucesOils`, `bakingSpices`, `breakfastCereal`, `snacksSweets`, `drinks`, `other`). Sets `aisleSource: manual`; Jev never overwrites it.

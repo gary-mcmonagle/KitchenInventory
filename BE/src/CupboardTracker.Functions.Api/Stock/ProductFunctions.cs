@@ -172,6 +172,9 @@ public sealed class ProductFunctions(
         iconSource = view.Icon?.Source,
         // Generic name (#90): the shopping-list name and where it came from; null until worked out.
         genericName = view.Generic is { } g ? new { id = g.Id, name = g.Name, source = Domain.Products.GenericNames.SourceName(g.Source) } : null,
+        // Meat, fish or neither (#112): null until worked out.
+        animalContent = view.Animal is { } an ? Domain.Products.AnimalContents.Id(an.Value) : null,
+        animalContentSource = view.Animal?.Source,
         units = view.InStockUnits.Select(UnitJson),
     };
 

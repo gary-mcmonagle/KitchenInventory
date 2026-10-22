@@ -240,6 +240,62 @@ test("Edit details: the aisle is saved with the form, and an icon is picked from
     expect(api.setAisle).toHaveBeenCalledWith("p-1", "bakery");
 });
 
+test("Edit details: meat, fish or neither is shown, and saved only when changed (#112)", async () => {
+    const known: Product = {
+        ...unknown,
+        status: "known",
+        displayName: "Pesto",
+        aisleId: "tinsJars",
+        aisleSource: "jev",
+        animalContent: "unknown",
+        animalContentSource: "jev",
+    };
+    const api = {
+        product: vi.fn(async () => known),
+        editDetails: vi.fn(async () => ({ productId: "p-1", displayName: "Pesto" })),
+        setAisle: vi.fn(),
+        setAnimalContent: vi.fn(async () => ({ productId: "p-1", animalContent: "fish" })),
+    };
+    window.history.pushState(null, "", "/products/p-1/edit");
+    render(<NameScreen api={api as unknown as ApiClient} productId="p-1" mode="edit" />);
+
+    const select = await screen.findByLabelText("Meat / fish / neither");
+    expect(select).toHaveValue("");
+    expect(
+        within(select)
+            .getAllByRole("option")
+            .map((o) => o.textContent),
+    ).toEqual(["Not sure yet", "Meat", "Fish", "Neither"]);
+
+    fireEvent.change(select, { target: { value: "fish" } });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+
+    expect(api.setAnimalContent).toHaveBeenCalledWith("p-1", "fish");
+});
+
+test("Edit details: an unchanged meat, fish or neither isn't sent again (#112)", async () => {
+    const known: Product = {
+        ...unknown,
+        status: "known",
+        displayName: "Ham",
+        aisleId: "meatFish",
+        animalContent: "meat",
+    };
+    const api = {
+        product: vi.fn(async () => known),
+        editDetails: vi.fn(async () => ({ productId: "p-1", displayName: "Ham" })),
+        setAisle: vi.fn(),
+        setAnimalContent: vi.fn(),
+    };
+    window.history.pushState(null, "", "/products/p-1/edit");
+    render(<NameScreen api={api as unknown as ApiClient} productId="p-1" mode="edit" />);
+
+    expect(await screen.findByLabelText("Meat / fish / neither")).toHaveValue("meat");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+
+    expect(api.setAnimalContent).not.toHaveBeenCalled();
+});
+
 describe("Edit details: generic name (#90)", () => {
     const known: Product = {
         ...unknown,

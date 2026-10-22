@@ -155,4 +155,27 @@ public sealed class AislesAndIconsTests
         Assert.Equal(["Leeks", "Milk"], data.UseFirstLines.Select(l => l.Name)); // shop order: fruit & veg first
         Assert.Contains("Use first\nFruit & veg:\n  Leeks ×1 · Est. 2 days\nDairy & eggs:\n  Milk ×1 · Est. tomorrow\n", text, StringComparison.Ordinal);
     }
+
+    // ---- Meat, fish or neither by hand (#112)
+
+    [Fact]
+    public async Task Animal_content_can_be_set_by_hand_and_the_timer_never_changes_it()
+    {
+        var pesto = Known("Pesto", aisle: new ProductAisle("tinsJars", "jev", 0.9, Now), icon: new ProductIcon("jar", "jev", 0.9, Now));
+        var set = new SetProductAnimalContent(products, clock, new ListLogger<SetProductAnimalContent>());
+
+        Assert.IsType<SetClassificationResult.Saved>(await set.ExecuteAsync(pesto.ProductId, "fish", Gary, CancellationToken.None));
+        estimator.AnimalAnswer = _ => new AnimalContentResult.Classified(AnimalContent.None, 0.99);
+        await Timer().ExecuteAsync(CancellationToken.None);
+
+        Assert.Equal((AnimalContent.Fish, AnimalContents.ManualSource), (products.Products[pesto.ProductId].Animal!.Value, products.Products[pesto.ProductId].Animal!.Source));
+        Assert.Empty(estimator.AnimalCalls);
+        Assert.IsType<SetClassificationResult.Invalid>(await set.ExecuteAsync(pesto.ProductId, "unknown", Gary, CancellationToken.None));
+        Assert.IsType<SetClassificationResult.Invalid>(await set.ExecuteAsync(pesto.ProductId, "vegan", Gary, CancellationToken.None));
+        Assert.IsType<SetClassificationResult.NotFound>(await set.ExecuteAsync(Guid.NewGuid(), "meat", Gary, CancellationToken.None));
+    }
+
+    [Fact]
+    public void Stock_carries_animal_content_to_the_app_and_the_recipe_stock_list() =>
+        Assert.Equal(AnimalContent.Meat, new StockProduct(Guid.NewGuid(), null, "Ham", null, null, 1, Now, StockProductStatus.Known, AnimalContent: AnimalContent.Meat).AnimalContent);
 }

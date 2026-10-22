@@ -47,8 +47,16 @@ public sealed record Product(
     ProductStateEstimates? StateEstimates = null,
     ProductAisle? Aisle = null,
     ProductIcon? Icon = null,
-    ProductGenericName? Generic = null)
+    ProductGenericName? Generic = null,
+    ProductAnimalContent? Animal = null)
 {
+    /// <summary>Known, with an aisle (step 1 needs it), and no animal content yet (#112): the estimate timer works it out.</summary>
+    public bool NeedsAnimalContent => Status == ProductStatus.Known && Aisle is not null && Animal is null;
+
+    /// <summary>Set by hand in Edit details (#112): never overwritten.</summary>
+    public Product WithManualAnimalContent(AnimalContent value, DateTimeOffset at) =>
+        this with { Animal = new ProductAnimalContent(value, AnimalContents.ManualSource, null, at) };
+
     /// <summary>Known, with an aisle, and no generic name yet (#90): the estimate timer works one out.</summary>
     public bool NeedsGenericName => Status == ProductStatus.Known && Aisle is not null && Generic is null;
 

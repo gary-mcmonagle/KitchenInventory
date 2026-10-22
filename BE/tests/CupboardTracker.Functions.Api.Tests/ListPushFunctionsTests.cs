@@ -12,4 +12,8 @@ public sealed class ListPushFunctionsTests
     [Fact]
     public void The_queue_trigger_isnt_http() =>
         Assert.False(FunctionAuthPolicy.RequiresUser("CupboardTracker.Functions.Api.ShoppingList.ListPushFunction.Run"));
+
+    [Fact]
+    public void Setting_animal_content_needs_a_signed_in_user() =>
+        Assert.True(FunctionAuthPolicy.RequiresUser("CupboardTracker.Functions.Api.Stock.ClassificationFunctions.AnimalContent"));
 }

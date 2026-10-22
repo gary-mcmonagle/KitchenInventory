@@ -136,6 +136,9 @@ internal sealed class FakeProducts : IProductRepository
     public Task<IReadOnlyList<Product>> GetNeedingClassificationAsync(int max, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.NeedsClassification).Take(max).ToList());
 
+    public Task<IReadOnlyList<Product>> GetNeedingAnimalContentAsync(int max, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.NeedsAnimalContent).Take(max).ToList());
+
     public Task<IReadOnlyList<Product>> GetNeedingGenericNameAsync(int max, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Product>>(Products.Values.Where(p => p.NeedsGenericName).Take(max).ToList());
 

@@ -162,6 +162,15 @@ public sealed class CosmosProductRepository(CosmosContainers containers, TimePro
         return documents.Select(ProductDocument.ToProduct).ToList();
     }
 
+    public async Task<IReadOnlyList<Product>> GetNeedingAnimalContentAsync(int max, CancellationToken cancellationToken)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.type = 'product' AND c.status = 'known' AND IS_STRING(c.aisle) "
+            + "AND (NOT IS_DEFINED(c.animalContent) OR IS_NULL(c.animalContent))");
+        var documents = await CosmosJson.QueryAsync(Products, query, partitionKey: null, max, cancellationToken);
+        return documents.Select(ProductDocument.ToProduct).ToList();
+    }
+
     public async Task<IReadOnlyList<Product>> GetNeedingGenericNameAsync(int max, CancellationToken cancellationToken)
     {
         var query = new QueryDefinition(
@@ -298,6 +307,12 @@ internal static class ProductDocument
         Replace(document, "genericNameSource", product.Generic is { } g ? GenericNames.SourceName(g.Source) : null);
         Replace(document, "genericNameConfidence", product.Generic?.Confidence is { } gc ? Math.Round(gc, 3) : null);
         Replace(document, "genericNameEstimatedAt", product.Generic is { } ga ? CosmosJson.Timestamp(ga.At) : null);
+
+        // Animal content (#112).
+        Replace(document, "animalContent", product.Animal is { } an ? AnimalContents.Id(an.Value) : null);
+        Replace(document, "animalContentSource", product.Animal?.Source);
+        Replace(document, "animalContentConfidence", product.Animal?.Confidence is { } ac ? Math.Round(ac, 3) : null);
+        Replace(document, "animalContentAt", product.Animal is { } at ? CosmosJson.Timestamp(at.At) : null);
         return document;
     }
 
@@ -318,6 +333,13 @@ internal static class ProductDocument
             ? new ProductAisle(id, CosmosJson.Text(d["aisleSource"]) ?? ShelfLife.JevSource,
                 d["aisleConfidence"] is JsonValue c && c.TryGetValue<double>(out var conf) ? conf : 0,
                 CosmosJson.ParseTimestamp(d["aisleEstimatedAt"]) ?? DateTimeOffset.MinValue)
+            : null;
+
+    private static ProductAnimalContent? ReadAnimal(JsonObject d) =>
+        AnimalContents.Parse(CosmosJson.Text(d["animalContent"])) is { } value
+            ? new ProductAnimalContent(value, CosmosJson.Text(d["animalContentSource"]) ?? AnimalContents.JevSource,
+                d["animalContentConfidence"] is JsonValue c && c.TryGetValue<double>(out var conf) ? conf : null,
+                CosmosJson.ParseTimestamp(d["animalContentAt"]) ?? DateTimeOffset.MinValue)
             : null;
 
     private static ProductGenericName? ReadGeneric(JsonObject d) =>
@@ -425,7 +447,8 @@ internal static class ProductDocument
             ReadStates(document),
             ReadAisle(document),
             ReadIcon(document),
-            ReadGeneric(document));
+            ReadGeneric(document),
+            ReadAnimal(document));
     }
 
     private static ShelfLife? ReadShelfLife(JsonObject document)
