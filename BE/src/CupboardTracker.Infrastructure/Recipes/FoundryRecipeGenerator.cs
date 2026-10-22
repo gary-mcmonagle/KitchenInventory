@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -461,7 +462,7 @@ public sealed partial class FoundryRecipeGenerator(
             ["alsoNeeded"] = new JsonArray([.. new[] { current.AlsoNeeded }.OfType<string>().Select(a => (JsonNode)JsonValue.Create(a)!)]),
         };
         var text = new StringBuilder();
-        text.AppendLine("Current idea (JSON):").AppendLine(Delimiters().Replace(json.ToJsonString(), " ")).AppendLine();
+        text.AppendLine("Current idea (JSON):").AppendLine(Delimiters().Replace(json.ToJsonString(PromptJson), " ")).AppendLine();
         if (request.Changes.AddTyped.Count > 0)
         {
             text.AppendLine("Add (not in stock: it becomes alsoNeeded):");
@@ -644,6 +645,10 @@ public sealed partial class FoundryRecipeGenerator(
         return new RecipeResult.Suggested(WithWarnings(recipe!, request.Context));
     }
 
+    /// <summary>JSON the model reads as text: "sauté" and "it's" as written, not <c>\u00E9</c> and <c>\u0027</c>, which
+    /// came back garbled ("saut E9"). Tags like &lt;preferences&gt; stay raw too, so <see cref="Delimiters"/> still strips them.</summary>
+    private static readonly JsonSerializerOptions PromptJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
     /// <summary>The adjustment's user message: the suggestion prompt (meal, the products to add as "Must include", the
     /// stock, and the tweak as preferences), plus the current recipe and the other changes.</summary>
     internal static string AdjustPrompt(RecipeAdjustmentRequest request)
@@ -668,7 +673,7 @@ public sealed partial class FoundryRecipeGenerator(
             ["alsoNeeded"] = new JsonArray([.. current.AlsoNeeded.Select(a => (JsonNode)new JsonObject { ["name"] = a.Name, ["for"] = Diets.Id(a.For) })]),
         };
         var text = new StringBuilder();
-        text.AppendLine("Current recipe (JSON):").AppendLine(Delimiters().Replace(json.ToJsonString(), " ")).AppendLine();
+        text.AppendLine("Current recipe (JSON):").AppendLine(Delimiters().Replace(json.ToJsonString(PromptJson), " ")).AppendLine();
         if (request.Changes.AddTyped.Count > 0)
         {
             text.AppendLine("Add (not in stock: put each in alsoNeeded):");

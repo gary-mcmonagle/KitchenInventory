@@ -479,6 +479,18 @@ public sealed class FoundryRecipeGeneratorTests
     }
 
     [Fact]
+    public void The_adjust_prompt_keeps_accents_and_apostrophes_as_written()
+    {
+        var request = Adjustment();
+        request = request with { Current = request.Current with { Steps = [new("Sauté the onion until it's soft.")] } };
+
+        var prompt = FoundryRecipeGenerator.AdjustPrompt(request);
+
+        Assert.Contains("\"text\":\"Sauté the onion until it's soft.\"", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\u00", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task An_adjustment_that_ignores_a_change_is_asked_for_again_once_then_returned_with_notes()
     {
         var stillOnion = Adjusted.Replace("{\"name\":\"Mature cheddar\"", "{\"name\":\"Onion\",\"amount\":\"1\",\"productId\":null},{\"name\":\"Mature cheddar\"", StringComparison.Ordinal)
