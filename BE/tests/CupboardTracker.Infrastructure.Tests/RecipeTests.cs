@@ -173,6 +173,39 @@ public sealed class FoundryRecipeGeneratorTests
     }
 
     [Fact]
+    public void Without_prefer_use_first_the_stock_shows_only_whether_each_item_has_expired()
+    {
+        var prompt = FoundryRecipeGenerator.Prompt(Request() with { PreferUseFirst = false });
+
+        Assert.Contains("Prefer use first: no", prompt, StringComparison.Ordinal);
+        Assert.Contains("Stock (ref | name | quantity | expired | aisle | opened):", prompt, StringComparison.Ordinal);
+        Assert.Contains("p1 | Semi-skimmed milk | 2 | expired | Dairy & eggs | 1 opened", prompt, StringComparison.Ordinal);
+        Assert.Contains("p2 | Wholewheat penne | 1 | - | Pasta, rice & grains | -", prompt, StringComparison.Ordinal);
+        Assert.Contains("p3 | Mature cheddar | 1 | - | Dairy & eggs | -", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("use first |", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("days", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_rules_say_to_choose_freely_when_not_preferring_use_first()
+    {
+        Assert.Contains("When it's no, choose ingredients freely: don't favour items because they need using up.",
+            FoundryRecipeGenerator.Instructions, StringComparison.Ordinal);
+        Assert.Contains("When it's no, choose freely: don't favour items because they need using up.",
+            FoundryRecipeGenerator.IdeasInstructions, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Uses_up_is_worked_out_from_the_use_first_products_used_not_the_models_list()
+    {
+        var recipe = FoundryRecipeGenerator.Validate(
+            Recorded.Replace($"\"usesUp\":[\"{Milk}\",\"{Cheddar}\",\"nonsense\"]", $"\"usesUp\":[\"{Penne}\"]", StringComparison.Ordinal),
+            Request() with { PreferUseFirst = false });
+
+        Assert.Equal([Milk], recipe.UsesUp); // milk is use first and used; penne is used but not use first
+    }
+
+    [Fact]
     public void Unknown_product_ids_are_dropped_and_uses_up_is_only_what_the_recipe_uses()
     {
         var recipe = FoundryRecipeGenerator.Validate(Recorded, Request());
@@ -747,7 +780,7 @@ public sealed class FoundryRecipeGeneratorTests
         Assert.Contains("A step for 'all' must never name meat or fish, not even to serve it", messages[0]!["content"]!.GetValue<string>(), StringComparison.Ordinal);
         var prompt = messages[1]!["content"]!.GetValue<string>();
         Assert.Contains("| opened | meat or fish):", prompt, StringComparison.Ordinal);
-        Assert.Contains("Smoked back bacon | 1 | in 3 days | - | Meat & fish | - | meat", prompt, StringComparison.Ordinal);
+        Assert.Contains("Smoked back bacon | 1 | - | Meat & fish | - | meat", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
