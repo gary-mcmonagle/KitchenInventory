@@ -532,7 +532,8 @@ A **recipe suggestion** built from what's in stock: gpt-4o on Azure AI Foundry (
   "includeProductIds": ["…"],
   "comments": "something spicy, no oven",
   "avoidTitles": ["Creamy cheddar penne"],
-  "equipment": ["hob", "microwave", "airFryer"]
+  "equipment": ["hob", "microwave", "airFryer"],
+  "diet": "half"
 }
 ```
 
@@ -542,6 +543,13 @@ A **recipe suggestion** built from what's in stock: gpt-4o on Azure AI Foundry (
 - The recipe gains `equipment` (the kit its method uses, as ids, not the kettle) and `warnings` (`[]` when none).
 - Logged: the allowed kit as ids, and whether a warning was returned.
 - **Ready now** has no chips; its ideas may also use the **air fryer** (`appliance: "airFryer"`, about 15 minutes), as may adjusted ideas (#108).
+
+**Meat or veg? (#110):** `diet` is `"any"` (Meat & veg, the default when missing or `null`), `"veg"` (Veggie) or `"half"` (Half & half: one meal, some plates veggie). Anything else is **400**, and `"half"` with `"mode": "readyNow"` is **400**. `POST /api/recipes/adjust` and `POST /api/recipes/adjust-idea` take the same field (`"half"` is 400 on an idea), and the app sends the diet the recipe or idea was made with.
+- **The model is told** (rule 9 in the system message, so the comments can't change it) what vegetarian means here: no meat or fish, and nothing made from them (stock cubes, gravy, lard, gelatine, Worcestershire sauce, fish sauce); cheese, eggs, milk and honey are fine. The stock list it sees gains a **meat or fish** column from each product's animal content (#112) whenever `diet` isn't `"any"`.
+- **Half & half:** every ingredient, step and `alsoNeeded` item has `for`: `"all"` (everyone), `"meat"` (the meat plates only) or `"veg"` (the veggie plates only). The recipe has `servingsMeat` and `servingsVeg`, which add up to `servings`. For any other diet everything is `"all"` and both are `0`.
+- **Checked in code** (`DietChecks`, Application): Veggie: no meat or fish product (by animal content) and no meat or fish word (one list, e.g. bacon, chicken, mince, prawns, gravy, Worcestershire; veggie forms such as "veggie sausages" or "vegetable stock" are fine) in the ingredients, steps or `alsoNeeded`. Half & half: meat and fish only on `"meat"` items and steps, both sides present, and the servings adding up. **One retry** naming what broke, then what's left becomes `warnings` (e.g. `"Worcestershire sauce usually contains anchovies: keep it to the meat plates."`). A product whose animal content is **unknown** is allowed with the warning `"Check <name> is vegetarian."`.
+- **Veggie Ready now:** ideas are checked the same way; failing ones get one retry, then are dropped. If none are left: **200** `{ "available": false, "message": "Couldn't find veggie ideas in your stock." }`. Ideas gain `diet` and `warnings`.
+- The recipe gains `diet`, `servingsMeat` and `servingsVeg`. Logged: the diet.
 
 | Field | Notes |
 |---|---|
@@ -564,13 +572,18 @@ The **stock is read on the server from Cosmos**, never taken from the app (in th
     "servings": 2,
     "totalMinutes": 25,
     "ingredients": [
-      { "name": "Semi-skimmed milk", "amount": "300 ml", "productId": "…", "useFirst": true },
-      { "name": "Oil, salt and pepper", "amount": "1 tbsp", "productId": null, "useFirst": false }
+      { "name": "Semi-skimmed milk", "amount": "300 ml", "productId": "…", "useFirst": true, "for": "all" },
+      { "name": "Oil, salt and pepper", "amount": "1 tbsp", "productId": null, "useFirst": false, "for": "all" }
     ],
-    "steps": ["Cook the penne…", "…"],
+    "steps": [{ "text": "Cook the penne…", "for": "all" }, { "text": "…", "for": "all" }],
     "usesUp": [{ "productId": "…", "displayName": "Semi-skimmed milk", "daysUntilSoonest": 2, "soonestEstimatedExpiryDate": "2026-10-20" }],
-    "alsoNeeded": ["1 onion"],
-    "couldNotFitIn": []
+    "alsoNeeded": [{ "name": "1 onion", "for": "all" }],
+    "couldNotFitIn": [],
+    "equipment": ["hob"],
+    "warnings": [],
+    "diet": "any",
+    "servingsMeat": 0,
+    "servingsVeg": 0
   }
 }
 ```
@@ -629,7 +642,8 @@ Quick things using **only a toaster, microwave or kettle, or no cooking** (never
 ```json
 {
   "recipe": { "title": "…", "summary": "…", "meal": "dinner", "servings": 2, "totalMinutes": 25,
-              "ingredients": [{ "name": "…", "amount": "…", "productId": "…" | null }], "steps": ["…"], "alsoNeeded": ["…"] },
+              "ingredients": [{ "name": "…", "amount": "…", "productId": "…" | null, "for": "all" }], "steps": [{ "text": "…", "for": "all" }],
+              "alsoNeeded": [{ "name": "…", "for": "all" }], "diet": "any", "servingsMeat": 0, "servingsVeg": 0 },
   "add": { "productIds": ["…"], "typed": ["chilli flakes"] },
   "remove": ["Onion"],
   "tweak": "spicier" | null
@@ -696,13 +710,13 @@ The household's one collection of saved recipes and Ready now ideas. Every endpo
   "meal": "dinner", "totalMinutes": 40, "servings": 2 | null,
   "ingredients": [{ "name": "Halloumi", "amount": "225 g" | null, "productId": "…" | null, "genericName": "Halloumi" | null,
                     "status": "have" | "useFirst" | "missing" }],
-  "steps": ["…"], "alsoNeeded": ["…"], "how": "…" | null, "appliance": "microwave" | null,
+  "steps": [{ "text": "…", "for": "all" }], "alsoNeeded": [{ "name": "…", "for": "all" }], "diet": "any", "servingsMeat": 0, "servingsVeg": 0, "how": "…" | null, "appliance": "microwave" | null,
   "note": "Halve the chilli", "savedByName": "Sam", "savedAt": "…", "updatedAt": "…",
   "missing": ["Halloumi"], "usesUp": ["Smoked paprika"]
 }
 ```
 
-A Ready now idea's items come back as `ingredients` too (no `amount`), with `how` and `appliance`; a recipe has `servings` and `steps`.
+A Ready now idea's items come back as `ingredients` too (no `amount`), with `how` and `appliance`; a recipe has `servings` and `steps`. Since #110 each ingredient, step and `alsoNeeded` item has `for` (`"all"`, `"meat"` or `"veg"`), and the recipe has `diet` with half & half's `servingsMeat` and `servingsVeg`; older saves read as `"any"`, with everything for everyone. Plain strings are still accepted for `steps` and `alsoNeeded` (as `"all"`).
 
 **Stock status** is worked out on every read, against today's stock. For each ingredient: **have** if its `productId` is in stock; otherwise if any in-stock product shares its **generic name**; otherwise if its name (normalized like generic names) matches an in-stock product's generic or display name. **Staples** (an ingredient made only of words like salt, pepper, oil, olive, water, "to taste") always count as had. **useFirst** when it's had and a matching product has a use-first unit. `missing` lists the missing ones (by generic name when known) and `usesUp` the use-first ones; the app shows "You've got everything · Uses up …" or "Missing: …".
 
@@ -722,7 +736,7 @@ Saves a snapshot of what the app showed. No Foundry call.
 {
   "kind": "recipe", "title": "…", "meal": "dinner", "totalMinutes": 25, "servings": 2,
   "ingredients": [{ "name": "…", "amount": "…", "productId": "…" | null, "genericName": null }],
-  "steps": ["…"], "alsoNeeded": ["…"], "note": "", "originalTitle": "…"
+  "steps": [{ "text": "…", "for": "all" }], "alsoNeeded": [{ "name": "…", "for": "all" }], "diet": "any", "servingsMeat": 0, "servingsVeg": 0, "note": "", "originalTitle": "…"
 }
 ```
 

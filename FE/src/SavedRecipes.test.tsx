@@ -52,9 +52,9 @@ const RECIPE: Recipe = {
         { name: "Test penne", amount: "200 g", productId: "penne", useFirst: false },
         { name: "Salt", amount: "a pinch", productId: null, useFirst: false },
     ],
-    steps: ["Cook the penne."],
+    steps: [{ text: "Cook the penne.", for: "all" }],
     usesUp: [],
-    alsoNeeded: ["1 onion"],
+    alsoNeeded: [{ name: "1 onion", for: "all" }],
     couldNotFitIn: [],
 };
 
@@ -94,7 +94,10 @@ const saved = (overrides: Partial<SavedRecipe>): SavedRecipe => ({
             status: "useFirst",
         },
     ],
-    steps: ["Roast the peppers.", "Add the halloumi."],
+    steps: [
+        { text: "Roast the peppers.", for: "all" },
+        { text: "Add the halloumi.", for: "all" },
+    ],
     alsoNeeded: [],
     how: null,
     appliance: null,
@@ -306,11 +309,14 @@ test("Save on a recipe saves a snapshot, fills, and shows the toast; Undo unsave
         totalMinutes: 25,
         servings: 2,
         ingredients: [
-            { name: "Test penne", amount: "200 g", productId: "penne" },
-            { name: "Salt", amount: "a pinch", productId: null },
+            { name: "Test penne", amount: "200 g", productId: "penne", for: "all" },
+            { name: "Salt", amount: "a pinch", productId: null, for: "all" },
         ],
-        steps: ["Cook the penne."],
-        alsoNeeded: ["1 onion"],
+        steps: [{ text: "Cook the penne.", for: "all" }],
+        alsoNeeded: [{ name: "1 onion", for: "all" }],
+        diet: "any",
+        servingsMeat: 0,
+        servingsVeg: 0,
     });
     const toast = await screen
         .findByText("Saved to Hungry?")
@@ -372,6 +378,7 @@ test("each Ready now idea has Save in its button row, saving the idea with how a
         totalMinutes: 5,
         uses: [{ name: "Test beans", productId: "beans" }],
         alsoNeeded: [],
+        diet: "any",
         how: "Microwave the beans; toast the bread.",
         appliance: "microwave",
     });
@@ -538,7 +545,13 @@ test("Remove from saved: gone from the list, Save again shows; Undo puts the sam
             originalTitle: "Test traybake",
             note: "Halve the chilli",
             ingredients: expect.arrayContaining([
-                { name: "Peppers", amount: "2", productId: "peppers", genericName: "Peppers" },
+                {
+                    name: "Peppers",
+                    amount: "2",
+                    productId: "peppers",
+                    genericName: "Peppers",
+                    for: "all",
+                },
             ]),
         }),
     );
@@ -557,4 +570,46 @@ test("a saved Ready now idea shows what it uses and how, without Adjust", async 
     expect(screen.getByRole("heading", { name: "How" })).toBeInTheDocument();
     expect(screen.getByText("Microwave the beans.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adjust to what's in" })).not.toBeInTheDocument();
+});
+
+test("a saved half & half recipe keeps its split, legend and plate tags, and Adjust works on them (#110)", async () => {
+    const half = saved({
+        diet: "half",
+        servingsMeat: 1,
+        servingsVeg: 1,
+        ingredients: [
+            {
+                name: "Peppers",
+                amount: "2",
+                productId: "peppers",
+                genericName: "Peppers",
+                status: "have",
+                for: "all",
+            },
+            {
+                name: "Test chorizo",
+                amount: "100 g",
+                productId: null,
+                genericName: null,
+                status: "have",
+                for: "meat",
+            },
+        ],
+        steps: [
+            { text: "Roast the peppers.", for: "all" },
+            { text: "Add the chorizo.", for: "meat" },
+        ],
+        missing: [],
+    });
+    await openTraybake(fakeApi([half, ...SAVED.filter((s) => s.id !== "s1")]));
+
+    expect(screen.getByText(/^Dinner · Serves 2 \(1 meat, 1 veg\) · 40 min/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Plate tags")).toBeInTheDocument();
+    expect(screen.getByText("Test chorizo").closest("li")).toHaveTextContent("Meat plates");
+    expect(screen.getByText("Add the chorizo.").closest("li")).toHaveTextContent("Meat plates");
+
+    const asRecipe = savedToRecipe(half);
+    expect(asRecipe.diet).toBe("half");
+    expect(asRecipe.ingredients[1].for).toBe("meat");
+    expect(asRecipe.steps[1]).toEqual({ text: "Add the chorizo.", for: "meat" });
 });

@@ -268,6 +268,22 @@ export type RecipeMeal = "breakfast" | "lunch" | "dinner" | "snack";
 /** Hungry? (#88): a proper recipe, or quick Ready now ideas. */
 export type RecipeMode = "cook" | "readyNow";
 
+/** Meat or veg? (#110): meat & veg (any), veggie, or half & half (Cook something only). */
+export type Diet = "any" | "veg" | "half";
+
+/** Which plates something is for (#110): everyone, unless half & half. */
+export type PlateFor = "all" | "meat" | "veg";
+
+export interface RecipeStep {
+    text: string;
+    for: PlateFor;
+}
+
+export interface ExtraItem {
+    name: string;
+    for: PlateFor;
+}
+
 /** Whether a product is or contains meat or fish (#112). Fish counts as meat for "veg". */
 export type AnimalContent = "meat" | "fish" | "none" | "unknown";
 
@@ -315,6 +331,10 @@ export interface QuickIdea {
     /** After an adjustment (#108): what the model couldn't add or take out. */
     couldNotAdd?: string[];
     couldNotRemove?: string[];
+    /** Meat or veg? (#110). */
+    diet?: Diet;
+    /** "Check before cooking" after an adjustment (#110). */
+    warnings?: string[];
 }
 
 /** POST /api/recipes/adjust-idea (#108): a Ready now idea as shown, its meal, and what to change. */
@@ -332,6 +352,8 @@ export interface IdeaAdjustment {
     /** Names of things the idea uses. */
     remove: string[];
     tweak: string | null;
+    /** Meat & veg or Veggie (#110). */
+    diet?: Diet;
 }
 
 /** `available: false`: the model couldn't help just now; the idea stays as it was. */
@@ -349,6 +371,7 @@ export interface SavedIngredient {
     productId: string | null;
     genericName: string | null;
     status: "have" | "missing" | "useFirst";
+    for?: PlateFor;
 }
 
 /** A saved recipe or Ready now idea (#105): one household collection, checked against today's stock. */
@@ -361,8 +384,8 @@ export interface SavedRecipe {
     totalMinutes: number;
     servings: number | null;
     ingredients: SavedIngredient[];
-    steps: string[];
-    alsoNeeded: string[];
+    steps: RecipeStep[];
+    alsoNeeded: ExtraItem[];
     how: string | null;
     appliance: Appliance | null;
     note: string;
@@ -373,6 +396,10 @@ export interface SavedRecipe {
     missing: string[];
     /** Use-first names it would use up. */
     usesUp: string[];
+    /** Meat or veg? (#110), and half & half's split. */
+    diet?: Diet;
+    servingsMeat?: number;
+    servingsVeg?: number;
 }
 
 /** PUT /api/saved-recipes/{id}: what's being saved (a snapshot of what was shown). */
@@ -388,10 +415,14 @@ export interface SaveRecipeBody {
         amount?: string | null;
         productId?: string | null;
         genericName?: string | null;
+        for?: PlateFor;
     }>;
     uses?: Array<{ name: string; productId?: string | null; genericName?: string | null }>;
-    steps?: string[];
-    alsoNeeded?: string[];
+    steps?: RecipeStep[];
+    alsoNeeded?: ExtraItem[];
+    diet?: Diet;
+    servingsMeat?: number;
+    servingsVeg?: number;
     how?: string | null;
     appliance?: Appliance | null;
     note?: string;
@@ -409,6 +440,8 @@ export interface RecipeRequest {
     avoidTitles: string[];
     /** Cook something (#111): the kit the recipe may use (at least one); left out, everything is allowed. */
     equipment?: Kit[];
+    /** Meat or veg? (#110); left out, meat & veg. Half & half is Cook something only. */
+    diet?: Diet;
 }
 
 export interface Recipe {
@@ -418,15 +451,22 @@ export interface Recipe {
     servings: number;
     totalMinutes: number;
     /** productId (with the product's current name) for in-stock ingredients; null for staples. */
-    ingredients: Array<{ name: string; amount: string; productId: string | null; useFirst: boolean }>;
-    steps: string[];
+    ingredients: Array<{
+        name: string;
+        amount: string;
+        productId: string | null;
+        useFirst: boolean;
+        for?: PlateFor;
+    }>;
+    /** Each step, and which plates it's for (#110). */
+    steps: RecipeStep[];
     usesUp: Array<{
         productId: string;
         displayName: string;
         daysUntilSoonest: number | null;
         soonestEstimatedExpiryDate: string | null;
     }>;
-    alsoNeeded: string[];
+    alsoNeeded: ExtraItem[];
     /** Names of picked ingredients the recipe couldn't use. */
     couldNotFitIn: string[];
     /** After an adjustment (#104): what the model couldn't add or take out. */
@@ -434,8 +474,12 @@ export interface Recipe {
     couldNotRemove?: string[];
     /** The kit the method uses (#111), for the meta line. */
     equipment?: Kit[];
-    /** "Check before cooking" (#111): what still breaks a rule after one retry. */
+    /** "Check before cooking" (#111, #110): what still breaks a rule after one retry. */
     warnings?: string[];
+    /** Meat or veg? (#110), and half & half's split (0 otherwise). */
+    diet?: Diet;
+    servingsMeat?: number;
+    servingsVeg?: number;
 }
 
 /** POST /api/recipes/adjust (#104): the recipe as shown, and what to change. At least one change. */
@@ -448,6 +492,8 @@ export interface RecipeAdjustment {
     tweak: string | null;
     /** The same kit as the recipe was made with (#111). */
     equipment?: Kit[];
+    /** The same Meat or veg? choice (#110). */
+    diet?: Diet;
 }
 
 /** What an adjustment changed, for the "Adjusted: + Chorizo · − Onion · "spicier"" line. */

@@ -5,6 +5,7 @@ import {
     type AdjustmentSummary,
     type ApiClient,
     type Appliance,
+    type Diet,
     type QuickIdea,
     type Recipe,
     type RecipeMeal,
@@ -17,6 +18,16 @@ import {
     KITS,
 } from "./api";
 import { expiryBadge } from "./format";
+import {
+    CheckBeforeCooking,
+    DIETS,
+    PlateLegend,
+    PlateTag,
+    servingsText,
+    stepClass,
+    stepNumberClass,
+} from "./Plates";
+import plateStyles from "./Plates.module.css";
 import { itemPath, navigate } from "./router";
 import { AdjustSheet, adjustmentLine, type AdjustChoices } from "./RecipeAdjust";
 import styles from "./Recipes.module.css";
@@ -120,6 +131,8 @@ interface Choices {
     comments: string;
     /** Cook something (#111): the kit ticked. All of it each time the form opens; nothing is remembered. */
     equipment: Kit[];
+    /** Meat or veg? (#110): Meat & veg each time the form opens, like the kit. */
+    diet: Diet;
 }
 
 const ALL_KIT: Kit[] = KITS.map((k) => k.id);
@@ -160,9 +173,9 @@ export function ideaAsRecipe(idea: QuickIdea, meal: RecipeMeal): Recipe {
             productId: u.productId,
             useFirst: u.useFirst,
         })),
-        steps: [idea.how],
+        steps: [{ text: idea.how, for: "all" }],
         usesUp: [],
-        alsoNeeded: idea.alsoNeeded ? [idea.alsoNeeded] : [],
+        alsoNeeded: idea.alsoNeeded ? [{ name: idea.alsoNeeded, for: "all" }] : [],
         couldNotFitIn: [],
     };
 }
@@ -185,6 +198,7 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
         picked: [],
         comments: "",
         equipment: ALL_KIT,
+        diet: "any",
     }));
     const [phase, setPhase] = useState<Phase>({ kind: "form" });
     const [shownTitles, setShownTitles] = useState<string[]>([]);
@@ -432,6 +446,7 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                 add: { productIds: choices.productIds, typed: choices.typed },
                 remove: choices.remove,
                 tweak: choices.tweak,
+                diet: idea.diet ?? "any", // as the idea was made (#110)
             });
             if (!answer.available || !answer.idea) {
                 failed(answer.message ?? IDEA_UNAVAILABLE);
@@ -476,6 +491,7 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                 remove: choices.remove,
                 tweak: choices.tweak,
                 equipment: kitInUse, // the same kit as the recipe was made with (#111)
+                diet: recipe.diet ?? "any", // and the same Meat or veg? (#110)
             });
             if (!answer.available || !answer.recipe) {
                 setAdjust({ kind: "error", message: answer.message ?? ADJUST_UNAVAILABLE, choices });
@@ -508,12 +524,17 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
         comments: choices.comments.trim() || null,
         avoidTitles,
         ...(choices.mode === "cook" ? { equipment: choices.equipment } : {}),
+        diet: choices.diet,
     });
 
-    // The chips start all ticked every time the form opens (#111).
+    // The chips start all ticked (#111), and Meat or veg? at Meat & veg (#110), every time the form opens.
     useEffect(() => {
         if (phase.kind === "form")
-            setChoices((c) => (c.equipment.length === ALL_KIT.length ? c : { ...c, equipment: ALL_KIT }));
+            setChoices((c) =>
+                c.equipment.length === ALL_KIT.length && c.diet === "any"
+                    ? c
+                    : { ...c, equipment: ALL_KIT, diet: "any" },
+            );
     }, [phase.kind]);
 
     return (
@@ -736,7 +757,14 @@ function RecipeForm({
                         role="radio"
                         aria-checked={choices.mode === m.id}
                         className={styles.mode}
-                        onClick={() => onChange((c) => ({ ...c, mode: m.id }))}
+                        onClick={() =>
+                            onChange((c) => ({
+                                ...c,
+                                mode: m.id,
+                                // Half & half is Cook something only (#110).
+                                diet: m.id === "readyNow" && c.diet === "half" ? "any" : c.diet,
+                            }))
+                        }
                     >
                         <span className={styles.modeLabel}>{m.label}</span>
                         <span className={styles.modeSub}>{m.sub}</span>
@@ -762,6 +790,27 @@ function RecipeForm({
                         </button>
                     ))}
                 </div>
+            </div>
+
+            <div className={styles.group}>
+                <div id="diet-label" className={styles.label}>
+                    Meat or veg?
+                </div>
+                <div role="radiogroup" aria-labelledby="diet-label" className={styles.diets}>
+                    {DIETS.filter((d) => !ready || d.id !== "half").map((d) => (
+                        <button
+                            key={d.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={choices.diet === d.id}
+                            className={styles.diet}
+                            onClick={() => onChange((c) => ({ ...c, diet: d.id }))}
+                        >
+                            {d.label}
+                        </button>
+                    ))}
+                </div>
+                <div className={styles.dietHelp}>{DIETS.find((d) => d.id === choices.diet)!.help}</div>
             </div>
 
             {!ready && (
@@ -1121,7 +1170,13 @@ function RecipeView({
                         <div className={styles.kicker}>
                             {[
                                 mealLabel(recipe.meal),
-                                `Serves ${recipe.servings}`,
+                                servingsText(
+                                    recipe.servings,
+                                    recipe.diet,
+                                    recipe.servingsMeat,
+                                    recipe.servingsVeg,
+                                ),
+                                ...(recipe.diet === "veg" ? ["Veggie"] : []),
                                 `${recipe.totalMinutes} min`,
                                 ...(recipe.equipment ?? []).map(kitLabel),
                             ].join(" · ")}
@@ -1138,33 +1193,10 @@ function RecipeView({
                     )}
                     <h1 className={styles.recipeTitle}>{recipe.title}</h1>
                     {recipe.summary && <div className={styles.summary}>{recipe.summary}</div>}
+                    {recipe.diet === "half" && <PlateLegend />}
                 </div>
 
-                {(recipe.warnings ?? []).length > 0 && (
-                    <div role="note" className={styles.checkFirst}>
-                        <svg
-                            width="20"
-                            height="20"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                            className={styles.checkFirstIcon}
-                        >
-                            <path d="M12 4l9 16H3z" />
-                            <path d="M12 10v4M12 17.2v.1" />
-                        </svg>
-                        <div className={styles.checkFirstText}>
-                            <span className={styles.checkFirstTitle}>Check before cooking</span>
-                            {recipe.warnings!.map((w) => (
-                                <span key={w}>{w}</span>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                <CheckBeforeCooking warnings={recipe.warnings} />
 
                 {recipe.usesUp.length > 0 && (
                     <section className={styles.usesUp} aria-label="Uses up">
@@ -1212,6 +1244,7 @@ function RecipeView({
                                     <span className={styles.ingredientName}>{i.name}</span>
                                 )}
                                 {isNew(i.name) && <span className={styles.addedTag}>Added</span>}
+                                <PlateTag plate={i.for} />
                             </li>
                         ))}
                     </ul>
@@ -1233,7 +1266,16 @@ function RecipeView({
                     {recipe.alsoNeeded.length > 0 && (
                         <div className={styles.alsoNeeded}>
                             <div className={styles.alsoTitle}>You&apos;ll also need</div>
-                            <div className={styles.alsoItems}>{recipe.alsoNeeded.join(" · ")}</div>
+                            <div className={styles.alsoItems}>
+                                {recipe.alsoNeeded.map((a, index) => (
+                                    <span key={index}>
+                                        {index > 0 && " · "}
+                                        {a.name}
+                                        {a.for !== "all" && " "}
+                                        <PlateTag plate={a.for} small />
+                                    </span>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </section>
@@ -1242,11 +1284,21 @@ function RecipeView({
                     <h2 className={styles.label}>Method</h2>
                     <ol className={styles.steps}>
                         {recipe.steps.map((step, index) => (
-                            <li key={index} className={styles.step}>
-                                <span className={styles.stepNumber} aria-hidden="true">
+                            <li key={index} className={`${styles.step} ${stepClass(step.for) ?? ""}`}>
+                                <span
+                                    className={`${styles.stepNumber} ${stepNumberClass(step.for) ?? ""}`}
+                                    aria-hidden="true"
+                                >
                                     {index + 1}
                                 </span>
-                                <span>{step}</span>
+                                {step.for === "all" ? (
+                                    <span>{step.text}</span>
+                                ) : (
+                                    <span className={plateStyles.stepBody}>
+                                        <PlateTag plate={step.for} />
+                                        <span>{step.text}</span>
+                                    </span>
+                                )}
                             </li>
                         ))}
                     </ol>
@@ -1507,6 +1559,7 @@ function IdeasView({
                                     You&apos;ll also need: {idea.alsoNeeded}
                                 </div>
                             )}
+                            <CheckBeforeCooking warnings={idea.warnings} />
                             {(idea.couldNotAdd ?? []).length > 0 && (
                                 <p className={styles.notFitted}>
                                     Couldn&apos;t add: {idea.couldNotAdd!.join(", ")}

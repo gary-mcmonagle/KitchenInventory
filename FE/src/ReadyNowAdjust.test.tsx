@@ -183,6 +183,7 @@ test("Update dims only that card, then shows the adjusted idea with the summary,
         add: { productIds: ["cheddar"], typed: [] },
         remove: [],
         tweak: "make it a toastie",
+        diet: "any",
     });
 
     await act(async () =>

@@ -1,0 +1,116 @@
+/* Half & half plate tags (#110, project/RecipeHalfVeg.dc.html) and "Check before cooking" (#111). */
+.tag {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.tagSmall {
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.meat {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}
+
+.veg {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.everyone {
+    background: var(--off-bg);
+    color: var(--ink-strong);
+    font-weight: 600;
+}
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-top: 2px;
+}
+
+.legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+}
+
+.dotMeat {
+    background: var(--danger-fg);
+}
+
+.dotVeg {
+    background: var(--accent);
+}
+
+.stepMeat,
+.stepVeg {
+    padding: 8px 10px 8px 8px;
+    margin: 0 -4px;
+    border-radius: 12px;
+}
+
+.stepMeat {
+    background: #fbf0ef;
+}
+
+.stepVeg {
+    background: #f1f7f3;
+}
+
+/* Doubled to win over the screen's own step number style. */
+.numberMeat.numberMeat {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}
+
+.stepBody {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+}
+
+.checkFirst {
+    display: flex;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--warn-bg);
+    border-radius: var(--radius-card);
+    color: var(--warn-fg);
+}
+
+.checkFirstIcon {
+    flex: none;
+    margin-top: 1px;
+}
+
+.checkFirstText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.checkFirstTitle {
+    font-weight: 700;
+}

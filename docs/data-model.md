@@ -550,12 +550,14 @@ The household's saved recipes and Ready now ideas, in **one partition**: `househ
   "id": "<the app's UUID>", "householdId": "household", "type": "savedRecipe", "kind": "recipe" | "readyNow",
   "title": "Sam's traybake", "originalTitle": "Halloumi and pepper traybake", "meal": "dinner", "totalMinutes": 40,
   "servings": 2, "ingredients": [{ "name": "Halloumi", "amount": "225 g", "productId": null, "genericName": "Halloumi" }],
-  "steps": ["…"], "alsoNeeded": ["…"],
+  "steps": [{ "text": "…", "for": "all" }], "alsoNeeded": [{ "name": "…", "for": "all" }],
+  "diet": "any", "servingsMeat": 0, "servingsVeg": 0,
   "note": "", "savedBy": "<oid>", "savedByName": "Sam", "savedAt": "…", "updatedBy": "<oid>", "updatedAt": "…"
 }
 ```
 
 - **Recipes** have `servings`, `ingredients` and `steps`; **Ready now ideas** have `how`, `appliance` and `uses: [{ name, productId, genericName }]` instead. Both have `alsoNeeded`.
+- **Meat or veg? (#110):** each ingredient, step and `alsoNeeded` item has `for` (`"all"`, `"meat"`, `"veg"`), and the recipe has `diet` (`any`, `veg`, `half`) and half & half's split. Saves from before #110 have plain strings for steps and `alsoNeeded`, and no `for` or `diet`: they read as `"all"` and `any`.
 - **A snapshot:** nothing is regenerated. `genericName` is recorded at save time when the product has one, so the stock status still finds it after that product is used up.
 - **Stock status** isn't stored: the API works it out against today's stock on every read (see `docs/api.md`, Saved recipes).
 - Created once (`PUT` is idempotent by `id`); renames and notes are ETag-checked replaces; removed by delete (Undo creates it again).

@@ -37,7 +37,7 @@ const RECIPE: Recipe = {
     servings: 2,
     totalMinutes: 20,
     ingredients: [{ name: "Test penne", amount: "200 g", productId: "penne", useFirst: false }],
-    steps: ["Boil the penne."],
+    steps: [{ text: "Boil the penne.", for: "all" }],
     usesUp: [],
     alsoNeeded: [],
     couldNotFitIn: [],

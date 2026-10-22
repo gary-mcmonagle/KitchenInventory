@@ -246,6 +246,14 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Basic staples** – the few things a recipe suggestion may assume without them being in stock: salt, pepper, cooking oil and water. Anything else not in stock is listed under "You'll also need" (at most 3).
 
+**Meat or veg?** – the Hungry? switch for who's eating (#110): **Meat & veg** (anything goes), **Veggie** (no meat or fish, and nothing cooked with them) or **Half & half** (Cook something only). Meat & veg each time the form opens. In code, `Diet` (`any`, `veg`, `half`).
+
+**Veggie** – vegetarian as Hungry? means it: no meat or fish, and nothing made from them (stock cubes, gravy, lard, gelatine, Worcestershire sauce, fish sauce); cheese, eggs, milk and honey are fine. See **Animal content**.
+
+**Half & half** – one meal where some plates are veggie, cooked alongside the meat (#110). The recipe says how many plates of each ("Serves 2 (1 meat, 1 veg)"), and tags anything for one side only with a **plate tag**.
+
+**Plate tag** – **Meat plates** or **Veggie plates** on a half & half recipe's ingredient, extra item or method step (tinted steps); untagged means everyone. In code, `PlateFor` (`all`, `meat`, `veg`).
+
 **Saved recipe** – a recipe or Ready now idea someone liked and kept (#105), in the household's one shared collection: a **snapshot** of what was shown (nothing is regenerated), with a name anyone can change and a shared **note**. Found in the **Saved** box at the top of Hungry?, newest first, filtered by meal, cook time and words in the name. **Remove from saved** has Undo.
 
 **Stock status (of a saved recipe)** – whether each ingredient is in today's stock: **have** (the same product, or any product with the same generic name, or a matching name), **use first** (had, and due soon), or **missing**. Basic staples always count as had. The recipe shows "You've got everything" (with "Uses up …") or "Missing: …", and **Add missing to the list** puts the missing ones on the shopping list by generic name.

@@ -63,7 +63,10 @@ const RECIPE: Recipe = {
         { name: "Test penne", amount: "200 g", productId: "penne", useFirst: false },
         { name: "Oil, salt and pepper", amount: "1 tbsp", productId: null, useFirst: false },
     ],
-    steps: ["Cook the penne.", "Warm the milk."],
+    steps: [
+        { text: "Cook the penne.", for: "all" },
+        { text: "Warm the milk.", for: "all" },
+    ],
     usesUp: [
         {
             productId: "milk",
@@ -72,7 +75,10 @@ const RECIPE: Recipe = {
             soonestEstimatedExpiryDate: "2026-10-20",
         },
     ],
-    alsoNeeded: ["1 onion", "1 garlic clove"],
+    alsoNeeded: [
+        { name: "1 onion", for: "all" },
+        { name: "1 garlic clove", for: "all" },
+    ],
     couldNotFitIn: [],
 };
 
@@ -227,6 +233,7 @@ test("Get a recipe sends the choices, shows the loading state, then the recipe",
         includeProductIds: ["cheddar"],
         comments: "no oven",
         avoidTitles: [],
+        diet: "any",
         equipment: [
             "hob",
             "ovenGrill",
@@ -262,7 +269,7 @@ test("the recipe view: meta, uses up, ingredients with links and dots, also need
     expect(penne.parentElement!.querySelector("[class*=_dotOn_]")).toBeNull();
     expect(screen.getByText("Oil, salt and pepper").tagName).toBe("SPAN");
     expect(screen.getByText("You'll also need")).toBeInTheDocument();
-    expect(screen.getByText("1 onion · 1 garlic clove")).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.textContent === "1 onion · 1 garlic clove")).toBeInTheDocument();
     expect(screen.queryByText(/Couldn't fit in/)).not.toBeInTheDocument();
 
     const steps = screen.getByRole("heading", { name: "Method" }).parentElement!.querySelectorAll("li");

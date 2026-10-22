@@ -60,7 +60,7 @@ const RECIPE: Recipe = {
     servings: 1,
     totalMinutes: 10,
     ingredients: [{ name: "Mature cheddar", amount: "50 g", productId: "p-cheese", useFirst: false }],
-    steps: ["Toast it."],
+    steps: [{ text: "Toast it.", for: "all" }],
     usesUp: [],
     alsoNeeded: [],
     couldNotFitIn: [],

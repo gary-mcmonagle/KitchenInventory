@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { QuickIdea, Recipe, RecipeMeal, SaveRecipeBody, SavedRecipe } from "./api";
+import type { QuickIdea, Recipe, RecipeMeal, RecipeStep, SaveRecipeBody, SavedRecipe } from "./api";
+import { PlateLegend, PlateTag, servingsText, stepClass, stepNumberClass } from "./Plates";
+import plateStyles from "./Plates.module.css";
 import { useOptionalShoppingList } from "./useShoppingList";
 import styles from "./SavedRecipes.module.css";
 
@@ -65,9 +67,13 @@ export function recipeToSave(recipe: Recipe): SaveRecipeBody {
             name: i.name,
             amount: i.amount,
             productId: i.productId,
+            for: i.for ?? "all",
         })),
         steps: recipe.steps,
         alsoNeeded: recipe.alsoNeeded,
+        diet: recipe.diet ?? "any",
+        servingsMeat: recipe.servingsMeat ?? 0,
+        servingsVeg: recipe.servingsVeg ?? 0,
     };
 }
 
@@ -78,7 +84,8 @@ export function ideaToSave(idea: QuickIdea, meal: RecipeMeal): SaveRecipeBody {
         meal,
         totalMinutes: idea.minutes,
         uses: idea.uses.map((u) => ({ name: u.displayName, productId: u.productId })),
-        alsoNeeded: idea.alsoNeeded ? [idea.alsoNeeded] : [],
+        alsoNeeded: idea.alsoNeeded ? [{ name: idea.alsoNeeded, for: "all" }] : [],
+        diet: idea.diet ?? "any",
         how: idea.how,
         appliance: idea.appliance,
     };
@@ -91,6 +98,7 @@ export function savedToSave(saved: SavedRecipe): SaveRecipeBody {
         amount: i.amount,
         productId: i.productId,
         genericName: i.genericName,
+        ...(saved.kind === "readyNow" ? {} : { for: i.for ?? "all" }),
     }));
     return {
         kind: saved.kind,
@@ -102,6 +110,9 @@ export function savedToSave(saved: SavedRecipe): SaveRecipeBody {
         ...(saved.kind === "readyNow" ? { uses: items } : { ingredients: items }),
         steps: saved.steps,
         alsoNeeded: saved.alsoNeeded,
+        diet: saved.diet ?? "any",
+        servingsMeat: saved.servingsMeat ?? 0,
+        servingsVeg: saved.servingsVeg ?? 0,
         how: saved.how,
         appliance: saved.appliance,
         note: saved.note,
@@ -121,11 +132,15 @@ export function savedToRecipe(saved: SavedRecipe): Recipe {
             amount: i.amount ?? "",
             productId: i.status === "missing" ? null : i.productId,
             useFirst: i.status === "useFirst",
+            for: i.for ?? "all",
         })),
-        steps: saved.kind === "readyNow" && saved.how ? [saved.how] : saved.steps,
+        steps: saved.kind === "readyNow" && saved.how ? [{ text: saved.how, for: "all" }] : saved.steps,
         usesUp: [],
         alsoNeeded: saved.alsoNeeded,
         couldNotFitIn: [],
+        diet: saved.diet ?? "any",
+        servingsMeat: saved.servingsMeat ?? 0,
+        servingsVeg: saved.servingsVeg ?? 0,
     };
 }
 
@@ -481,13 +496,16 @@ export function SavedRecipeView({
     const meta = [
         MEAL_LABELS[recipe.meal],
         ready ? "Ready now" : null,
-        recipe.servings ? `Serves ${recipe.servings}` : null,
+        recipe.servings
+            ? servingsText(recipe.servings, recipe.diet, recipe.servingsMeat, recipe.servingsVeg)
+            : null,
+        recipe.diet === "veg" ? "Veggie" : null,
         `${recipe.totalMinutes} min`,
         `${savedWhen(recipe.savedAt, now)} by ${recipe.savedByName}`,
     ]
         .filter(Boolean)
         .join(" · ");
-    const steps = ready ? (recipe.how ? [recipe.how] : []) : recipe.steps;
+    const steps: RecipeStep[] = ready ? (recipe.how ? [{ text: recipe.how, for: "all" }] : []) : recipe.steps;
 
     return (
         <>
@@ -585,6 +603,7 @@ export function SavedRecipeView({
                             </button>
                         )}
                     </div>
+                    {recipe.diet === "half" && <PlateLegend />}
                 </div>
 
                 {saved && (
@@ -680,13 +699,22 @@ export function SavedRecipeView({
                                     >
                                         {noteText}
                                     </span>
+                                    <PlateTag plate={i.for} />
                                 </li>
                             );
                         })}
                     </ul>
                     {recipe.alsoNeeded.length > 0 && (
                         <div className={styles.also}>
-                            You&apos;ll also need: {recipe.alsoNeeded.join(" · ")}
+                            You&apos;ll also need:{" "}
+                            {recipe.alsoNeeded.map((a, index) => (
+                                <span key={index}>
+                                    {index > 0 && " · "}
+                                    {a.name}
+                                    {a.for !== "all" && " "}
+                                    <PlateTag plate={a.for} small />
+                                </span>
+                            ))}
                         </div>
                     )}
                 </section>
@@ -696,11 +724,21 @@ export function SavedRecipeView({
                         <h2 className={styles.sectionLabel}>{ready ? "How" : "Method"}</h2>
                         <ol className={styles.steps}>
                             {steps.map((step, index) => (
-                                <li key={index} className={styles.step}>
-                                    <span className={styles.stepNumber} aria-hidden="true">
+                                <li key={index} className={`${styles.step} ${stepClass(step.for) ?? ""}`}>
+                                    <span
+                                        className={`${styles.stepNumber} ${stepNumberClass(step.for) ?? ""}`}
+                                        aria-hidden="true"
+                                    >
                                         {index + 1}
                                     </span>
-                                    <span>{step}</span>
+                                    {step.for === "all" ? (
+                                        <span>{step.text}</span>
+                                    ) : (
+                                        <span className={plateStyles.stepBody}>
+                                            <PlateTag plate={step.for} />
+                                            <span>{step.text}</span>
+                                        </span>
+                                    )}
                                 </li>
                             ))}
                         </ol>

@@ -55,9 +55,12 @@ const RECIPE: Recipe = {
         { name: "Test penne", amount: "200 g", productId: "penne", useFirst: false },
         { name: "Onion", amount: "1", productId: null, useFirst: false },
     ],
-    steps: ["Cook the penne.", "Fry the chicken until cooked through."],
+    steps: [
+        { text: "Cook the penne.", for: "all" },
+        { text: "Fry the chicken until cooked through.", for: "all" },
+    ],
     usesUp: [],
-    alsoNeeded: ["1 garlic clove"],
+    alsoNeeded: [{ name: "1 garlic clove", for: "all" }],
     couldNotFitIn: [],
 };
 
@@ -199,6 +202,7 @@ test("add from the search and typed, remove, tweak: sends them, dims while updat
         add: { productIds: ["chorizo"], typed: ["chilli flakes"] },
         remove: ["Onion"],
         tweak: "spicier",
+        diet: "any",
         equipment: [
             "hob",
             "ovenGrill",
