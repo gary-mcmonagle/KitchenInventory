@@ -296,9 +296,14 @@ describe("the This phone card", () => {
         expect(api.setPushPreferences).toHaveBeenCalledWith(json.endpoint, {
             stockChanges: true,
             shoppingList: true,
+            stillGotThis: true,
         });
         expect(screen.getByRole("switch", { name: "Stock changes" })).toHaveAttribute("aria-checked", "true");
         expect(screen.getByRole("switch", { name: "Shopping list" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.getByRole("switch", { name: "Still got this?" })).toHaveAttribute(
+            "aria-checked",
+            "true",
+        );
         expect(card()).toHaveTextContent("On for this phone");
     });
 

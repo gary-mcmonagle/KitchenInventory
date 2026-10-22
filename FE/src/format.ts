@@ -197,3 +197,52 @@ export function stateNote(
     const word = state === "opened" ? "Opened" : state === "frozen" ? "Frozen" : "Defrosted";
     return `${word} ${shortDate(isoDate, now)}`;
 }
+
+/**
+ * Why a stock list row asks "Still got this?" (#94): "Estimated to last until today" or "Estimated to last until
+ * 18 Oct, 2 days ago", "(opened 16 Oct)" when opened, then "Bought 14 Oct.", and how many are asking when it's more
+ * than one ("2 of 3 are at their estimate.").
+ */
+export function stillGotThisWhy(
+    ask: {
+        estimatedExpiryDate: string;
+        boughtOn: string;
+        openedOn: string | null;
+        daysOver: number;
+        askingCount: number;
+    },
+    count: number,
+    now: Date = new Date(),
+): string {
+    const until =
+        ask.daysOver <= 0
+            ? "Estimated to last until today"
+            : `Estimated to last until ${shortDate(ask.estimatedExpiryDate, now)}, ${ask.daysOver === 1 ? "1 day ago" : `${ask.daysOver} days ago`}`;
+    const opened = ask.openedOn ? ` (opened ${shortDate(ask.openedOn, now)})` : "";
+    const more = ask.askingCount > 1 ? ` ${ask.askingCount} of ${count} are at their estimate.` : "";
+    return `${until}${opened}. Bought ${shortDate(ask.boughtOn, now)}.${more}`;
+}
+
+/** The "Still got these?" sheet's line under a name (#94): "Fridge · opened 18 Oct · estimated until 21 Oct". */
+export function expiredUnitMeta(
+    unit: {
+        storage: "cupboard" | "fridge" | "freezer" | null;
+        boughtOn: string;
+        openedOn: string | null;
+        estimatedExpiryDate: string;
+    },
+    now: Date = new Date(),
+): string {
+    const place = unit.storage ? unit.storage.charAt(0).toUpperCase() + unit.storage.slice(1) : null;
+    const when = unit.openedOn
+        ? `opened ${shortDate(unit.openedOn, now)}`
+        : `bought ${shortDate(unit.boughtOn, now)}`;
+    return [place, when, `estimated until ${shortDate(unit.estimatedExpiryDate, now)}`]
+        .filter(Boolean)
+        .join(" · ");
+}
+
+/** "1 day over", "9 days over". */
+export function daysOver(days: number): string {
+    return days === 1 ? "1 day over" : `${days} days over`;
+}

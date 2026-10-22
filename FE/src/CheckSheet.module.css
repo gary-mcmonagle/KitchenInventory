@@ -1,0 +1,206 @@
+/* "Still got these?" (#94, project/CheckSheet.dc.html): the sheet a "Still got this?" push opens. */
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+}
+
+.scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+}
+
+.sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: var(--design-width);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px var(--page-x) calc(28px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 24px rgba(28, 42, 36, 0.18);
+    max-height: 85vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.handle {
+    align-self: center;
+    width: 40px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border);
+}
+
+.titleBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.title {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 700;
+}
+
+.subtitle {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--off-bg);
+}
+
+.rowHead {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.rowText {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.struck {
+    color: var(--muted);
+    text-decoration: line-through;
+}
+
+.meta {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.badge {
+    flex: none;
+    padding: 3px 9px;
+    border-radius: 10px;
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.stillHere,
+.gone {
+    flex: 1;
+    min-height: var(--touch);
+    border-radius: var(--radius-button);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.stillHere {
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+}
+
+.gone {
+    border: 0;
+    background: var(--danger-fg);
+    color: #ffffff;
+}
+
+.stillHere:disabled,
+.gone:disabled,
+.undo:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.answered {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.state {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-dark);
+}
+
+.stateGone {
+    color: var(--danger-fg);
+}
+
+.undo {
+    min-height: var(--touch);
+    padding: 0 6px;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.error {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--danger-fg);
+}
+
+.close {
+    min-height: 52px;
+    border-radius: var(--radius-input);
+    border: 1px solid var(--input-border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.done {
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+}

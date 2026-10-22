@@ -4,6 +4,7 @@ import {
     phoneNotifications,
     setPreferences,
     SHOPPING_LIST,
+    STILL_GOT_THIS,
     STOCK_CHANGES,
     subscribe,
     unsubscribe,
@@ -27,7 +28,7 @@ const LOOK = {
 
 /**
  * "This phone" on the Scanners screen (#80, project/Scanners.dc.html): turn notifications on or off for this device,
- * choose stock change and shopping list (#86) pushes, and send a test. Permission is only ever asked from the Turn on tap (iOS requires it).
+ * choose stock change, shopping list (#86) and "Still got this?" (#94) pushes, and send a test. Permission is only ever asked from the Turn on tap (iOS requires it).
  */
 export function ThisPhoneCard({ api, env }: { api: Api; env?: PushEnvironment }) {
     const [state, setState] = useState<PhoneNotifications | null>(null);
@@ -66,7 +67,7 @@ export function ThisPhoneCard({ api, env }: { api: Api; env?: PushEnvironment })
         run(async () => {
             const result = await subscribe(api as ApiClient, env);
             if (result === "subscribed") {
-                const defaults = { [STOCK_CHANGES]: true, [SHOPPING_LIST]: true }; // on by default
+                const defaults = { [STOCK_CHANGES]: true, [SHOPPING_LIST]: true, [STILL_GOT_THIS]: true }; // on by default
                 await setPreferences(api as ApiClient, defaults, env);
                 setState({ kind: "on", preferences: defaults });
             } else if (result === "notConfigured") {
@@ -106,6 +107,7 @@ export function ThisPhoneCard({ api, env }: { api: Api; env?: PushEnvironment })
     const look = LOOK[kind];
     const stockOn = state?.kind === "on" && state.preferences[STOCK_CHANGES] === true;
     const listOn = state?.kind === "on" && state.preferences[SHOPPING_LIST] !== false;
+    const checkOn = state?.kind === "on" && state.preferences[STILL_GOT_THIS] !== false;
 
     return (
         <section className={styles.section} aria-labelledby="phone-title">
@@ -186,6 +188,32 @@ export function ThisPhoneCard({ api, env }: { api: Api; env?: PushEnvironment })
                                 >
                                     <span
                                         className={`${styles.track} ${listOn ? styles.trackOn : ""}`}
+                                        aria-hidden="true"
+                                    >
+                                        <span className={styles.knob} />
+                                    </span>
+                                </button>
+                            </div>
+                            <div className={styles.toggle}>
+                                <div className={styles.toggleText}>
+                                    <span id="sw-check" className={styles.toggleLabel}>
+                                        Still got this?
+                                    </span>
+                                    <span className={styles.toggleHelp}>
+                                        Tue, Thu and Sun at 18:00, if anything has expired
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={checkOn}
+                                    aria-labelledby="sw-check"
+                                    className={styles.switch}
+                                    disabled={busy}
+                                    onClick={() => void flip(STILL_GOT_THIS, !checkOn)}
+                                >
+                                    <span
+                                        className={`${styles.track} ${checkOn ? styles.trackOn : ""}`}
                                         aria-hidden="true"
                                     >
                                         <span className={styles.knob} />

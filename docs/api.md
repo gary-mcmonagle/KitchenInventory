@@ -148,7 +148,9 @@ The stock list (#49, #52): every product with units in stock, grouped, put in se
 | `openedCount`, `frozenCount` | In-stock units opened, and in the freezer now (#65): the row's **Opened** / **n frozen** pills. |
 | `aisleId`, `icon`, `useFirst` | Its aisle (#71; `other` until Jev has chosen), its icon (#72; `null`: show the aisle's icon, or the letter for `other`) and whether it's in Use first. |
 | `genericName` | Its generic name (#90), or `null`. Added for the stock search (#91), which filters in the app. |
-| `aisles` | Known products **by aisle in shop order** (#71): `[{ aisleId, name, icon, itemCount, useFirstCount, anyExpired, products: [...] }]`, empty aisles left out. Within an aisle: use first (soonest first), then the rest by soonest estimated expiry, then name. The UI's Use first view filters this in the app. |
+| `ask` | "Still got this?" (#94): the product's oldest in-stock unit at or past its estimate (estimate ≤ today, UK) that nobody has said is still here in the last `STILL_HERE_ASK_AGAIN_DAYS` (default 2) days: `{ unitId, estimatedExpiryDate, boughtOn, openedOn, daysOver, askingCount }` (dates `YYYY-MM-DD`, `daysOver` 0 on the day, `askingCount` how many of its units are asking). `null` when none is, and always for unnamed products. |
+| `checkedToday` | Someone said one of its units is still here today (UK): the row shows **Checked**. |
+| `aisles` | Known products **by aisle in shop order** (#71): `[{ aisleId, name, icon, itemCount, useFirstCount, anyExpired, toCheckCount, products: [...] }]` (`toCheckCount`: products with an `ask`, the red "n to check" pill, #94), empty aisles left out. Within an aisle: use first (soonest first), then the rest by soonest estimated expiry, then name. The UI's Use first view filters this in the app. |
 | `waitingForName` | Unknown items (`noMatch` / `lookupFailed`), newest first, apart from the aisles. |
 | `soonestState`, `soonestStateOn` | When the soonest unit's date comes from being `opened`, `frozen` or `defrosted` (#65): which, and since when (`YYYY-MM-DD`). The row then says "Opened 12 Oct" instead of the bought note. `null` otherwise. |
 
@@ -229,6 +231,22 @@ Check out **that** unit, from item detail (#53). No body. Recorded like a stock-
 - **200** `{ "unitId": "…", "productId": "…", "displayName": "…", "remainingCount": 1 }`
 - **404** `{ "error": "No such unit." }`
 - **409** `{ "error": "That unit isn't in stock." }`: already checked out (or a scanner took it meanwhile). Nothing changed.
+
+### "Still got this?" (#94)
+
+A unit **asks** from its estimated day (estimate ≤ today, UK date) until someone answers. All need a signed-in user.
+
+- **`POST /api/units/{unitId}/still-here`**: sets the unit's `lastConfirmedAt` (now) and `lastConfirmedVia: "prompt"`; its date is unchanged. It stops asking until `STILL_HERE_ASK_AGAIN_DAYS` (default 2) UK days later (confirmed on Monday → asks again on Wednesday). Idempotent. **200** `{ "unitId": "…", "productId": "…", "lastConfirmedAt": "…" }`, **404** no such unit, **409** not in stock.
+- **`POST /api/units/{unitId}/undo-still-here`**: clears `lastConfirmedAt` and `lastConfirmedVia`, so it asks again. Idempotent. Same responses.
+- **`POST /api/units/{unitId}/gone`**: checks out **that** unit as a **stock check** (`checkOutReason: "stockCheck"`, `checkOutSource: "ui"`, `checkedOutBy`). Same responses as `POST /api/units/{unitId}/check-out`; Undo is `POST /api/units/{unitId}/undo-check-out`, which clears the reason. A stock-check check-out **counts as running out** (#89) but **pushes nobody** (#81), and nor does its undo.
+- **`GET /api/stock/expired`**: what the "Still got these?" sheet lists. **Expired** = named, in stock, estimate **before** today (a unit on its day asks on its row but isn't expired), and not said to be still here lately. Oldest estimate first. `Cache-Control: no-store`.
+
+```json
+{ "units": [{ "unitId": "…", "productId": "…", "name": "Hummus", "storage": "fridge", "boughtOn": "2026-10-10",
+  "openedOn": null, "estimatedExpiryDate": "2026-10-16", "daysOver": 4 }] }
+```
+
+`name` is the generic name when there is one; `storage` is the unit's current storage, else the product's usual one (`null` before it has a shelf life).
 
 ### `PUT /api/units/{unitId}/estimated-expiry`
 
@@ -865,6 +883,15 @@ No endpoint of their own: they use the subscription, preferences and seen receip
 - **Who:** each person with a device whose `preferences.stockChanges` is `true` gets **one** push for what they missed, on each such device: scanner changes they have **no** seen receipt for (from any of their devices), and app changes made by **someone else**. What's left is **netted per product** (a check-out and its undo cancel out; 2 added and 1 removed is 1 added). Nothing left → nothing.
 - **What:** title `Cupboard updated`, body like `Added Milk, Bread, Eggs and 4 more · Removed Hummus` (up to 3 names a side, repeats as `2 × Milk`, an empty side left out), topic and tag `stockChanges` (was `stock`, which Apple refused, #106), opens `/` (or `/?removed=<batchId>` when something was removed, #89), TTL 3 hours.
 - **Quiet hours** (21:30–07:30 UK): changes then aren't batched, and a batch falling due then is closed without sending, so night-time changes are never pushed later.
+
+### "Still got this?" pushes (#94)
+
+- **When:** at **18:00 UK time on Tuesday, Thursday and Sunday** (the `stillGotThisPush` timer runs at 17:00 and 18:00 UTC on those days; only the run in the 18:00 hour in the UK acts, so it follows BST and GMT).
+- **Only if anything is expired** (as `GET /api/stock/expired`). Nothing → no push.
+- **Who:** every device whose `preferences.stillGotThis` isn't `false` (on unless turned off). Household-wide: whoever answers first clears it for everyone.
+- **What:** title `Cupboard`, body `3 expired items are still in stock. Still got these?` or `1 expired item is still in stock. Still got it?`, opens `/?check=expired` (the sheet), TTL 6 hours, topic and tag **`stillGotThis`**: the card's `check` is 5 characters, which Apple refuses (#106).
+- **Once a day:** the day is claimed in `pushSeen` (`check:<date>`) before sending, and released if sending fails, so the timer's retry can send.
+- **Logs:** `Still got this push: …`.
 
 ### Shopping list pushes (#86)
 

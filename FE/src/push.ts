@@ -165,6 +165,8 @@ export const STOCK_CHANGES = "stockChanges";
 
 /** Shopping list pushes (#86): on until the device turns it off (the server counts a missing key as on). */
 export const SHOPPING_LIST = "shoppingList";
+/** "Still got this?" (#94): Tue, Thu and Sun at 18:00 if anything has expired; on unless turned off. */
+export const STILL_GOT_THIS = "stillGotThis";
 
 const WORKER_WAIT_MS = 5000;
 

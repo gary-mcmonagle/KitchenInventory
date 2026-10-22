@@ -17,8 +17,10 @@ import {
     stockRowText,
     scannedLabel,
     stateNote,
+    stillGotThisWhy,
     todayLine,
 } from "./format";
+import { CheckSheet, checkFromUrl } from "./CheckSheet";
 import { AISLES, type AisleInfo } from "./aisles";
 import { takeFlash } from "./flash";
 import { rememberItemPreview } from "./itemPreview";
@@ -38,6 +40,8 @@ export const TOAST_MS = 6000; // as in the mockup
 
 type Toast =
     | { kind: "checkedOut"; unitId: string; product: StockProduct; name: string }
+    | { kind: "stillHere"; unitId: string; product: StockProduct }
+    | { kind: "gone"; unitId: string; product: StockProduct; name: string }
     | { kind: "opened"; unitId: string; name: string }
     | { kind: "error"; text: string }
     | { kind: "info"; text: string };
@@ -90,6 +94,8 @@ export interface AisleGroup {
     products: StockProduct[];
     useFirstCount: number;
     anyExpired: boolean;
+    /** Products asking "Still got this?" (#94): the red "n to check" pill. */
+    toCheckCount: number;
 }
 
 const bySoonest = (a: StockProduct, b: StockProduct) => {
@@ -118,6 +124,7 @@ export function groupByAisle(products: StockProduct[]): AisleGroup[] {
             products,
             useFirstCount: products.filter((p) => p.section === "useFirst").length,
             anyExpired: products.some((p) => (p.daysUntilSoonest ?? 0) < 0),
+            toCheckCount: products.filter((p) => p.ask).length,
         };
     }).filter((g) => g.products.length > 0);
 }
@@ -201,6 +208,16 @@ export function StockScreen({
             url.searchParams.delete("removed");
             window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
         }
+    }, [visible]);
+
+    // "Still got these?" (#94): from a tapped "Still got this?" push (/?check=expired). The query goes at once too.
+    const [checkSheet, setCheckSheet] = useState(false);
+    useEffect(() => {
+        if (!visible || !checkFromUrl()) return;
+        setCheckSheet(true);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("check");
+        window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
     }, [visible]);
 
     // "Added 3 items" after adding from the app (#58).
@@ -303,6 +320,84 @@ export function StockScreen({
         }
     };
 
+    /** A product's row with its ask answered (#94), until the reload brings the API's view. */
+    const answered = (product: StockProduct, checkedToday: boolean) => (s: Stock | null) =>
+        s && {
+            ...s,
+            products: s.products.map((p) =>
+                p.productId === product.productId ? { ...p, ask: null, checkedToday } : p,
+            ),
+        };
+
+    /** "Still got this?" → Still here (#94). */
+    const stillHere = async (product: StockProduct) => {
+        const ask = product.ask;
+        if (!ask || inFlight.has(product.productId)) return;
+        setBusy(product.productId, true);
+        setStock(answered(product, true)); // optimistic
+        try {
+            await api.stillHere(ask.unitId);
+            showToast({ kind: "stillHere", unitId: ask.unitId, product });
+            void load({ quiet: true }); // another unit of it may still be asking
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return;
+            showToast({ kind: "error", text: "Couldn't save that. Try again." });
+            void load({ quiet: true });
+        } finally {
+            setBusy(product.productId, false);
+        }
+    };
+
+    const undoStillHere = async (done: Extract<Toast, { kind: "stillHere" }>) => {
+        clearTimeout(toastTimer.current);
+        setToast(null);
+        try {
+            await api.undoStillHere(done.unitId);
+            void load({ quiet: true });
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return;
+            showToast({ kind: "error", text: "Couldn't undo that. Try again." });
+        }
+    };
+
+    /** "Still got this?" → Gone (#94): that unit comes out of stock as a stock check. */
+    const gone = async (product: StockProduct) => {
+        const ask = product.ask;
+        if (!ask || inFlight.has(product.productId)) return;
+        setBusy(product.productId, true);
+        setStock((s) => s && withCount(answered(product, false)(s)!, product, product.count - 1)); // optimistic
+        try {
+            const result = await api.unitGone(ask.unitId);
+            setStock((s) => s && withCount(s, product, result.remainingCount));
+            showToast({ kind: "gone", unitId: ask.unitId, product, name: product.displayName });
+            void load({ quiet: true });
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return;
+            showToast({
+                kind: "error",
+                text:
+                    error instanceof ApiError && error.status === 409
+                        ? `That ${product.displayName} is already gone.`
+                        : "Couldn't save that. Try again.",
+            });
+            void load({ quiet: true });
+        } finally {
+            setBusy(product.productId, false);
+        }
+    };
+
+    const undoGone = async (done: Extract<Toast, { kind: "gone" }>) => {
+        clearTimeout(toastTimer.current);
+        setToast(null);
+        try {
+            await api.undoCheckOut(done.unitId);
+            void load({ quiet: true });
+        } catch (error) {
+            if (error instanceof SignInRequiredError) return;
+            showToast({ kind: "error", text: "Couldn't undo that. Try again." });
+        }
+    };
+
     const load = useCallback(
         async ({ quiet = false }: { quiet?: boolean } = {}) => {
             if (!navigator.onLine) {
@@ -398,6 +493,8 @@ export function StockScreen({
             busy={inFlight.has(p.productId)}
             onCheckOut={() => void checkOut(p)}
             onOpen={() => void openOne(p)}
+            onStillHere={() => void stillHere(p)}
+            onGone={() => void gone(p)}
         />
     );
 
@@ -648,7 +745,11 @@ export function StockScreen({
                             ? `Checked out ${toast.name}`
                             : toast.kind === "opened"
                               ? `Marked ${toast.name} as opened`
-                              : toast.text}
+                              : toast.kind === "stillHere"
+                                ? "OK, we'll ask again in 2 days"
+                                : toast.kind === "gone"
+                                  ? `Marked ${toast.name} as gone`
+                                  : toast.text}
                     </span>
                     {toast.kind === "checkedOut" && (
                         <button type="button" className={styles.undo} onClick={() => void undo(toast)}>
@@ -660,9 +761,32 @@ export function StockScreen({
                             Undo
                         </button>
                     )}
+                    {toast.kind === "stillHere" && (
+                        <button
+                            type="button"
+                            className={styles.undo}
+                            onClick={() => void undoStillHere(toast)}
+                        >
+                            Undo
+                        </button>
+                    )}
+                    {toast.kind === "gone" && (
+                        <button type="button" className={styles.undo} onClick={() => void undoGone(toast)}>
+                            Undo
+                        </button>
+                    )}
                 </div>
             )}
             {sheet && visible && <RunOutSheet api={api} source={sheet} onClose={() => setSheet(null)} />}
+            {checkSheet && visible && (
+                <CheckSheet
+                    api={api}
+                    onClose={() => {
+                        setCheckSheet(false);
+                        void load({ quiet: true });
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -700,12 +824,19 @@ function AisleSection({
                 onClick={onToggle}
             >
                 <span className={styles.aisleName}>{group.aisle.name}</span>
-                {group.useFirstCount > 0 && (
-                    <span
-                        className={`${styles.aislePill} ${group.anyExpired ? styles.aislePillExpired : ""}`}
-                    >
-                        {`${group.useFirstCount} to use first`}
+                {/* Things to check replace the use-first pill while there are any (#94). */}
+                {group.toCheckCount > 0 ? (
+                    <span className={`${styles.aislePill} ${styles.aislePillCheck}`}>
+                        {`${group.toCheckCount} to check`}
                     </span>
+                ) : (
+                    group.useFirstCount > 0 && (
+                        <span
+                            className={`${styles.aislePill} ${group.anyExpired ? styles.aislePillExpired : ""}`}
+                        >
+                            {`${group.useFirstCount} to use first`}
+                        </span>
+                    )
                 )}
                 <span className={styles.sectionCount}>{itemsLabel(group.products.length)}</span>
                 <svg
@@ -750,29 +881,38 @@ function KnownRow({
     busy,
     onCheckOut,
     onOpen,
+    onStillHere,
+    onGone,
 }: {
     product: StockProduct;
     busy: boolean;
     onCheckOut: () => void;
     onOpen: () => void;
+    onStillHere: () => void;
+    onGone: () => void;
 }) {
     // Greyed out once one's open (finish it first), or when they're all in the freezer (#65).
     const alreadyOpen = product.openedCount > 0;
     const canOpen = !alreadyOpen && product.frozenCount < product.count;
     const { title, meta } = stockRowText(product);
-    const badge =
-        product.daysUntilSoonest !== null && product.soonestEstimatedExpiryDate !== null
-            ? expiryBadge(product.daysUntilSoonest, product.soonestEstimatedExpiryDate)
-            : null;
+    const ask = product.ask ?? null;
+    // Said to be still here today, and nothing else asking: Checked, for the rest of the day (#94).
+    const checked = !ask && !!product.checkedToday;
+    const badge = checked
+        ? { text: "Checked", tone: "checked" as const }
+        : product.daysUntilSoonest !== null && product.soonestEstimatedExpiryDate !== null
+          ? expiryBadge(product.daysUntilSoonest, product.soonestEstimatedExpiryDate)
+          : null;
     // An estimate from opening, freezing or defrosting says so (#65): working back to a bought date would be wrong.
-    const note =
-        product.soonestState && product.soonestStateOn
-            ? stateNote(product.soonestState, product.soonestStateOn)
-            : product.soonestEstimatedExpiryDate !== null && product.shelfLifeDays !== null
-              ? boughtNote(product.soonestEstimatedExpiryDate, product.shelfLifeDays)
-              : null;
+    const note = checked
+        ? "You said it's still here · we'll ask again in 2 days"
+        : product.soonestState && product.soonestStateOn
+          ? stateNote(product.soonestState, product.soonestStateOn)
+          : product.soonestEstimatedExpiryDate !== null && product.shelfLifeDays !== null
+            ? boughtNote(product.soonestEstimatedExpiryDate, product.shelfLifeDays)
+            : null;
     return (
-        <li className={styles.row}>
+        <li className={ask ? `${styles.row} ${styles.rowAsking}` : styles.row}>
             <div className={styles.rowMain}>
                 <ProductTile
                     className={styles.tile}
@@ -810,64 +950,91 @@ function KnownRow({
                 </div>
                 {badge && <span className={`${styles.badge} ${styles[badge.tone]}`}>{badge.text}</span>}
             </div>
-            <div className={styles.actions}>
-                {note && <span className={styles.note}>{note}</span>}
-                <div className={styles.rowButtons}>
-                    <button
-                        type="button"
-                        className={styles.checkOut}
-                        onClick={onOpen}
-                        disabled={busy || !canOpen}
-                        aria-label={
-                            alreadyOpen
-                                ? `One ${product.displayName} is already open`
-                                : `Mark one ${product.displayName} as opened`
-                        }
-                    >
-                        <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
+            {ask ? (
+                <div className={styles.ask}>
+                    <div className={styles.askTitle}>Still got this?</div>
+                    <div className={styles.askWhy}>{stillGotThisWhy(ask, product.count)}</div>
+                    <div className={styles.askButtons}>
+                        <button
+                            type="button"
+                            className={styles.stillHere}
+                            onClick={onStillHere}
+                            disabled={busy}
+                            aria-label={`${product.displayName}: still here`}
                         >
-                            <path d="M7 9h10v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z" />
-                            <path d="M5.5 6.5L17 3.5" />
-                        </svg>
-                        {/* "Open" while it can be done; "Opened" once one is (Gary, 2026-10-18). */}
-                        {alreadyOpen ? "Opened" : "Open"}
-                    </button>
-                    <button
-                        type="button"
-                        className={styles.checkOut}
-                        onClick={onCheckOut}
-                        disabled={busy}
-                        aria-label={`Remove one ${product.displayName}`}
-                    >
-                        <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
+                            Still here
+                        </button>
+                        <button
+                            type="button"
+                            className={styles.gone}
+                            onClick={onGone}
+                            disabled={busy}
+                            aria-label={`${product.displayName}: gone`}
                         >
-                            <path d="M4 7h16" />
-                            <path d="M10 11v6M14 11v6" />
-                            <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
-                            <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                        </svg>
-                        Remove
-                    </button>
+                            Gone
+                        </button>
+                    </div>
                 </div>
-            </div>
+            ) : (
+                <div className={styles.actions}>
+                    {note && <span className={styles.note}>{note}</span>}
+                    <div className={styles.rowButtons}>
+                        <button
+                            type="button"
+                            className={styles.checkOut}
+                            onClick={onOpen}
+                            disabled={busy || !canOpen}
+                            aria-label={
+                                alreadyOpen
+                                    ? `One ${product.displayName} is already open`
+                                    : `Mark one ${product.displayName} as opened`
+                            }
+                        >
+                            <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M7 9h10v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z" />
+                                <path d="M5.5 6.5L17 3.5" />
+                            </svg>
+                            {/* "Open" while it can be done; "Opened" once one is (Gary, 2026-10-18). */}
+                            {alreadyOpen ? "Opened" : "Open"}
+                        </button>
+                        <button
+                            type="button"
+                            className={styles.checkOut}
+                            onClick={onCheckOut}
+                            disabled={busy}
+                            aria-label={`Remove one ${product.displayName}`}
+                        >
+                            <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M4 7h16" />
+                                <path d="M10 11v6M14 11v6" />
+                                <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+                                <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                            </svg>
+                            Remove
+                        </button>
+                    </div>
+                </div>
+            )}
         </li>
     );
 }

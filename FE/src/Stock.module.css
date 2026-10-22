@@ -676,3 +676,76 @@
     font-size: 15px;
     font-weight: 600;
 }
+
+/* "Still got this?" (#94, project/StillGotThis.dc.html): a red box under the product line while a unit asks. */
+.rowAsking {
+    border-color: #e9b8b3;
+}
+
+.ask {
+    position: relative;
+    z-index: 1; /* above the row's stretched name link */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-left: 56px;
+    padding: 10px 12px;
+    border-radius: var(--radius-button);
+    background: var(--danger-bg);
+}
+
+.askTitle {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--danger-fg);
+}
+
+.askWhy {
+    font-size: 13px;
+    line-height: 1.4;
+    color: #6e1a13;
+}
+
+.askButtons {
+    display: flex;
+    gap: 8px;
+}
+
+.stillHere,
+.gone {
+    flex: 1;
+    min-height: var(--touch);
+    border-radius: var(--radius-button);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.stillHere {
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+}
+
+.gone {
+    border: 0;
+    background: var(--danger-fg);
+    color: #ffffff;
+}
+
+.stillHere:disabled,
+.gone:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.checked {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.aislePillCheck {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}

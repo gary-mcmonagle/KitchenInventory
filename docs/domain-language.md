@@ -93,6 +93,18 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Scanner port** – the Pi USB port a scanner's dongle is plugged into, named by its `/dev/input/by-path` link (e.g. `platform-3f980000.usb-usb-0:1.5:1.0`). The Pi maps each scanner port to a device. Moving a dongle to another port moves its scans to another device.
 - In code: `scanner_port` (Pi client config)
 
+**Still got this?** – the question a stock list row asks once a unit reaches its estimated expiry date (#94), with **Still here** and **Gone**. Asked from the estimated day itself; a product row asks about its oldest such unit. The aisle's pill then reads "n to check".
+
+**Still here** – the answer that the unit is still in the house. It records **last confirmed** and stops asking for 2 days (`STILL_HERE_ASK_AGAIN_DAYS`); the date stays as it was. The row shows **Checked** for the rest of the day.
+
+**Last confirmed** – when someone last said a unit is still here (`lastConfirmedAt`, with how: the prompt, or later a stock check by place).
+
+**Stock-check check-out** – **Gone** on a "Still got this?" prompt: that unit is checked out as a correction (`checkOutReason: "stockCheck"`), not as something used just now. It counts as running out (add when we run out) but isn't pushed as a stock change.
+
+**Expired** (for "Still got this?") – an in-stock, named unit whose estimated expiry date is **before** today and that nobody has said is still here lately. A unit on its estimated day asks on its row but isn't expired yet.
+
+**Still got these?** – the sheet listing the expired units, each with Still here and Gone, opened by the **expired check push**: at 18:00 on Tuesdays, Thursdays and Sundays, if anything is expired ("3 expired items are still in stock. Still got these?"). Turned off per phone with the **Still got this?** switch on the "This phone" card.
+
 **Undo check-out** – reversing a check-out, returning the unit to stock with its check-out details cleared. Offered for 6 seconds after a check-out in the stock list (the toast's Undo).
 - In code: `UndoCheckOut`, `POST /api/units/{unitId}/undo-check-out`
 

@@ -64,6 +64,35 @@ export interface StockProduct {
     useFirst: boolean;
     /** Its generic name (#90), when it has one; the stock search matches it (#91). */
     genericName?: string | null;
+    /** "Still got this?" (#94): its oldest unit at or past its estimate, unless someone said it's still here lately. */
+    ask?: StockAsk | null;
+    /** Someone said one is still here today: the badge reads Checked. */
+    checkedToday?: boolean;
+}
+
+/** The unit a stock list row asks about (#94). Dates are YYYY-MM-DD. */
+export interface StockAsk {
+    unitId: string;
+    estimatedExpiryDate: string;
+    boughtOn: string;
+    openedOn: string | null;
+    /** 0 on the estimated day. */
+    daysOver: number;
+    /** How many of the product's units are asking. */
+    askingCount: number;
+}
+
+/** GET /api/stock/expired (#94): what the "Still got these?" sheet lists, oldest estimate first. */
+export interface ExpiredUnit {
+    unitId: string;
+    productId: string;
+    /** The generic name if it has one. */
+    name: string;
+    storage: StorageName | null;
+    boughtOn: string;
+    openedOn: string | null;
+    estimatedExpiryDate: string;
+    daysOver: number;
 }
 
 /** Opened, frozen, defrosted (#65). */
@@ -643,6 +672,30 @@ export class ApiClient {
     /** Checks out that unit (item detail; 409 → ApiError: not in stock). */
     checkOutUnit(unitId: string): Promise<CheckedOut> {
         return this.send<CheckedOut>("POST", `/api/units/${encodeURIComponent(unitId)}/check-out`);
+    }
+
+    /** "Still got this?" → Still here (#94): it stops asking for a couple of days. Idempotent. */
+    stillHere(
+        unitId: string,
+    ): Promise<{ unitId: string; productId: string; lastConfirmedAt: string | null }> {
+        return this.send("POST", `/api/units/${encodeURIComponent(unitId)}/still-here`);
+    }
+
+    /** Undo of Still here (#94): it asks again. Idempotent. */
+    undoStillHere(
+        unitId: string,
+    ): Promise<{ unitId: string; productId: string; lastConfirmedAt: string | null }> {
+        return this.send("POST", `/api/units/${encodeURIComponent(unitId)}/undo-still-here`);
+    }
+
+    /** "Still got this?" → Gone (#94): that unit is checked out as a stock check. Undo is undoCheckOut. 409: not in stock. */
+    unitGone(unitId: string): Promise<CheckedOut> {
+        return this.send<CheckedOut>("POST", `/api/units/${encodeURIComponent(unitId)}/gone`);
+    }
+
+    /** The units the "Still got these?" sheet lists (#94). */
+    expiredUnits(): Promise<{ units: ExpiredUnit[] }> {
+        return this.get<{ units: ExpiredUnit[] }>("/api/stock/expired");
     }
 
     /** Sets one unit's estimated expiry date by hand (YYYY-MM-DD). */
