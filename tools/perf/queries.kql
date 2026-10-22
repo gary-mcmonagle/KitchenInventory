@@ -68,8 +68,10 @@ AppTraces
 | where TimeGenerated > ago(7d) and Message startswith "Cosmos index metrics for"
 | extend Operation = tostring(Properties.CosmosOperation), Metrics = tostring(Properties.IndexMetrics)
 | summarize arg_max(TimeGenerated, Metrics) by Operation
-| extend HasPotential = Metrics has "Potential"
-| order by HasPotential desc, Operation asc
+| extend Potential = parse_json(Metrics).PotentialIndexes
+| extend Suggested = array_length(Potential.SingleIndexes) + array_length(Potential.CompositeIndexes)
+| project Operation, Suggested, Potential, Metrics, TimeGenerated
+| order by Suggested desc, Operation asc
 
 // 10. What this measuring adds to ingestion per day (the custom metrics and the two traces)
 union
