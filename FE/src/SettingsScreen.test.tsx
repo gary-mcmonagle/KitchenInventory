@@ -204,12 +204,12 @@ test("recently checked out: scanner or app, and Undo puts it back with a toast",
     );
 });
 
-test("the page has Scanners then This phone as sections, with the lists as sub-headings of Scanners", async () => {
+test("the page has Scanners, This phone and AI models as sections, with the lists as sub-headings of Scanners", async () => {
     setup();
     await screen.findByText("Check-in scanner");
 
     const sections = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(sections).toEqual(["ScannersLast checked 2 minutes ago", "This phoneNotifications"]);
+    expect(sections).toEqual(["ScannersLast checked 2 minutes ago", "This phoneNotifications", "AI models"]);
     const lists = screen
         .getAllByRole("heading", { level: 3 })
         .map((h) => h.textContent?.replace(/\d.*$/, "").trim());

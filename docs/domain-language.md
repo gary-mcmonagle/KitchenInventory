@@ -227,7 +227,7 @@ If you need a term that isn't here, add it as part of the card that introduces i
 - Not to be confused with: **Scan event**, the stored record of the scan itself.
 - In code: `ScanFeedEvent` (`ScanReceived`, `ScanIdentified`, `ScanNeedsIdentification`, `CheckOutUnmatched`, `ScanSkipped`), sent through `IScanFeedPublisher`
 
-**Settings** – the screen reached from the gear button in the stock list's header (`/settings`; it was the Scanners screen at `/scanners` until #122, which still redirects). One scrolling page of sections: **Scanners**, **This phone** and, later, **AI models** (#123). The gear's dot is red for a scanner problem and amber for things to sort out.
+**Settings** – the screen reached from the gear button in the stock list's header (`/settings`; it was the Scanners screen at `/scanners` until #122, which still redirects). One scrolling page of sections: **Scanners**, **This phone** and **AI models** (#123: which model each job uses, and a button to the AI models page). The gear's dot is red for a scanner problem and amber for things to sort out.
 
 **Scanners** (a section of Settings) – answering "is everything working?" and "what needs sorting?": each scanner's receiver presence and the Pi's health, check-ins with no match (to identify), check-outs with no match (to dismiss), and recently checked out (to undo).
 
@@ -277,6 +277,8 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Active model** – the model a job currently uses (#120). Until one is chosen, the job uses its **default**: the app setting's deployment, else gpt-4o. Anyone in the household can change it (who and when is recorded), it takes effect within about a minute, and **revert** goes back to the previous one. A model can only be made active for a job it has passed tests for.
 
 **Temperature mode** – whether a model gets the temperature each caller normally sends (**usual**) or none (**default**), because it only accepts its own default (gpt-6-luna). Not shown in the UI; the model test (#121) sets it.
+
+**AI models page** – `/settings/ai-models` (#123), reached from Settings. **In use**: a card per job (recipes and ideas, photos, generic names) with its model, who changed it and when, **Change** (a sheet; only models that passed the job's tests can be chosen, and the switch is confirmed with the estimated cost against the current model) and **Go back to <previous>**. **Models**: **Add a model** (a name to show and the deployment name; it is added and its tests start at once), and a card per model with its status (All passed, Passed with warnings, Failed, Testing…), the jobs it can do, **Run tests** and **Remove** (only when it isn't in use).
 
 **Model test** – the saved checks run on a registered model (#121), at the press of a button and any time after: can it be reached, does it accept our temperature and strict JSON schemas, does the real recipe, Ready now, Adjust, photo and generic name request work on it, how fast and how costly is it. A **run** is asynchronous and shows each **check** (waiting, running, pass, warn or fail) as it finishes. A job's model must pass that job's checks to be made active; **warnings** (slow, costly, "needs its default temperature") don't block. At most five runs a person an hour.
 

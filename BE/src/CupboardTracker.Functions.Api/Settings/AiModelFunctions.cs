@@ -9,17 +9,22 @@ using Microsoft.Azure.Functions.Worker.Http;
 namespace CupboardTracker.Functions.Api.Settings;
 
 /// <summary>The Foundry models people register and choose in the app (#120). All need a signed-in user. See docs/api.md.</summary>
-public sealed class AiModelFunctions(ManageAiModels manage, AiModelDefaults defaults)
+public sealed class AiModelFunctions(
+    ManageAiModels manage, AiModelDefaults defaults, OpenModelTestRuns openRuns, StartModelTest startTests)
 {
     public const int MaxBodyBytes = 4 * 1024;
 
-    /// <summary><c>GET /api/settings/ai-models</c>: the registered models, each job's active one, and the defaults.</summary>
+    /// <summary><c>GET /api/settings/ai-models</c>: the registered models (with the run in progress on each, if any), each
+    /// job's active one, the defaults, and how many test runs the caller has left this hour.</summary>
     [Function("aiModels")]
     public async Task<HttpResponseData> Get(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "settings/ai-models")] HttpRequestData request,
-        CancellationToken cancellationToken)
+        FunctionContext context, CancellationToken cancellationToken)
     {
-        var response = await JsonAsync(request, HttpStatusCode.OK, ToJson(await manage.GetAsync(cancellationToken), defaults));
+        var settings = await manage.GetAsync(cancellationToken);
+        var testing = await openRuns.ForAsync(settings.Models.Select(m => m.Id), cancellationToken);
+        var left = startTests.RunsLeft(context.GetCurrentUser().ObjectId);
+        var response = await JsonAsync(request, HttpStatusCode.OK, ToJson(settings, defaults, testing, new ModelTestLimits().PerHour, left));
         response.Headers.Add("Cache-Control", "no-store");
         return response;
     }
@@ -123,16 +128,19 @@ public sealed class AiModelFunctions(ManageAiModels manage, AiModelDefaults defa
         }
     }
 
-    internal static (HttpStatusCode Status, object Body) ToResponse(AiModelsResult result, AiModelDefaults modelDefaults) => result switch
+    internal static (HttpStatusCode Status, object Body) ToResponse(
+        AiModelsResult result, AiModelDefaults modelDefaults, IReadOnlyDictionary<string, Guid>? testing = null) => result switch
     {
-        AiModelsResult.Done d => (HttpStatusCode.OK, ToJson(d.Settings, modelDefaults)),
+        AiModelsResult.Done d => (HttpStatusCode.OK, ToJson(d.Settings, modelDefaults, testing)),
         AiModelsResult.Invalid i => (HttpStatusCode.BadRequest, new { error = i.Error }),
         AiModelsResult.NotFound n => (HttpStatusCode.NotFound, new { error = n.Error }),
         AiModelsResult.Conflict c => (HttpStatusCode.Conflict, new { error = c.Reason }),
         _ => throw new ArgumentOutOfRangeException(nameof(result)),
     };
 
-    internal static object ToJson(AiModelSettings settings, AiModelDefaults modelDefaults) => new
+    internal static object ToJson(
+        AiModelSettings settings, AiModelDefaults modelDefaults, IReadOnlyDictionary<string, Guid>? testing = null,
+        int? runsPerHour = null, int? runsLeft = null) => new
     {
         models = settings.Models.Select(m => new
         {
@@ -145,6 +153,8 @@ public sealed class AiModelFunctions(ManageAiModels manage, AiModelDefaults defa
             addedByName = m.AddedByName,
             addedAt = Timestamp(m.AddedAt),
             tests = m.Tests,
+            // The run going on this model right now (#123), so its card says "Testing…"; null when none.
+            testing = testing is not null && testing.TryGetValue(m.Id, out var runId) ? (Guid?)runId : null,
         }),
         // Each job's active model, or null while it's on its default.
         active = AiJobs.All.ToDictionary(AiJobs.Id, job => settings.Active.TryGetValue(job, out var a)
@@ -159,11 +169,16 @@ public sealed class AiModelFunctions(ManageAiModels manage, AiModelDefaults defa
             : null),
         // What each job uses until a model is made active (the app settings, else gpt-4o).
         defaults = AiJobs.All.ToDictionary(AiJobs.Id, modelDefaults.For),
+        // How many test runs the caller can still start this hour (GET only).
+        testRuns = runsPerHour is null ? null : new { perHour = runsPerHour, left = runsLeft },
     };
 
     private async Task<HttpResponseData> RespondAsync(HttpRequestData request, AiModelsResult result)
     {
-        var (status, body) = ToResponse(result, defaults);
+        var testing = result is AiModelsResult.Done d
+            ? await openRuns.ForAsync(d.Settings.Models.Select(m => m.Id), CancellationToken.None)
+            : null;
+        var (status, body) = ToResponse(result, defaults, testing);
         return await JsonAsync(request, status, body);
     }
 

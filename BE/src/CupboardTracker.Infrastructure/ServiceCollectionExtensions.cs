@@ -63,6 +63,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(new ModelTestLimits());
         services.AddSingleton<StartModelTest>(); // holds the per-person hourly limit
         services.AddTransient<GetModelTestRun>();
+        services.AddTransient<OpenModelTestRuns>();
         services.AddTransient<RunModelTest>();
 
         // Measuring Cosmos (#115): every call's RUs as App Insights metrics, totals per invocation, index metrics when on.

@@ -1,0 +1,805 @@
+/* AI models (#123): project/Settings.dc.html (the section), AIModels.dc.html (the page) and AIModelTest.dc.html (add and test). */
+.screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    padding: 16px var(--page-x) 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.back {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: var(--touch);
+    margin-left: -12px;
+    padding-right: 8px;
+    text-decoration: none;
+    color: var(--accent-dark);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.backIcon {
+    width: 32px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.title {
+    margin: 0;
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.subtitle {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.content {
+    flex: 1;
+    padding: 8px var(--page-x) 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.groupTitle {
+    margin: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.groupNote {
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
+}
+
+.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.cardRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cardText {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.small {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.jobName {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.modelName {
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.modelNameSmall {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.outline {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 16px;
+    border-radius: var(--radius-button);
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.link {
+    align-self: flex-start;
+    min-height: var(--touch);
+    padding: 0 4px;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.big {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 14px;
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.big:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.pill {
+    flex: none;
+    padding: 4px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    background: var(--off-bg);
+    color: var(--ink-strong);
+}
+
+.ok {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.warn {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.fail {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}
+
+.chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 10px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.chipNo {
+    background: var(--ground);
+    color: #8a968f;
+    text-decoration: line-through;
+}
+
+.note {
+    font-size: 13px;
+    color: var(--ink-strong);
+    line-height: 1.4;
+}
+
+.meta {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+.secondary {
+    flex: 1;
+    min-height: var(--touch);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-button);
+    border: 1px solid var(--input-border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.danger {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border-radius: var(--radius-button);
+    border: 1px solid #e8c4c0;
+    background: var(--surface);
+    color: var(--danger-fg);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.notice {
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: var(--radius-input);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.noticeRow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+}
+
+.skeleton {
+    height: 56px;
+    border-radius: 12px;
+    background: var(--skeleton);
+}
+
+/* The Settings section: rows inside one card, then the Manage button. */
+.sectionCard {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 14px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.jobRow {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    min-height: 56px;
+    padding: 6px 0;
+    border-top: 1px solid var(--off-bg);
+}
+
+.jobRow:first-child {
+    border-top: 0;
+}
+
+.jobValue {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.manage {
+    margin-top: 6px;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 14px;
+    border-radius: var(--radius-button);
+    border: 1px solid var(--accent);
+    color: var(--accent-dark);
+    font-size: 15px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.manageCount {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+/* Toast (Undo), above the bottom nav. */
+.toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 98px;
+    max-width: calc(var(--design-width) - 32px);
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 6px 6px 16px;
+    min-height: 52px;
+    box-sizing: border-box;
+    background: var(--ink);
+    color: #ffffff;
+    border-radius: var(--radius-input);
+    box-shadow: 0 8px 24px rgba(28, 42, 36, 0.25);
+}
+
+.toastText {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.toastUndo {
+    flex: none;
+    min-height: var(--touch);
+    padding: 0 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--toast-action);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* The sheets (Change, and its confirmation). */
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+}
+
+.scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+}
+
+.sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: var(--design-width);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px var(--page-x) calc(28px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 24px rgba(28, 42, 36, 0.18);
+    max-height: 85vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.handle {
+    align-self: center;
+    width: 40px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border);
+}
+
+.sheetTitle {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 700;
+}
+
+.options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 60px;
+    padding: 10px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.optionOff {
+    background: var(--ground);
+    color: #8a968f;
+    cursor: default;
+}
+
+.optionCurrent {
+    border-color: var(--accent);
+}
+
+.optionText {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.optionLabel {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.optionSub {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.optionOff .optionSub {
+    color: #8a968f;
+}
+
+.inUse {
+    flex: none;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-dark);
+}
+
+.compare {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px;
+    border-radius: 14px;
+    background: var(--ground);
+}
+
+.compareRow {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 14px;
+}
+
+.buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.sheetButton {
+    flex: 1;
+    min-height: 48px;
+    border-radius: 14px;
+    border: 1px solid var(--input-border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.sheetPrimary {
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+}
+
+/* Add a model (the form). */
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.label {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.input {
+    height: 48px;
+    box-sizing: border-box;
+    padding: 0 14px;
+    border: 1px solid var(--input-border);
+    border-radius: 14px;
+    background: var(--surface);
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.inputBad {
+    border-color: var(--warn-border);
+}
+
+.help {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.problem {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--warn-fg);
+}
+
+.aside {
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--ground);
+    font-size: 13px;
+    color: var(--ink-strong);
+    line-height: 1.45;
+}
+
+.submit {
+    min-height: 52px;
+    border-radius: 14px;
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.submit:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* The summary and the checks. */
+.summary {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px;
+    border-radius: var(--radius-card);
+}
+
+.summaryTitle {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.summaryText {
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.summaryChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: var(--surface);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.checks {
+    list-style: none;
+    margin: 0;
+    padding: 4px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.check {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--off-bg);
+}
+
+.check:first-child {
+    border-top: 0;
+}
+
+.icon {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    margin-top: 1px;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    background: var(--off-bg);
+    color: #8a968f;
+}
+
+.iconPass {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.iconWarn {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.iconFail {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}
+
+.iconInfo {
+    background: var(--off-bg);
+    color: var(--ink-strong);
+}
+
+.spinner {
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    border-radius: 7px;
+    border: 2px solid var(--on-border);
+    border-top-color: var(--accent-dark);
+    animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        animation-duration: 3s;
+    }
+}
+
+.checkText {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.checkHead {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.checkName {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.checkWaiting {
+    color: #8a968f;
+}
+
+.checkTime {
+    flex: none;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.checkReason {
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--muted);
+}
+
+.reasonWarn {
+    color: var(--warn-fg);
+}
+
+.reasonFail {
+    color: var(--danger-fg);
+}
+
+.reasonOff {
+    color: #8a968f;
+}
+
+.doneRow {
+    display: flex;
+    gap: 8px;
+}
+
+.doneRow .big {
+    flex: 1;
+}
+
+.again {
+    flex: none;
+    min-height: 48px;
+    padding: 0 16px;
+    border-radius: 14px;
+    border: 1px solid var(--input-border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* Read by screen readers only (a check's outcome, which the icon shows to everyone else). */
+.srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}

@@ -64,6 +64,13 @@ export function useTabResets(): number {
     return useSyncExternalStore(subscribeResets, () => resets);
 }
 
+/** Swaps the current history entry for another path (#123: after adding a model, the form gives way to its test, so
+ * back goes to the page before the form). */
+export function replacePath(path: string): void {
+    window.history.replaceState(window.history.state, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 /** The screen this one was opened from, if it was opened inside the app (#103). */
 export const cameFrom = (): string | null => (window.history.state as { from?: string } | null)?.from ?? null;
 
@@ -80,6 +87,17 @@ export const SETTINGS_PATH = "/settings";
 /** The old address of Settings: bookmarks and links to it are sent to `SETTINGS_PATH`. */
 export const LEGACY_SCANNERS_PATH = "/scanners";
 export const ADD_PATH = "/add";
+
+/** AI models (#123): the page under Settings, adding a model, and one model's test (the run is `?run=<runId>`). */
+export const AI_MODELS_PATH = "/settings/ai-models";
+export const AI_MODEL_ADD_PATH = "/settings/ai-models/add";
+export const aiModelTestPath = (modelId: string) => `${AI_MODELS_PATH}/${encodeURIComponent(modelId)}/test`;
+
+/** The model ID if the path is one model's test (#123). */
+export function matchAiModelTestPath(path: string): string | null {
+    const match = /^\/settings\/ai-models\/([^/]+)\/test\/?$/.exec(path);
+    return match && match[1] !== "add" ? decodeURIComponent(match[1]) : null;
+}
 export const RECIPES_PATH = "/recipes";
 export const LIST_PATH = "/list";
 

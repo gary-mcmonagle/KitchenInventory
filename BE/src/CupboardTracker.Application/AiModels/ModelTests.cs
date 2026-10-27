@@ -219,6 +219,17 @@ public sealed class StartModelTest(
         return new StartModelTestResult.Started(run);
     }
 
+    /// <summary>How many more runs this person can start this hour (the UI says so before they start one).</summary>
+    public int RunsLeft(Guid userId)
+    {
+        var now = clock.GetUtcNow();
+        lock (gate)
+        {
+            var recent = started.TryGetValue(userId, out var times) ? times.Count(t => now - t < ModelTestLimits.Window) : 0;
+            return Math.Max(0, limits.PerHour - recent);
+        }
+    }
+
     /// <summary>The model's run that is still going, or null (clearing a mark whose run finished, vanished or was abandoned).</summary>
     private async Task<ModelTestRun?> OpenRunAsync(string modelId, CancellationToken cancellationToken)
     {
@@ -261,6 +272,27 @@ public sealed class StartModelTest(
             times.Enqueue(now);
             return null;
         }
+    }
+}
+
+/// <summary>Which models have a run going (#123), so a model's card can say "Testing…" after the person left the page.
+/// Read-only: a stale mark (finished, vanished or abandoned) just isn't reported.</summary>
+public sealed class OpenModelTestRuns(IModelTestRunRepository runs, TimeProvider clock)
+{
+    public async Task<IReadOnlyDictionary<string, Guid>> ForAsync(IEnumerable<string> modelIds, CancellationToken cancellationToken)
+    {
+        var open = new Dictionary<string, Guid>();
+        foreach (var modelId in modelIds)
+        {
+            if (await runs.GetActiveRunIdAsync(modelId, cancellationToken) is { } runId
+                && (await runs.GetAsync(runId, cancellationToken))?.Value is { } run
+                && RunStatuses.IsOpen(run.Status) && clock.GetUtcNow() - run.StartedAt < ModelTestLimits.Abandoned)
+            {
+                open[modelId] = runId;
+            }
+        }
+
+        return open;
     }
 }
 

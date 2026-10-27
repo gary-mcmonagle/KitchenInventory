@@ -1,7 +1,8 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ApiClient, Scanners } from "./api";
 import { BottomNav } from "./BottomNav";
 import { scannerLabel, scannerStatus } from "./scannerStatus";
+import { aiModels, checks, run } from "./aiModelsFixture";
 import { Shell } from "./Shell";
 
 // The three-tab navigation (#87): Stock · List · Hungry? (Recipes until #88), with Add and Scanners in the stock list header.
@@ -89,6 +90,7 @@ test.each([
     ["/list", "List"],
     ["/recipes", "Hungry?"],
     ["/settings", "Stock"], // reached from the stock list
+    ["/settings/ai-models", "Stock"], // reached from Settings (#123)
 ])("on %s the %s tab is open", async (path, open) => {
     await at(path);
     const current = tabs().filter(([, c]) => c === "page");
@@ -280,4 +282,32 @@ describe("tapping the tab you're on", () => {
         await act(async () => fireEvent.click(tab("List")));
         expect(window.location.pathname).toBe("/list");
     });
+});
+
+test("AI models (#123): Settings leads to the page, which leads to Add a model and back", async () => {
+    const api = shellApi() as unknown as ReturnType<typeof shellApi> & Record<string, unknown>;
+    api.aiModels = async () => aiModels();
+    await at("/settings", api);
+
+    fireEvent.click(await screen.findByRole("link", { name: /Manage AI models/ }));
+    expect(window.location.pathname).toBe("/settings/ai-models");
+    expect(await screen.findByRole("heading", { level: 1, name: "AI models" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("link", { name: "Add a model" }));
+    expect(window.location.pathname).toBe("/settings/ai-models/add");
+    expect(await screen.findByRole("heading", { level: 1, name: "Add a model" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("link", { name: "Back to AI models" }));
+    await waitFor(() => expect(window.location.pathname).toBe("/settings/ai-models")); // a real step back in history
+});
+
+test("a model's test has its own address and shows over the stock list", async () => {
+    const api = shellApi() as unknown as ReturnType<typeof shellApi> & Record<string, unknown>;
+    api.aiModels = async () => aiModels();
+    api.startModelTest = async () =>
+        run({ status: "queued", finishedAt: null, jobs: [], checks: checks("waiting") });
+    api.modelTestRun = async () => run();
+    await at("/settings/ai-models/luna/test", api);
+
+    expect(await screen.findByRole("heading", { level: 1, name: /Testing GPT-6 Luna/ })).toBeInTheDocument();
 });

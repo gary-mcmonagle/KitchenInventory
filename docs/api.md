@@ -740,6 +740,8 @@ Jobs: `recipes` (suggest, Ready now, Adjust and idea Adjust), `photos` and `gene
 }
 ```
 
+Each model also carries **`testing`** (#123): the `runId` of a test run going on it now, else `null` (so its card says "Testing…" even after the person who started the run left the page). The body of a `GET` also has **`testRuns`**, `{ "perHour": 5, "left": 3 }`, the caller's runs left this hour (`null` in the answers to changes); `left` is counted on the instance that answers, like the limit itself.
+
 `active.<job>` is `null` while the job is on its default; `defaults` are the deployment names it then uses (the app settings, else `gpt-4o`). `Cache-Control: no-store`. A change takes effect within about a minute on every app instance (the UI says so).
 
 ### `PUT /api/settings/ai-models/models/{id}`

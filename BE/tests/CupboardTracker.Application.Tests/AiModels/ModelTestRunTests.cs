@@ -303,4 +303,37 @@ public sealed class ModelTestRunTests
         Assert.Equal("queued", (string?)json["status"]);
         Assert.Equal(run1, ModelTestJson.FromNode(json)! with { Checks = run1.Checks, Jobs = run1.Jobs });
     }
+
+    [Fact]
+    public async Task Runs_left_counts_down_per_person_and_recovers_after_an_hour()
+    {
+        Assert.Equal(5, start.RunsLeft(Gary.ObjectId));
+        for (var i = 0; i < 2; i++)
+        {
+            var started = Assert.IsType<StartModelTestResult.Started>(await start.ExecuteAsync("luna", Gary, TestContext.Current.CancellationToken));
+            await runs.SaveAsync(started.Run with { Status = RunStatuses.Done }, TestContext.Current.CancellationToken);
+            await runs.ClearActiveAsync("luna", TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(3, start.RunsLeft(Gary.ObjectId));
+        Assert.Equal(5, start.RunsLeft(Sam.ObjectId));
+        clock.Now = Now.AddHours(1).AddSeconds(1);
+        Assert.Equal(5, start.RunsLeft(Gary.ObjectId));
+    }
+
+    [Fact]
+    public async Task Only_models_with_a_live_run_are_reported_as_testing()
+    {
+        var open = new OpenModelTestRuns(runs, clock);
+        Assert.Empty(await open.ForAsync(["luna"], TestContext.Current.CancellationToken));
+
+        var started = Assert.IsType<StartModelTestResult.Started>(await start.ExecuteAsync("luna", Gary, TestContext.Current.CancellationToken));
+        Assert.Equal(started.Run.RunId, (await open.ForAsync(["luna", "other"], TestContext.Current.CancellationToken))["luna"]);
+
+        await runs.SaveAsync(started.Run with { Status = RunStatuses.Done }, TestContext.Current.CancellationToken);
+        Assert.Empty(await open.ForAsync(["luna"], TestContext.Current.CancellationToken)); // finished
+        await runs.SaveAsync(started.Run, TestContext.Current.CancellationToken);
+        clock.Now = Now.AddMinutes(20);
+        Assert.Empty(await open.ForAsync(["luna"], TestContext.Current.CancellationToken)); // abandoned
+    }
 }

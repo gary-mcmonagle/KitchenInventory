@@ -6,6 +6,7 @@ import { feedTime } from "./scanFeed";
 import { TOAST_MS } from "./StockScreen";
 import { signalRConnection, useScanFeed, type FeedConnection } from "./useScanFeed";
 import styles from "./Settings.module.css";
+import { AiModelsSection } from "./AiModelsSection";
 import { ThisPhoneCard } from "./ThisPhoneCard";
 
 type Device = Scanners["devices"][number];
@@ -15,7 +16,7 @@ const PULL_TO_REFRESH = 70; // px
 /**
  * Settings (#122, project/Settings.dc.html), once the Scanners screen (#55): a **Scanners** section (is everything
  * working: each scanner's receiver and the Pi; and what needs sorting: check-ins to identify, check-outs with no match,
- * and recent check-outs to undo) and **This phone** (notifications). More sections will follow (AI models, #123). The
+ * and recent check-outs to undo) and **This phone** (notifications). **AI models** (#123) shows which model each job uses. The
  * scanner data reloads on open, on returning to the app, on pull-to-refresh, and when the scan feed says something
  * happened.
  */
@@ -332,6 +333,8 @@ export function SettingsScreen({
                 </section>
 
                 <ThisPhoneCard api={api} />
+
+                <AiModelsSection api={api} />
             </div>
 
             {toast && (

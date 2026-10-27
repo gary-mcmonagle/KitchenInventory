@@ -2,14 +2,19 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { SignInRequiredError, type ApiClient } from "./api";
 import styles from "./App.module.css";
 import { AddScreen } from "./AddScreen";
+import { AiModelsScreen } from "./AiModelsScreen";
 import { BottomNav } from "./BottomNav";
 import { ItemScreen } from "./ItemScreen";
 import { ListScreen } from "./ListScreen";
+import { ModelTestScreen } from "./ModelTestScreen";
 import { NameScreen } from "./NameScreen";
 import { refreshPushSubscription } from "./push";
 import { RecipesScreen } from "./RecipesScreen";
 import {
     ADD_PATH,
+    AI_MODEL_ADD_PATH,
+    AI_MODELS_PATH,
+    matchAiModelTestPath,
     matchAssignPath,
     matchEditPath,
     matchItemPath,
@@ -73,12 +78,14 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     const editing = matchEditPath(path);
     const item = matchItemPath(path);
     const assigning = matchAssignPath(path);
+    const aiModelTest = matchAiModelTestPath(path);
     const onStock = path === "/" || !matchKnownPath(path);
     // Screens reached from the stock list: the list stays mounted underneath, hidden, so going back keeps its data,
     // scroll, open aisles, search, Use first and live updates, with no reload (#103, spike #99 option A). The same for
     // Hungry? under item detail opened from a recipe.
     const overStock =
-        !!(naming || editing || item || assigning) || path === ADD_PATH || path === SETTINGS_PATH;
+        !!(naming || editing || item || assigning || aiModelTest) ||
+        [ADD_PATH, SETTINGS_PATH, AI_MODELS_PATH, AI_MODEL_ADD_PATH].includes(path);
     const onRecipes = path === RECIPES_PATH;
     const overRecipes = !!item && cameFrom() === RECIPES_PATH;
     useLayoutEffect(() => {
@@ -116,6 +123,15 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                         <ListScreen key={resets} api={api} />
                         <BottomNav current="list" />
                     </>
+                ) : aiModelTest ? (
+                    <ModelTestScreen key={aiModelTest} api={api} modelId={aiModelTest} />
+                ) : path === AI_MODEL_ADD_PATH ? (
+                    <ModelTestScreen api={api} modelId={null} />
+                ) : path === AI_MODELS_PATH ? (
+                    <>
+                        <AiModelsScreen api={api} />
+                        <BottomNav current="stock" />
+                    </>
                 ) : path === SETTINGS_PATH ? (
                     <>
                         <SettingsScreen api={api} />
@@ -130,7 +146,13 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
 /** Every path with its own screen; anything else shows the stock list. */
 function matchKnownPath(path: string): boolean {
     return (
-        !!(matchNamePath(path) || matchEditPath(path) || matchItemPath(path) || matchAssignPath(path)) ||
-        [ADD_PATH, LIST_PATH, RECIPES_PATH, SETTINGS_PATH].includes(path)
+        !!(
+            matchNamePath(path) ||
+            matchEditPath(path) ||
+            matchItemPath(path) ||
+            matchAssignPath(path) ||
+            matchAiModelTestPath(path)
+        ) ||
+        [ADD_PATH, LIST_PATH, RECIPES_PATH, SETTINGS_PATH, AI_MODELS_PATH, AI_MODEL_ADD_PATH].includes(path)
     );
 }

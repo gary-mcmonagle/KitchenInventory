@@ -205,6 +205,78 @@ export interface FieldErrors {
 }
 
 /** GET /api/scanners (#55). */
+/** What a model is used for (#120): the API's job ids. */
+export type AiJob = "recipes" | "photos" | "genericNames";
+
+export type CheckState = "waiting" | "running" | "pass" | "warn" | "fail";
+
+/** One check of a model test (#121). `reason` is one line, never prompt or reply text. */
+export interface ModelCheck {
+    id: string;
+    state: CheckState;
+    reason: string | null;
+    ms: number | null;
+    promptTokens: number | null;
+    completionTokens: number | null;
+}
+
+/** Estimated pounds for one recipe, one Ready now set, one photo and the whole run; null: unknown (#121). */
+export interface ModelCosts {
+    perRecipe: number | null;
+    perReadyNow: number | null;
+    perPhoto: number | null;
+    perRun: number | null;
+    basis: string | null;
+}
+
+/** A run of the model test suite, as `GET …/test-runs/{runId}` returns it (#121), also saved on the model as `tests`. */
+export interface ModelTestRun {
+    runId: string;
+    modelId: string;
+    deployment: string;
+    startedBy: string;
+    startedByName: string;
+    startedAt: string;
+    finishedAt: string | null;
+    status: "queued" | "running" | "done" | "failed";
+    checks: ModelCheck[];
+    jobs: AiJob[];
+    temperatureMode: string;
+    modelVersion: string | null;
+    costs: ModelCosts | null;
+    totalMs: number | null;
+    error: string | null;
+}
+
+/** A Foundry model the household registered (#120). `tests` is the latest finished run; `testing` the run going now (#123). */
+export interface AiModel {
+    id: string;
+    label: string;
+    deployment: string;
+    jobs: AiJob[];
+    addedBy: string;
+    addedByName: string;
+    addedAt: string;
+    tests: ModelTestRun | null;
+    testing: string | null;
+}
+
+export interface ActiveAiModel {
+    modelId: string;
+    changedBy: string;
+    changedByName: string;
+    changedAt: string;
+    previousModelId: string | null;
+}
+
+/** `GET /api/settings/ai-models` and what changing it returns (#120). `testRuns` comes with the GET only. */
+export interface AiModels {
+    models: AiModel[];
+    active: Record<AiJob, ActiveAiModel | null>;
+    defaults: Record<AiJob, string>;
+    testRuns: { perHour: number; left: number } | null;
+}
+
 export interface Scanners {
     generatedAt: string;
     hub: {
@@ -995,6 +1067,47 @@ export class ApiClient {
 
     listSuggestions(q: string): Promise<{ suggestions: ListSuggestion[] }> {
         return this.get(`/api/shopping-list/suggestions?q=${encodeURIComponent(q)}`);
+    }
+
+    /** The registered Foundry models, each job's active one and the defaults (#120, #123). */
+    aiModels(): Promise<AiModels> {
+        return this.get<AiModels>("/api/settings/ai-models");
+    }
+
+    /** Registers a model by its deployment name (400/409: ApiError with `{ error }`). Doesn't test it. */
+    addAiModel(id: string, label: string, deployment: string): Promise<AiModels> {
+        return this.send<AiModels>("PUT", `/api/settings/ai-models/models/${encodeURIComponent(id)}`, {
+            label,
+            deployment,
+        });
+    }
+
+    /** Removes a model that isn't active (409 if it is). */
+    removeAiModel(id: string): Promise<AiModels> {
+        return this.send<AiModels>("DELETE", `/api/settings/ai-models/models/${encodeURIComponent(id)}`);
+    }
+
+    /** Makes the model the job's active one (409: it didn't pass that job's tests). */
+    setActiveAiModel(job: AiJob, modelId: string): Promise<AiModels> {
+        return this.send<AiModels>("PUT", `/api/settings/ai-models/active/${job}`, { modelId });
+    }
+
+    /** Goes back to the job's previous model, or its default; doing it again undoes it. */
+    revertAiModel(job: AiJob): Promise<AiModels> {
+        return this.send<AiModels>("POST", `/api/settings/ai-models/active/${job}/revert`);
+    }
+
+    /** Starts a test run (#121), or returns the one already going. 429: five an hour (`body.retryAt`). */
+    startModelTest(modelId: string): Promise<ModelTestRun> {
+        return this.send<ModelTestRun>(
+            "POST",
+            `/api/settings/ai-models/models/${encodeURIComponent(modelId)}/test`,
+        );
+    }
+
+    /** The run so far; 404 once it has expired (a day). */
+    modelTestRun(runId: string): Promise<ModelTestRun> {
+        return this.get<ModelTestRun>(`/api/settings/ai-models/test-runs/${encodeURIComponent(runId)}`);
     }
 
     /** Public: no token needed. */

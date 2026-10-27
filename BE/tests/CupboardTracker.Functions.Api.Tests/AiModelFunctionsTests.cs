@@ -81,13 +81,31 @@ public sealed class AiModelFunctionsTests
 
         const string Models =
             "\"models\":[{\"id\":\"luna\",\"label\":\"GPT-6 Luna\",\"deployment\":\"gpt-6-luna\",\"temperatureMode\":\"default\",\"jobs\":[\"recipes\"],"
-            + "\"addedBy\":\"caf87c93-9030-44e8-a25d-fed63261ea67\",\"addedByName\":\"Gary\",\"addedAt\":\"2026-10-27T09:00:00.123Z\",\"tests\":{\"passed\":true}}]";
+            + "\"addedBy\":\"caf87c93-9030-44e8-a25d-fed63261ea67\",\"addedByName\":\"Gary\",\"addedAt\":\"2026-10-27T09:00:00.123Z\",\"tests\":{\"passed\":true},\"testing\":null}]";
         const string Active =
             "\"active\":{\"recipes\":{\"modelId\":\"luna\",\"changedBy\":\"caf87c93-9030-44e8-a25d-fed63261ea67\",\"changedByName\":\"Gary\","
             + "\"changedAt\":\"2026-10-27T09:05:00.123Z\",\"previousModelId\":\"gpt-4o\"},\"photos\":null,\"genericNames\":null}";
         const string DefaultsJson = "\"defaults\":{\"recipes\":\"gpt-4o\",\"photos\":\"gpt-4o\",\"genericNames\":\"gpt-4o\"}";
-        Assert.Equal("{" + Models + "," + Active + "," + DefaultsJson + "}", json);
+        Assert.Equal("{" + Models + "," + Active + "," + DefaultsJson + ",\"testRuns\":null}", json);
     }
 
     private static byte[] Body(string text) => Encoding.UTF8.GetBytes(text);
+
+    [Fact]
+    public void The_list_says_which_models_are_being_tested_and_how_many_runs_are_left()
+    {
+        var model = new AiModel("luna", "Luna", "gpt-6-luna", TemperatureMode.Usual, [], Guid.NewGuid(), "Gary", DateTimeOffset.UnixEpoch);
+        var other = model with { Id = "other", Deployment = "other" };
+        var settings = new AiModelSettings([model, other], new Dictionary<AiJob, ActiveSelection>());
+        var runId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+
+        var json = JsonNode.Parse(JsonSerializer.Serialize(
+            AiModelFunctions.ToJson(settings, Defaults, new Dictionary<string, Guid> { ["luna"] = runId }, 5, 3), WebJson))!;
+
+        Assert.Equal(runId.ToString(), (string?)json["models"]![0]!["testing"]);
+        Assert.Null(json["models"]![1]!["testing"]);
+        Assert.Equal(5, (int?)json["testRuns"]!["perHour"]);
+        Assert.Equal(3, (int?)json["testRuns"]!["left"]);
+        Assert.Null(JsonNode.Parse(JsonSerializer.Serialize(AiModelFunctions.ToJson(settings, Defaults), WebJson))!["testRuns"]);
+    }
 }
