@@ -737,6 +737,7 @@ Settings people change in the app, one document each, partitioned by **`/id`**. 
 - **`active`:** one entry per job, only for jobs that have been given a model. A missing entry (or no document) means the job uses its **default**: the `RECIPE_MODEL_DEPLOYMENT`, `PHOTO_MODEL_DEPLOYMENT` or `GENERIC_NAME_MODEL_DEPLOYMENT` app setting, else `gpt-4o`, with the usual temperature. `previousModelId` (null: the default) is what **revert** goes back to.
 - **Reading:** each Foundry call resolves its job's model per request, from a copy cached for a minute on each app instance (a write clears the copy on the instance that made it), so a change reaches every instance within about a minute. If the document can't be read, the last good copy is used, else the defaults: a settings problem never stops a recipe.
 - At most 20 models; deployment names are unique (ignoring case).
+- **Seeding:** until the test suite (#121) sets `temperatureMode` and `jobs`, `deploy/seed-ai-models.sh` registers the models in `deploy/ai-models.seed.json` and sets them (as the person running it; never touching `active`).
 
 ## Measuring Cosmos (#115)
 

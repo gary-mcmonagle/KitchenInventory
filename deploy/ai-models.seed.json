@@ -1,0 +1,8 @@
+{
+  "_comment": "The Foundry models to register in settings/aiModels with deploy/seed-ai-models.sh (#120), until the test suite (#121) sets temperatureMode and jobs itself. 'deployment' is the deployment name as shown in Foundry. 'jobs' is what each model is allowed to be made active for (recipes, photos, genericNames); 'temperatureMode' is 'default' for a model that only accepts its default temperature (gpt-6-luna), else 'usual'. Nothing here chooses which model is in use.",
+  "models": [
+    { "id": "gpt-4o", "label": "GPT-4o", "deployment": "gpt-4o", "temperatureMode": "usual", "jobs": ["recipes", "photos", "genericNames"] },
+    { "id": "gpt-6-luna", "label": "GPT-6 Luna", "deployment": "gpt-6-luna", "temperatureMode": "default", "jobs": ["recipes"] },
+    { "id": "deepseek-v4-1-flash", "label": "DeepSeek V4.1 Flash", "deployment": "DeepSeek-V4.1-Flash", "temperatureMode": "usual", "jobs": ["recipes"] }
+  ]
+}
