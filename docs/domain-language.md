@@ -276,7 +276,9 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Active model** – the model a job currently uses (#120). Until one is chosen, the job uses its **default**: the app setting's deployment, else gpt-4o. Anyone in the household can change it (who and when is recorded), it takes effect within about a minute, and **revert** goes back to the previous one. A model can only be made active for a job it has passed tests for.
 
-**Temperature mode** – whether a model gets the temperature each caller normally sends (**usual**) or none (**default**), because it only accepts its own default (gpt-6-luna). Not shown in the UI; the test suite sets it.
+**Temperature mode** – whether a model gets the temperature each caller normally sends (**usual**) or none (**default**), because it only accepts its own default (gpt-6-luna). Not shown in the UI; the model test (#121) sets it.
+
+**Model test** – the saved checks run on a registered model (#121), at the press of a button and any time after: can it be reached, does it accept our temperature and strict JSON schemas, does the real recipe, Ready now, Adjust, photo and generic name request work on it, how fast and how costly is it. A **run** is asynchronous and shows each **check** (waiting, running, pass, warn or fail) as it finishes. A job's model must pass that job's checks to be made active; **warnings** (slow, costly, "needs its default temperature") don't block. At most five runs a person an hour.
 
 **Saved recipe** – a recipe or Ready now idea someone liked and kept (#105), in the household's one shared collection: a **snapshot** of what was shown (nothing is regenerated), with a name anyone can change and a shared **note**. Found in the **Saved** box at the top of Hungry?, newest first, filtered by meal, cook time and words in the name. **Remove from saved** has Undo.
 

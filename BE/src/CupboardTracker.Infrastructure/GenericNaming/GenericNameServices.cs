@@ -218,6 +218,7 @@ public sealed partial class FoundryGenericNameWriter(
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
                 using var response = await http.SendAsync(request, timeout.Token);
                 var text = await response.Content.ReadAsStringAsync(timeout.Token);
+                FoundryCalls.Reply(model.Deployment, started, response.StatusCode, response.IsSuccessStatusCode, text);
                 if (response.IsSuccessStatusCode)
                 {
                     var (name, tokens) = Parse(text);
@@ -236,14 +237,17 @@ public sealed partial class FoundryGenericNameWriter(
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 reason = "timeout";
+                FoundryCalls.Failure(model.Deployment, started, AiCall.Timeout);
             }
             catch (HttpRequestException e)
             {
                 reason = $"network error ({e.HttpRequestError})";
+                FoundryCalls.Failure(model.Deployment, started, AiCall.Network);
             }
             catch (JsonException)
             {
                 reason = "unreadable answer";
+                FoundryCalls.Failure(model.Deployment, started, AiCall.Unreadable);
             }
 
             if (attempt < options.Attempts)

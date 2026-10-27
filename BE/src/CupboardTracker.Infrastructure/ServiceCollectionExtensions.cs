@@ -24,6 +24,7 @@ using CupboardTracker.Infrastructure.Email;
 using CupboardTracker.Infrastructure.GenericNaming;
 using CupboardTracker.Infrastructure.Jev;
 using CupboardTracker.Infrastructure.Photos;
+using CupboardTracker.Infrastructure.ModelTesting;
 using CupboardTracker.Infrastructure.Push;
 using CupboardTracker.Infrastructure.Recipes;
 using CupboardTracker.Infrastructure.SignalR;
@@ -50,6 +51,19 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IActiveAiModels, ActiveAiModels>();
         services.AddSingleton(sp => AiModelDefaultsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddTransient<ManageAiModels>();
+
+        // The model test suite (#121): saved checks run when a model is added. A run is a queue message, its progress a
+        // short-lived document, its test image a blob, and its price a lookup in Azure's public list prices.
+        services.AddSingleton<IModelTestRunRepository, CosmosModelTestRunRepository>();
+        services.AddSingleton<IModelTestScheduler, StorageQueueModelTestScheduler>();
+        services.AddSingleton<IModelTestImageStore, BlobModelTestImageStore>();
+        services.AddSingleton<IModelPrices>(sp =>
+            new RetailPriceLookup(new HttpClient(), sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<RetailPriceLookup>>()));
+        services.AddSingleton<IModelTestSuite, FoundryModelTestSuite>();
+        services.AddSingleton(new ModelTestLimits());
+        services.AddSingleton<StartModelTest>(); // holds the per-person hourly limit
+        services.AddTransient<GetModelTestRun>();
+        services.AddTransient<RunModelTest>();
 
         // Measuring Cosmos (#115): every call's RUs as App Insights metrics, totals per invocation, index metrics when on.
         services.AddSingleton(sp => CosmosTelemetrySettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));

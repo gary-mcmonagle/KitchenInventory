@@ -761,6 +761,66 @@ Jobs: `recipes` (suggest, Ready now, Adjust and idea Adjust), `photos` and `gene
 
 Goes back to the job's `previousModelId`, or to its default when that's `null`; the model it left becomes the new previous, so reverting again undoes it. **200** with the settings. **404** no such job, or the job is already on its default. **409** the previous model has been removed.
 
+### Model tests (#121)
+
+Saved checks that show whether a new model works before it's made active. A run is **asynchronous**: it makes up to about 10 Foundry calls of up to 45 s, more than one HTTP response can wait for (Azure cuts HTTP off at about 230 s). All need a signed-in user.
+
+#### `POST /api/settings/ai-models/models/{id}/test`
+
+Queues a run for the registered model. No body.
+
+- **202** the new run, as `GET` below returns it: `status: "queued"`, every check `waiting`. Its `runId` is what the app polls.
+- **200** the model **already has a run going**: that run is returned and nothing new is queued (a second tap, or another person's run). It doesn't use up the limit.
+- **404** no such model.
+- **429** five runs a person an hour: `{ "error": "You've started five test runs this hour. Try again later.", "retryAt": "2026-10-27T10:05:00.000Z" }` (kept in memory on each app instance, like the test notification's limit).
+
+The run is a `{ runId }` message on the `model-test-runs` queue, run by a queue-triggered function that claims it first (a message delivered twice runs once). A run that hasn't finished after 15 minutes is treated as abandoned, so a new one can start.
+
+#### `GET /api/settings/ai-models/test-runs/{runId}`
+
+The run so far (`Cache-Control: no-store`; the app polls it every 2 seconds). **404** for an unknown or expired run (runs are kept a day; the latest results also live on the model).
+
+```json
+{
+  "runId": "…", "modelId": "luna", "deployment": "gpt-6-luna",
+  "startedBy": "<oid>", "startedByName": "Gary", "startedAt": "2026-10-27T09:00:00.000Z", "finishedAt": null,
+  "status": "running",
+  "checks": [
+    { "id": "reachable", "state": "pass", "reason": null, "ms": 820, "promptTokens": 14, "completionTokens": 2 },
+    { "id": "temperature", "state": "warn", "reason": "This model needs its default temperature; we'll leave it out.", "ms": 1311, "promptTokens": 14, "completionTokens": 2 },
+    { "id": "strictSchema", "state": "running", "reason": null, "ms": null, "promptTokens": null, "completionTokens": null },
+    { "id": "recipe", "state": "waiting", … }
+  ],
+  "jobs": [], "temperatureMode": "usual", "modelVersion": null, "costs": null, "totalMs": null, "error": null
+}
+```
+
+- **`status`:** `queued`, `running`, `done` or `failed` (the run itself stopped unexpectedly: `error` says so, without detail).
+- **`checks`:** always all ten, in this order, each `waiting`, `running`, `pass`, `warn` or `fail`. `reason` is one line: Foundry's own `code` and `message` on a refusal, never the prompt or reply. `ms` is the check's time; the tokens are the sum over its calls.
+
+  | id | Checks |
+  |---|---|
+  | `reachable` | a tiny chat call answers (a 404 `DeploymentNotFound` says "No deployment with that name on this Foundry account.") |
+  | `temperature` | our usual temperature is accepted; if Foundry refuses it (`unsupported_value`), the call is retried without one: `warn` and `temperatureMode: "default"` if that works, `fail` if not |
+  | `strictSchema` | the app's `json_schema` with `strict: true` returns JSON that parses against it |
+  | `recipe` | the real recipe request as **Half & half** with Oven & grill and Slow cooker unticked, on a canned 12-item stock, through the real validators (`warn` if the recipe carries warnings) |
+  | `readyNow` | the real Ready now request: 3 to 5 valid ideas |
+  | `adjust` | the real Adjust request on the recipe, "add chilli flakes" (skipped without a recipe) |
+  | `photo` | the photo request with the test image; a refusal about image input fails the photos job only |
+  | `genericNames` | one name through the real generic-name call |
+  | `speed` | `warn` if any call took over 20 s, `fail` if any hit the 45 s limit |
+  | `cost` | always `pass` (the figures are in `costs`), or `warn` when output tokens are over 3× gpt-4o's (hidden reasoning is billed as output) |
+
+  A failure in `reachable`, `temperature` or `strictSchema` **skips** the checks that need it (`fail`, reason "Skipped: …"); other failures don't stop later checks.
+- **`jobs`:** the jobs the checks open up (when `done`): `recipes` needs `reachable`, `temperature`, `strictSchema`, `recipe`, `readyNow`, `adjust` and `speed`; `photos` needs `reachable`, `temperature`, `strictSchema`, `photo` and `speed`; `genericNames` needs `reachable`, `temperature`, `strictSchema`, `genericNames` and `speed`. `pass` and `warn` both count. A model can only be made active for a job in its `jobs`.
+- **`temperatureMode`:** what the run found (`default` if the model refuses our temperature but works without one). It is saved on the model with `jobs`.
+- **`modelVersion`:** the model Foundry reports (e.g. `gpt-4o-2024-11-20`).
+- **`costs`:** estimated pounds for one recipe, one Ready now set and one photo, and the whole run, from the tokens used and Azure's public list price (Retail Prices API, UK South first, matched by model name, cached a day): `{ "perRecipe": 0.0042, "perReadyNow": 0.0031, "perPhoto": 0.0007, "perRun": 0.021, "basis": "<the meters used>" }`. A figure is `null` (the app says "unknown") when no price matched.
+
+When a run finishes, the same document is stored on the model as `tests` (returned by `GET /api/settings/ai-models`), with its `jobs` and `temperatureMode`.
+
+**What a run uses.** A fixed canned stock of twelve made-up items in code (no household data), and a test image drawn in code the first time it's needed and kept in the API app's storage account (blob container `model-tests`, `pack.png`: a plain "TOMATO SOUP 400G" tin, no brand, a few KB); replacing that blob with another picture is fine. A run costs a few pence on a cheap model and about 10p on an expensive one. Nothing is logged or saved but states, one-line reasons, times, token counts and costs.
+
 ### Foundry refusals
 
 There is **no fallback to another model**. If the active model refuses a request, it fails as before ("couldn't come up with a recipe just now"), and the app logs at **Error**: `The recipe model refused the request (HTTP 400) on gpt-6-luna: unsupported_value: <Foundry's message, cut to 300 characters>` (likewise for photos and generic names). Never the prompt or the reply. Fix it by reverting.

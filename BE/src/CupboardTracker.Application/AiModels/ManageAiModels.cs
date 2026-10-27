@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using CupboardTracker.Application.Users;
 using Microsoft.Extensions.Logging;
@@ -89,6 +90,28 @@ public sealed partial class ManageAiModels(
             LogAdded(id, cleanDeployment, user.ObjectId);
             return Changed(settings with { Models = [.. settings.Models, added] });
         }, cancellationToken);
+    }
+
+    /// <summary>Saves a finished test run on the model (#121): the jobs it passed, its temperature mode and the run itself.
+    /// False if the model was removed meanwhile.</summary>
+    public async Task<bool> RecordTestsAsync(
+        string id, IReadOnlyList<AiJob> jobs, TemperatureMode temperatureMode, JsonObject tests, CancellationToken cancellationToken)
+    {
+        var found = true;
+        await UpdateAsync(settings =>
+        {
+            if (settings.Find(id) is null)
+            {
+                found = false;
+                return (new AiModelsResult.NotFound("No such model."), null);
+            }
+
+            return Changed(settings with
+            {
+                Models = [.. settings.Models.Select(m => m.Id == id ? m with { Jobs = jobs, TemperatureMode = temperatureMode, Tests = tests } : m)],
+            });
+        }, cancellationToken);
+        return found;
     }
 
     /// <summary>Removes a model that isn't active for any job.</summary>

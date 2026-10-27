@@ -108,7 +108,7 @@ public sealed partial class FoundryPhotoRecogniser(
                             ["type"] = "image_url",
                             ["image_url"] = new JsonObject
                             {
-                                ["url"] = "data:image/jpeg;base64," + Convert.ToBase64String(jpeg.Span),
+                                ["url"] = $"data:{MediaType(jpeg.Span)};base64," + Convert.ToBase64String(jpeg.Span),
                                 ["detail"] = "high",
                             },
                         }),
@@ -138,6 +138,7 @@ public sealed partial class FoundryPhotoRecogniser(
                 using var response = await http.SendAsync(request, timeout.Token);
                 var text = await response.Content.ReadAsStringAsync(timeout.Token);
                 var ms = (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                FoundryCalls.Reply(model.Deployment, started, response.StatusCode, response.IsSuccessStatusCode, text);
                 if (response.IsSuccessStatusCode)
                 {
                     var parsed = Parse(text);
@@ -156,14 +157,17 @@ public sealed partial class FoundryPhotoRecogniser(
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 reason = "timeout";
+                FoundryCalls.Failure(model.Deployment, started, AiCall.Timeout);
             }
             catch (HttpRequestException e)
             {
                 reason = $"network error ({e.HttpRequestError})";
+                FoundryCalls.Failure(model.Deployment, started, AiCall.Network);
             }
             catch (JsonException)
             {
                 reason = "unreadable answer";
+                FoundryCalls.Failure(model.Deployment, started, AiCall.Unreadable);
             }
 
             if (attempt < options.Attempts)
@@ -175,6 +179,10 @@ public sealed partial class FoundryPhotoRecogniser(
 
         return new PhotoRecognitionResult.Unavailable($"{reason} (after {options.Attempts} attempts)");
     }
+
+    /// <summary>Phones send JPEG; the model test suite's pack image (#121) is a PNG. Anything else is sent as JPEG.</summary>
+    internal static string MediaType(ReadOnlySpan<byte> image) =>
+        image.Length >= 4 && image[0] == 0x89 && image[1] == 0x50 && image[2] == 0x4E && image[3] == 0x47 ? "image/png" : "image/jpeg";
 
     /// <summary>The model's answer, cleaned up: "null"/"unknown"/empty → null, trimmed, capped lengths, quantity 1–20,
     /// not-food items dropped.</summary>

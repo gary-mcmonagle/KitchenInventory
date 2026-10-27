@@ -739,6 +739,15 @@ Settings people change in the app, one document each, partitioned by **`/id`**. 
 - At most 20 models; deployment names are unique (ignoring case).
 - **Seeding:** until the test suite (#121) sets `temperatureMode` and `jobs`, `deploy/seed-ai-models.sh` registers the models in `deploy/ai-models.seed.json` and sets them (as the person running it; never touching `active`).
 
+### Model test runs (#121)
+
+A run of the model test suite is a short-lived document in the **`pushSeen`** container (partition `/eventKey`, per-document `ttl`), so Cosmos deletes it itself:
+
+- **`testrun:<runId>`** (`type: "modelTestRun"`, `ttl` one day): the run as `GET /api/settings/ai-models/test-runs/{runId}` returns it (docs/api.md, Model tests). Created `queued` by the start request, claimed under its ETag by the queue-triggered function (`queued` → `running`), saved after each check, and finished `done` (or `failed`).
+- **`testrun-active:<modelId>`** (`type: "modelTestActive"`, `ttl` 20 minutes): `{ runId }`, created while a run is in progress (a second create conflicts, which is how a second start gets the running one) and deleted when it finishes.
+
+The finished run is also saved on its model in `aiModels` as **`tests`** (the same shape), with the model's `jobs` and `temperatureMode`. Run state never goes in the settings document while a run is in progress. The queue (`model-test-runs`) and the test image (blob container `model-tests`, `pack.png`) are in the API app's storage account, created on first use by its identity (Storage Queue Data Contributor, Storage Blob Data Owner): no infrastructure change.
+
 ## Measuring Cosmos (#115)
 
 Every Cosmos call either app makes is measured, for Faster back end (#96) and the cost guard (#107). Nothing changes what's read or written. KQL for each view is in [`tools/perf/queries.kql`](../tools/perf/queries.kql).
