@@ -22,7 +22,7 @@
     gap: 2px;
 }
 
-/* The title row with the Scanners and Add buttons (#87). */
+/* The title row with the Settings and Add buttons (#87, #122). */
 .headerRow {
     display: flex;
     align-items: flex-start;
@@ -37,7 +37,7 @@
     gap: 2px;
 }
 
-.scannersButton {
+.settingsButton {
     flex: none;
     position: relative;
     width: 44px;

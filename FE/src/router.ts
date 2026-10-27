@@ -74,7 +74,11 @@ export function goBack(fallback: string): void {
     else navigate(fallback);
 }
 
-export const SCANNERS_PATH = "/scanners";
+/** Settings (#122): Scanners, This phone and, later, AI models. It was the Scanners screen at `/scanners` until then. */
+export const SETTINGS_PATH = "/settings";
+
+/** The old address of Settings: bookmarks and links to it are sent to `SETTINGS_PATH`. */
+export const LEGACY_SCANNERS_PATH = "/scanners";
 export const ADD_PATH = "/add";
 export const RECIPES_PATH = "/recipes";
 export const LIST_PATH = "/list";

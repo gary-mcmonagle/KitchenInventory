@@ -27,7 +27,7 @@ const LOOK = {
 } as const;
 
 /**
- * "This phone" on the Scanners screen (#80, project/Scanners.dc.html): turn notifications on or off for this device,
+ * "This phone" on the Settings screen (#80, #122, project/Settings.dc.html): turn notifications on or off for this device,
  * choose stock change, shopping list (#86) and "Still got this?" (#94) pushes, and send a test. Permission is only ever asked from the Turn on tap (iOS requires it).
  */
 export function ThisPhoneCard({ api, env }: { api: Api; env?: PushEnvironment }) {

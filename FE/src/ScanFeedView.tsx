@@ -1,4 +1,4 @@
-import { assignPath, namePath, navigate, SCANNERS_PATH } from "./router";
+import { assignPath, namePath, navigate, SETTINGS_PATH } from "./router";
 import { toastSubtitle, visibleToasts, type FeedState, type FeedToast } from "./scanFeed";
 import styles from "./Feed.module.css";
 
@@ -34,13 +34,13 @@ export function ScanFeedView({
                     +{more} more waiting.{" "}
                     <a
                         className={styles.moreLink}
-                        href={SCANNERS_PATH}
+                        href={SETTINGS_PATH}
                         onClick={(e) => {
                             e.preventDefault();
-                            navigate(SCANNERS_PATH);
+                            navigate(SETTINGS_PATH);
                         }}
                     >
-                        Open Scanners to see them all.
+                        Open Settings to see them all.
                     </a>
                 </div>
             )}

@@ -88,7 +88,7 @@ test("three tabs, Stock · List · Hungry?, with Stock open on the stock list", 
 test.each([
     ["/list", "List"],
     ["/recipes", "Hungry?"],
-    ["/scanners", "Stock"], // reached from the stock list
+    ["/settings", "Stock"], // reached from the stock list
 ])("on %s the %s tab is open", async (path, open) => {
     await at(path);
     const current = tabs().filter(([, c]) => c === "page");
@@ -119,43 +119,56 @@ test("the List tab opens the shopping list", async () => {
     expect(screen.getByText("Shared with everyone at home")).toBeInTheDocument();
 });
 
-test("the stock list header has the Scanners button and + Add, and both navigate", async () => {
+test("the stock list header has the Settings button and + Add, and both navigate", async () => {
     await at("/");
     fireEvent.click(screen.getByRole("link", { name: "Add" }));
     expect(window.location.pathname).toBe("/add");
     window.history.pushState(null, "", "/");
     await act(async () => window.dispatchEvent(new PopStateEvent("popstate")));
-    fireEvent.click(screen.getByRole("link", { name: "Scanners and notifications" }));
-    expect(window.location.pathname).toBe("/scanners");
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
+    expect(window.location.pathname).toBe("/settings");
 });
 
-test("Scanners has a back link to Stock", async () => {
-    await at("/scanners");
+test("Settings has a back link to Stock", async () => {
+    await at("/settings");
     fireEvent.click(await screen.findByRole("link", { name: "Back to stock" }));
     expect(window.location.pathname).toBe("/");
 });
 
+test("the old /scanners address goes to /settings, keeping the back link and the Stock tab", async () => {
+    window.history.pushState({ from: "/" }, "", "/scanners"); // as an old in-app link or the stock list would leave it
+    render(<Shell api={shellApi()} buildSha="def5678" />);
+    await act(async () => undefined);
+
+    expect(window.location.pathname).toBe("/settings");
+    expect(window.history.state).toEqual({ from: "/" });
+    expect(await screen.findByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
+    expect(tabs().filter(([, c]) => c === "page")).toEqual([["Stock", "page"]]);
+    fireEvent.click(screen.getByRole("link", { name: "Back to stock" }));
+    expect(window.location.pathname).toBe("/");
+});
+
 test.each([
-    ["clear", clear, "none", "Scanners and notifications"],
+    ["clear", clear, "none", "Settings"],
     [
         "something to identify",
         { ...clear, noMatchCheckIns: [toIdentify, toIdentify] },
         "attention",
-        "Scanners and notifications: 2 need attention",
+        "Settings: 2 need attention",
     ],
     [
         "the hub offline",
         { ...clear, hub: { ...clear.hub!, online: false } },
         "problem",
-        "Scanners and notifications: 1 needs attention",
+        "Settings: the Raspberry Pi is offline",
     ],
     [
         "a scanner unplugged",
         { ...clear, devices: [{ ...clear.devices[0], present: false }, clear.devices[1]] },
         "problem",
-        "Scanners and notifications: 1 needs attention",
+        "Settings: a scanner is unplugged",
     ],
-] as const)("the Scanners button's dot: %s", async (_, scanners, level, label) => {
+] as const)("the Settings button's dot: %s", async (_, scanners, level, label) => {
     await at("/", shellApi(scanners as Scanners));
     const button = await screen.findByRole("link", { name: label });
     const dot = button.querySelector("[data-level]");
@@ -177,9 +190,27 @@ test("a problem outranks things to sort out, and the count covers both", () => {
             },
         ],
     });
-    expect(status).toEqual({ level: "problem", count: 2 });
-    expect(scannerLabel(status)).toBe("Scanners and notifications: 2 need attention");
-    expect(scannerLabel(null)).toBe("Scanners and notifications");
+    expect(status).toEqual({ level: "problem", count: 2, hubOffline: true, unplugged: 0 });
+    expect(scannerLabel(status)).toBe("Settings: the Raspberry Pi is offline"); // the problem is named, not the count
+    expect(scannerLabel(null)).toBe("Settings");
+});
+
+test("the Settings button's label names the problem: how many scanners, or the Pi", () => {
+    const status = (hubOffline: boolean, unplugged: number, toSort = 0) =>
+        ({
+            level: "problem",
+            count: (hubOffline ? 1 : 0) + unplugged + toSort,
+            hubOffline,
+            unplugged,
+        }) as const;
+
+    expect(scannerLabel(status(false, 1))).toBe("Settings: a scanner is unplugged");
+    expect(scannerLabel(status(false, 2))).toBe("Settings: 2 scanners are unplugged");
+    expect(scannerLabel(status(true, 0))).toBe("Settings: the Raspberry Pi is offline");
+    expect(scannerLabel(status(true, 1))).toBe("Settings: 2 need attention"); // more than one kind of problem
+    expect(scannerLabel({ level: "attention", count: 1, hubOffline: false, unplugged: 0 })).toBe(
+        "Settings: 1 needs attention",
+    );
 });
 
 // Tapping the tab you're on starts that page afresh, as arriving from another tab does (Gary, 2026-10-22).

@@ -195,7 +195,7 @@ test("Check out and the name link on named rows, Name it on unnamed rows, nothin
     // Each row has one link, stretched over the row (#100): a known product's to item detail (#53), an unknown one's
     // to Name it. The header has Scanners and Add (#87).
     expect(screen.getAllByRole("link").map((l) => l.getAttribute("aria-label") ?? l.textContent)).toEqual([
-        "Scanners and notifications",
+        "Settings",
         "Add",
         "Beef Gravy",
         "Unknown item",

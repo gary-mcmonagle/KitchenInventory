@@ -1,8 +1,8 @@
-/* "This phone" (#80), from project/Scanners.dc.html. */
+/* "This phone" (#80, #122), from project/Settings.dc.html. */
 .section {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
 }
 
 .title {
@@ -10,17 +10,14 @@
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    font-size: 13px;
+    font-size: 20px;
+    line-height: 1.2;
     font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--ink-strong);
 }
 
 .titleNote {
+    font-size: 13px;
     font-weight: 500;
-    letter-spacing: 0;
-    text-transform: none;
     color: var(--muted);
 }
 

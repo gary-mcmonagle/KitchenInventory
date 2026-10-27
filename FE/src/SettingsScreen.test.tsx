@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ApiClient, Scanners } from "./api";
-import { ScannersScreen } from "./ScannersScreen";
+import { SettingsScreen } from "./SettingsScreen";
 import { ScanFeedView } from "./ScanFeedView";
 import { applyEvent, type FeedState } from "./scanFeed";
 import type { FeedConnection } from "./useScanFeed";
@@ -99,7 +99,7 @@ function setup(data: Scanners[] = [base()]) {
         dismissUnmatched: vi.fn(async (scanId: string) => ({ scanId, dismissed: true })),
         undoCheckOut: vi.fn(async (unitId: string) => ({ unitId, productId: "p", count: 1, restored: true })),
     };
-    render(<ScannersScreen api={api as unknown as ApiClient} feedConnection={noFeed} />);
+    render(<SettingsScreen api={api as unknown as ApiClient} feedConnection={noFeed} />);
     return api;
 }
 
@@ -113,8 +113,10 @@ const region = (name: RegExp) => screen.getByRole("region", { name });
 
 test("scanner cards, the Pi and the header, as in the mockup", async () => {
     setup();
-    expect(await screen.findByRole("heading", { level: 1, name: "Scanners" })).toBeInTheDocument();
-    expect(screen.getByText("Last checked 2 minutes ago")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /^Scanners/ })).toHaveTextContent(
+        "Last checked 2 minutes ago",
+    );
 
     const checkIn = screen.getByText("Check-in scanner").closest<HTMLElement>("[class*=_card_]")!;
     expect(checkIn).toHaveTextContent("Last scan 18:42 yesterday");
@@ -202,6 +204,39 @@ test("recently checked out: scanner or app, and Undo puts it back with a toast",
     );
 });
 
+test("the page has Scanners then This phone as sections, with the lists as sub-headings of Scanners", async () => {
+    setup();
+    await screen.findByText("Check-in scanner");
+
+    const sections = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(sections).toEqual(["ScannersLast checked 2 minutes ago", "This phoneNotifications"]);
+    const lists = screen
+        .getAllByRole("heading", { level: 3 })
+        .map((h) => h.textContent?.replace(/\d.*$/, "").trim());
+    expect(lists).toEqual(["Check-ins with no match", "Check-outs with no match", "Recently checked out"]);
+    // The lists are inside the Scanners section, and This phone comes after them.
+    const scanners = screen.getByRole("region", { name: /^Scanners/ });
+    expect(
+        within(scanners).getByRole("heading", { level: 3, name: /Check-ins with no match/ }),
+    ).toBeInTheDocument();
+    expect(within(scanners).queryByText("This phone")).not.toBeInTheDocument();
+    const order = [...document.querySelectorAll("h2, h3")].map((h) => h.textContent ?? "");
+    expect(order.findIndex((t) => t.startsWith("Recently"))).toBeLessThan(
+        order.findIndex((t) => t.startsWith("This phone")),
+    );
+});
+
+test("This phone doesn't wait for the scanner data", () => {
+    const api = {
+        scanners: vi.fn(() => new Promise<Scanners>(() => undefined)), // never answers
+        scanFeed: vi.fn(async () => ({ generatedAt: "", events: [] })),
+    };
+    render(<SettingsScreen api={api as unknown as ApiClient} feedConnection={noFeed} />);
+
+    expect(screen.getByRole("heading", { level: 2, name: /^Scanners/ })).toHaveTextContent("Checking…");
+    expect(screen.getByRole("heading", { level: 2, name: /^This phone/ })).toBeInTheDocument();
+});
+
 test("empty sections show one muted line", async () => {
     setup([base({ noMatchCheckIns: [], unmatchedCheckOuts: [], recentlyCheckedOut: [] })]);
     expect(await screen.findByText("Nothing to identify.")).toBeInTheDocument();
@@ -212,13 +247,13 @@ test("empty sections show one muted line", async () => {
 
 test("returning to the app reloads", async () => {
     const api = setup();
-    await screen.findByText("Scanners");
+    await screen.findByText("Last checked 2 minutes ago");
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     await act(async () => document.dispatchEvent(new Event("visibilitychange")));
     expect(api.scanners).toHaveBeenCalledTimes(2);
 });
 
-test("the feed's +n more waiting line links to Scanners", () => {
+test("the feed's +n more waiting line links to Settings", () => {
     let feed: FeedState = new Map();
     for (let i = 0; i < 4; i++)
         feed = applyEvent(
@@ -241,8 +276,8 @@ test("the feed's +n more waiting line links to Scanners", () => {
     render(<ScanFeedView feed={feed} now={NOW.getTime()} onDismiss={() => {}} />);
 
     expect(screen.getByText(/\+1 more waiting\./)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("link", { name: "Open Scanners to see them all." }));
-    expect(window.location.pathname).toBe("/scanners");
+    fireEvent.click(screen.getByRole("link", { name: "Open Settings to see them all." }));
+    expect(window.location.pathname).toBe("/settings");
 });
 
 test("store labels (#58): Pick opens 'What is this?', and a store-label check-out says to check it out from the app", async () => {

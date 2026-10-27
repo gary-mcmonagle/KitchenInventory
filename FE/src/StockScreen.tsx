@@ -26,7 +26,7 @@ import { takeFlash } from "./flash";
 import { rememberItemPreview } from "./itemPreview";
 import { ProductTile } from "./ProductTile";
 import { createSeenReporter } from "./push";
-import { ADD_PATH, itemPath, LIST_PATH, namePath, navigate, onTabReset, SCANNERS_PATH } from "./router";
+import { ADD_PATH, itemPath, LIST_PATH, namePath, navigate, onTabReset, SETTINGS_PATH } from "./router";
 import { scannerLabel, scannerStatus, type ScannerStatus } from "./scannerStatus";
 import { matchesSearch, searchWords } from "./stockSearch";
 import styles from "./Stock.module.css";
@@ -520,14 +520,14 @@ export function StockScreen({
                             </div>
                         )}
                     </div>
-                    {/* Scanners and Add live here since the three-tab nav (#87). */}
+                    {/* Settings (it was Scanners until #122) and Add live here since the three-tab nav (#87). */}
                     <a
-                        href={SCANNERS_PATH}
-                        className={styles.scannersButton}
+                        href={SETTINGS_PATH}
+                        className={styles.settingsButton}
                         aria-label={scannerLabel(status)}
                         onClick={(e) => {
                             e.preventDefault();
-                            navigate(SCANNERS_PATH);
+                            navigate(SETTINGS_PATH);
                         }}
                     >
                         <svg
@@ -541,7 +541,8 @@ export function StockScreen({
                             strokeLinejoin="round"
                             aria-hidden="true"
                         >
-                            <path d="M4 7v10M7 7v10M10 7v10M14 7v10M17 7v10M20 7v10" />
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
                         </svg>
                         {status && status.level !== "none" && (
                             <span

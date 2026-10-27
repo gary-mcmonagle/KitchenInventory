@@ -18,11 +18,12 @@ import {
     cameFrom,
     RECIPES_PATH,
     savedScroll,
-    SCANNERS_PATH,
+    LEGACY_SCANNERS_PATH,
+    SETTINGS_PATH,
     usePath,
     useTabResets,
 } from "./router";
-import { ScannersScreen } from "./ScannersScreen";
+import { SettingsScreen } from "./SettingsScreen";
 import { StockScreen } from "./StockScreen";
 import { ShoppingListProvider } from "./useShoppingList";
 
@@ -32,6 +33,17 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     const path = usePath();
     const resets = useTabResets(); // tapping the tab you're on remounts its screen (Gary, 2026-10-22)
     const [footer, setFooter] = useState(`UI ${buildSha}`);
+
+    // /scanners became /settings (#122): send old links and bookmarks there, keeping where we came from (for the back link).
+    useLayoutEffect(() => {
+        if (window.location.pathname !== LEGACY_SCANNERS_PATH) return;
+        window.history.replaceState(
+            window.history.state,
+            "",
+            SETTINGS_PATH + window.location.search + window.location.hash,
+        );
+        window.dispatchEvent(new PopStateEvent("popstate"));
+    }, [path]);
 
     useEffect(() => {
         let live = true;
@@ -66,7 +78,7 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     // scroll, open aisles, search, Use first and live updates, with no reload (#103, spike #99 option A). The same for
     // Hungry? under item detail opened from a recipe.
     const overStock =
-        !!(naming || editing || item || assigning) || path === ADD_PATH || path === SCANNERS_PATH;
+        !!(naming || editing || item || assigning) || path === ADD_PATH || path === SETTINGS_PATH;
     const onRecipes = path === RECIPES_PATH;
     const overRecipes = !!item && cameFrom() === RECIPES_PATH;
     useLayoutEffect(() => {
@@ -104,9 +116,9 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                         <ListScreen key={resets} api={api} />
                         <BottomNav current="list" />
                     </>
-                ) : path === SCANNERS_PATH ? (
+                ) : path === SETTINGS_PATH ? (
                     <>
-                        <ScannersScreen api={api} />
+                        <SettingsScreen api={api} />
                         <BottomNav current="stock" />
                     </>
                 ) : null}
@@ -119,6 +131,6 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
 function matchKnownPath(path: string): boolean {
     return (
         !!(matchNamePath(path) || matchEditPath(path) || matchItemPath(path) || matchAssignPath(path)) ||
-        [ADD_PATH, LIST_PATH, RECIPES_PATH, SCANNERS_PATH].includes(path)
+        [ADD_PATH, LIST_PATH, RECIPES_PATH, SETTINGS_PATH].includes(path)
     );
 }

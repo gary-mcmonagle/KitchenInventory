@@ -368,7 +368,7 @@ Name an unknown item (#51): `{ "name": "Smoked paprika", "brand": "Schwartz", "s
 
 ### `GET /api/scanners`
 
-The scanners screen (#55): is everything working, and what needs sorting.
+The Scanners section of Settings (#55, #122): is everything working, and what needs sorting.
 
 ```json
 {
