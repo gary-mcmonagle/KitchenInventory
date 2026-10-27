@@ -239,7 +239,10 @@ public sealed class AiModelTests : IDisposable
 
         Assert.Empty(settings.Active);
         Assert.Equal(new ResolvedModel("gpt-4o", TemperatureMode.Usual), await active.ForAsync(AiJob.Recipes, "gpt-4o", CancellationToken.None));
-        Assert.IsType<AiModelsResult.NotFound>(await manage.RevertAsync(AiJob.Recipes, Gary, CancellationToken.None)); // nothing left to revert
+        var nothing = await manage.RevertAsync(AiJob.Recipes, Gary, CancellationToken.None); // nothing left to revert
+        Assert.Equal("Recipes is already on its default model.", Assert.IsType<AiModelsResult.NotFound>(nothing).Error);
+        Assert.Equal("Generic names is already on its default model.",
+            Assert.IsType<AiModelsResult.NotFound>(await manage.RevertAsync(AiJob.GenericNames, Gary, CancellationToken.None)).Error);
     }
 
     // ---- Removing

@@ -141,7 +141,7 @@ public sealed partial class ManageAiModels(
         {
             if (!settings.Active.TryGetValue(job, out var current))
             {
-                return (new AiModelsResult.NotFound($"{AiJobs.Words(job)} is already on its default model."), null);
+                return (new AiModelsResult.NotFound($"{char.ToUpperInvariant(AiJobs.Words(job)[0])}{AiJobs.Words(job)[1..]} is already on its default model."), null);
             }
 
             if (current.PreviousModelId is null)
