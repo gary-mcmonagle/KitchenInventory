@@ -2,6 +2,7 @@ using CupboardTracker.Application.ShoppingList;
 using CupboardTracker.Infrastructure.ShoppingList;
 using Azure.Communication.Email;
 using Azure.Identity;
+using CupboardTracker.Application.AiModels;
 using CupboardTracker.Application.Adding;
 using CupboardTracker.Application.Digest;
 using CupboardTracker.Application.Hubs;
@@ -42,6 +43,13 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IDeploymentInfo, ConfigurationDeploymentInfo>();
         services.AddTransient<GetPingStatus>();
+
+        // Which Foundry model each job uses, chosen in the app (#120): the settings document, read at most once a minute
+        // per instance, with the app settings as each job's default until a model is made active.
+        services.AddSingleton<IAiModelSettingsRepository, CosmosAiModelSettingsRepository>();
+        services.AddSingleton<IActiveAiModels, ActiveAiModels>();
+        services.AddSingleton(sp => AiModelDefaultsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddTransient<ManageAiModels>();
 
         // Measuring Cosmos (#115): every call's RUs as App Insights metrics, totals per invocation, index metrics when on.
         services.AddSingleton(sp => CosmosTelemetrySettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
@@ -328,6 +336,12 @@ public static class ServiceCollectionExtensions
 
         return new StockSettings(TimeZoneInfo.FindSystemTimeZoneById("Europe/London"), days);
     }
+
+    /// <summary>Each job's default deployment (#120): the same settings the callers always read, else gpt-4o.</summary>
+    internal static AiModelDefaults AiModelDefaultsFromConfiguration(IConfiguration config) => new(
+        RecipeGenerationOptions.FromConfiguration(config).Deployment,
+        PhotoRecognitionOptions.FromConfiguration(config).Deployment,
+        GenericNameWriterOptions.FromConfiguration(config).Deployment);
 
     /// <summary>COSMOS_INDEX_METRICS (#115): "true" asks Cosmos for index metrics on queries; anything else is off.</summary>
     internal static CosmosTelemetrySettings CosmosTelemetrySettingsFromConfiguration(IConfiguration config) =>

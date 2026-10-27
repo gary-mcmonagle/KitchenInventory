@@ -266,6 +266,16 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Plate tag** – **Meat plates** or **Veggie plates** on a half & half recipe's ingredient, extra item or method step (tinted steps); untagged means everyone. In code, `PlateFor` (`all`, `meat`, `veg`).
 
+**Model** – a Foundry AI model the household has registered with the app (#120), by a label and its **deployment name**. Registering one doesn't deploy it: it must already be deployed in Foundry.
+
+**Deployment name** – the name a model was deployed under in Foundry (the **Name** column under Deployments), which is what the app calls (`/openai/deployments/<name>/…`). It's often the model's own name, but it's whatever was typed when deploying.
+
+**Job** – what a model is used for: **recipes** (recipes, Ready now, Adjust and idea Adjust), **photos** (photo recognition, which needs image input) or **generic names**. Each job has its own **active model**.
+
+**Active model** – the model a job currently uses (#120). Until one is chosen, the job uses its **default**: the app setting's deployment, else gpt-4o. Anyone in the household can change it (who and when is recorded), it takes effect within about a minute, and **revert** goes back to the previous one. A model can only be made active for a job it has passed tests for.
+
+**Temperature mode** – whether a model gets the temperature each caller normally sends (**usual**) or none (**default**), because it only accepts its own default (gpt-6-luna). Not shown in the UI; the test suite sets it.
+
 **Saved recipe** – a recipe or Ready now idea someone liked and kept (#105), in the household's one shared collection: a **snapshot** of what was shown (nothing is regenerated), with a name anyone can change and a shared **note**. Found in the **Saved** box at the top of Hungry?, newest first, filtered by meal, cook time and words in the name. **Remove from saved** has Undo.
 
 **Stock status (of a saved recipe)** – whether each ingredient is in today's stock: **have** (the same product, or any product with the same generic name, or a matching name), **use first** (had, and due soon), or **missing**. Basic staples always count as had. The recipe shows "You've got everything" (with "Uses up …") or "Missing: …", and **Add missing to the list** puts the missing ones on the shopping list by generic name.

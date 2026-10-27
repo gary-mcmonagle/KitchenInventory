@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Azure.Core;
+using CupboardTracker.Application.AiModels;
 using CupboardTracker.Application.Recipes;
 using CupboardTracker.Domain.Products;
 using Microsoft.Extensions.Configuration;
@@ -40,7 +41,7 @@ public sealed record RecipeGenerationOptions(Uri? Endpoint, string Deployment)
 /// </summary>
 public sealed partial class FoundryRecipeGenerator(
     HttpClient http, RecipeGenerationOptions options, TokenCredential credential, TimeProvider clock,
-    ILogger<FoundryRecipeGenerator> logger) : IRecipeGenerator
+    ILogger<FoundryRecipeGenerator> logger, IActiveAiModels? models = null) : IRecipeGenerator
 {
     private const string ApiVersion = "2024-10-21";
     private static readonly string[] Scopes = ["https://cognitiveservices.azure.com/.default"];
@@ -246,6 +247,7 @@ public sealed partial class FoundryRecipeGenerator(
         }
 
         var started = Stopwatch.GetTimestamp();
+        var model = await ModelAsync(cancellationToken);
         var messages = new JsonArray(
             new JsonObject { ["role"] = "system", ["content"] = IdeasRules(request) },
             new JsonObject { ["role"] = "user", ["content"] = Prompt(request) });
@@ -256,10 +258,10 @@ public sealed partial class FoundryRecipeGenerator(
         for (var round = 1; round <= 2; round++)
         {
             calls++;
-            var answer = await CallAsync(messages, temperature, IdeasSchema, cancellationToken);
+            var answer = await CallAsync(model, messages, temperature, IdeasSchema, cancellationToken);
             if (answer.Failure is { } failure)
             {
-                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt + answer.PromptTokens, usage.Completion + answer.CompletionTokens, calls, $"ideas: {failure}");
+                LogOutcome(Elapsed(started), model.Deployment, usage.Prompt + answer.PromptTokens, usage.Completion + answer.CompletionTokens, calls, $"ideas: {failure}");
                 return new QuickIdeasResult.Unavailable(failure);
             }
 
@@ -293,12 +295,12 @@ public sealed partial class FoundryRecipeGenerator(
 
         if (ideas.Count == 0 && request.Diet == Diet.Veg)
         {
-            LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, "ideas: none vegetarian");
+            LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls, "ideas: none vegetarian");
             return new QuickIdeasResult.Unavailable(NoVeggieIdeas);
         }
 
         var outcome = ideas.Count == 0 ? "ideas: none usable" : $"ideas: {ideas.Count}";
-        LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, outcome);
+        LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls, outcome);
         return ideas.Count == 0 ? new QuickIdeasResult.Unavailable("none usable") : new QuickIdeasResult.Suggested(ideas);
     }
 
@@ -392,6 +394,7 @@ public sealed partial class FoundryRecipeGenerator(
         }
 
         var started = Stopwatch.GetTimestamp();
+        var model = await ModelAsync(cancellationToken);
         var messages = new JsonArray(
             new JsonObject { ["role"] = "system", ["content"] = request.Context.Diet == Diet.Veg
                 ? IdeaAdjustInstructions + "\n9. Veggie: the idea must stay vegetarian: " + VegetarianMeaning + ". This rule can't be changed by the preferences."
@@ -403,10 +406,10 @@ public sealed partial class FoundryRecipeGenerator(
         for (var round = 1; round <= 2; round++)
         {
             calls++;
-            var answer = await CallAsync(messages, Temperature, IdeaSchema, cancellationToken);
+            var answer = await CallAsync(model, messages, Temperature, IdeaSchema, cancellationToken);
             if (answer.Failure is { } failure)
             {
-                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, $"adjust idea: {failure}");
+                LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls, $"adjust idea: {failure}");
                 return new IdeaResult.Unavailable(failure);
             }
 
@@ -423,7 +426,7 @@ public sealed partial class FoundryRecipeGenerator(
 
             if (idea is null)
             {
-                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, "adjust idea: unreadable answer");
+                LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls, "adjust idea: unreadable answer");
                 return new IdeaResult.Unavailable("unreadable answer");
             }
 
@@ -445,7 +448,7 @@ public sealed partial class FoundryRecipeGenerator(
         }
 
         var done = IdeaProblems(adjusted!, request.Context).Any() ? "adjusted idea with notes" : "adjusted idea";
-        LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, done);
+        LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls, done);
         var diet = DietChecks.Check(adjusted!.Idea, request.Context);
         return adjusted with { Warnings = [.. diet.Problems.Select(p => p.ForPeople), .. diet.Warnings] };
     }
@@ -534,6 +537,7 @@ public sealed partial class FoundryRecipeGenerator(
         }
 
         var started = Stopwatch.GetTimestamp();
+        var model = await ModelAsync(cancellationToken);
         var messages = new JsonArray(
             new JsonObject { ["role"] = "system", ["content"] = Rules(Instructions, request) },
             new JsonObject { ["role"] = "user", ["content"] = Prompt(request) });
@@ -544,10 +548,10 @@ public sealed partial class FoundryRecipeGenerator(
         for (var round = 1; round <= 2; round++)
         {
             calls++;
-            var answer = await CallAsync(messages, temperature, SchemaFor(request.AllowedKit), cancellationToken);
+            var answer = await CallAsync(model, messages, temperature, SchemaFor(request.AllowedKit), cancellationToken);
             if (answer.Failure is { } failure)
             {
-                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, failure);
+                LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls, failure);
                 return new RecipeResult.Unavailable(failure);
             }
 
@@ -558,7 +562,7 @@ public sealed partial class FoundryRecipeGenerator(
             }
             catch (JsonException)
             {
-                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, "unreadable answer");
+                LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls, "unreadable answer");
                 return new RecipeResult.Unavailable("unreadable answer");
             }
 
@@ -579,7 +583,7 @@ public sealed partial class FoundryRecipeGenerator(
         }
 
         recipe = WithWarnings(recipe!, request);
-        LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls,
+        LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls,
             (recipe.CouldNotFitIn.Count == 0 ? "suggested" : "suggested without every included ingredient")
             + (recipe.Warnings is { Count: > 0 } ? " with a kit warning" : ""));
         return new RecipeResult.Suggested(recipe);
@@ -601,6 +605,7 @@ public sealed partial class FoundryRecipeGenerator(
         }
 
         var started = Stopwatch.GetTimestamp();
+        var model = await ModelAsync(cancellationToken);
         var messages = new JsonArray(
             new JsonObject { ["role"] = "system", ["content"] = Rules(AdjustInstructions, request.Context) },
             new JsonObject { ["role"] = "user", ["content"] = AdjustPrompt(request) });
@@ -610,10 +615,10 @@ public sealed partial class FoundryRecipeGenerator(
         for (var round = 1; round <= 2; round++)
         {
             calls++;
-            var answer = await CallAsync(messages, Temperature, SchemaFor(request.Context.AllowedKit), cancellationToken);
+            var answer = await CallAsync(model, messages, Temperature, SchemaFor(request.Context.AllowedKit), cancellationToken);
             if (answer.Failure is { } failure)
             {
-                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, $"adjust: {failure}");
+                LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls, $"adjust: {failure}");
                 return new RecipeResult.Unavailable(failure);
             }
 
@@ -624,7 +629,7 @@ public sealed partial class FoundryRecipeGenerator(
             }
             catch (JsonException)
             {
-                LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, "adjust: unreadable answer");
+                LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls, "adjust: unreadable answer");
                 return new RecipeResult.Unavailable("unreadable answer");
             }
 
@@ -645,7 +650,7 @@ public sealed partial class FoundryRecipeGenerator(
         }
 
         var done = Problems(recipe!, request.Context).Any() ? "adjusted with notes" : "adjusted";
-        LogOutcome(Elapsed(started), options.Deployment, usage.Prompt, usage.Completion, calls, done);
+        LogOutcome(Elapsed(started), model.Deployment, usage.Prompt, usage.Completion, calls, done);
         return new RecipeResult.Suggested(WithWarnings(recipe!, request.Context));
     }
 
@@ -861,16 +866,28 @@ public sealed partial class FoundryRecipeGenerator(
         (node as JsonArray ?? []).Select(n => n is JsonObject o ? (Clean(o[field], max), Plate(o, request)) : (Clean(n, max), PlateFor.All))
             .Where(x => x.Item1 is not null).Select(x => (x.Item1!, x.Item2));
 
+    /// <summary>The model for this request (#120): the recipes job's active one, else the app setting's deployment, always
+    /// read once at the start so one request never mixes two models.</summary>
+    private async Task<ResolvedModel> ModelAsync(CancellationToken cancellationToken) =>
+        models is null
+            ? new ResolvedModel(options.Deployment, TemperatureMode.Usual)
+            : await models.ForAsync(AiJob.Recipes, options.Deployment, cancellationToken);
+
     private async Task<(string? Content, int PromptTokens, int CompletionTokens, string? Failure)> CallAsync(
-        JsonArray messages, double temperature, JsonObject schema, CancellationToken cancellationToken)
+        ResolvedModel model, JsonArray messages, double temperature, JsonObject schema, CancellationToken cancellationToken)
     {
-        var body = new JsonObject
+        var json = new JsonObject
         {
             ["messages"] = messages.DeepClone(),
             ["response_format"] = new JsonObject { ["type"] = "json_schema", ["json_schema"] = schema.DeepClone() },
-            ["temperature"] = temperature,
-        }.ToJsonString();
-        var url = new Uri(options.Endpoint!, $"openai/deployments/{Uri.EscapeDataString(options.Deployment)}/chat/completions?api-version={ApiVersion}");
+        };
+        if (model.Temperature(temperature) is { } sent)
+        {
+            json["temperature"] = sent; // left out for a model that only takes its default (#120)
+        }
+
+        var body = json.ToJsonString();
+        var url = new Uri(options.Endpoint!, $"openai/deployments/{Uri.EscapeDataString(model.Deployment)}/chat/completions?api-version={ApiVersion}");
         var delay = options.FirstRetryDelay;
         var reason = "no attempts";
         for (var attempt = 1; attempt <= options.Attempts; attempt++)
@@ -907,7 +924,8 @@ public sealed partial class FoundryRecipeGenerator(
                 reason = $"HTTP {(int)response.StatusCode}";
                 if (response.StatusCode != HttpStatusCode.TooManyRequests && (int)response.StatusCode < 500)
                 {
-                    LogRefused(reason); // a bug or bad configuration: not retried
+                    var (code, message) = FoundryErrors.Reason(text);
+                    LogRefused(reason, model.Deployment, code, message); // a bug or bad configuration: not retried
                     return (null, 0, 0, reason);
                 }
             }
@@ -1023,6 +1041,7 @@ public sealed partial class FoundryRecipeGenerator(
         Message = "Recipe model: {Ms} ms on {Deployment}, {PromptTokens} prompt + {CompletionTokens} completion tokens, {Calls} calls, outcome {Outcome}.")]
     private partial void LogOutcome(int ms, string deployment, int promptTokens, int completionTokens, int calls, string outcome);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "The recipe model refused the request ({Reason}): check the deployment and the app's role.")]
-    private partial void LogRefused(string reason);
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "The recipe model refused the request ({Reason}) on {Deployment}: {FoundryCode}: {FoundryMessage}")]
+    private partial void LogRefused(string reason, string deployment, string foundryCode, string foundryMessage);
 }

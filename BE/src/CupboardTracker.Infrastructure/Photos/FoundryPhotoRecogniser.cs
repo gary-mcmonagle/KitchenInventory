@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Azure.Core;
 using CupboardTracker.Application.Adding;
+using CupboardTracker.Application.AiModels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -34,7 +35,7 @@ public sealed record PhotoRecognitionOptions(Uri? Endpoint, string Deployment)
 /// </summary>
 public sealed partial class FoundryPhotoRecogniser(
     HttpClient http, PhotoRecognitionOptions options, TokenCredential credential, TimeProvider clock,
-    ILogger<FoundryPhotoRecogniser> logger) : IProductPhotoRecogniser
+    ILogger<FoundryPhotoRecogniser> logger, IActiveAiModels? models = null) : IProductPhotoRecogniser
 {
     private const string ApiVersion = "2024-10-21";
     private static readonly string[] Scopes = ["https://cognitiveservices.azure.com/.default"];
@@ -89,7 +90,11 @@ public sealed partial class FoundryPhotoRecogniser(
             return new PhotoRecognitionResult.Unavailable("not configured");
         }
 
-        var body = new JsonObject
+        // The photos job's active model (#120), else the app setting's deployment.
+        var model = models is null
+            ? new ResolvedModel(options.Deployment, TemperatureMode.Usual)
+            : await models.ForAsync(AiJob.Photos, options.Deployment, cancellationToken);
+        var json = new JsonObject
         {
             ["messages"] = new JsonArray(
                 new JsonObject { ["role"] = "system", ["content"] = Instructions },
@@ -109,10 +114,15 @@ public sealed partial class FoundryPhotoRecogniser(
                         }),
                 }),
             ["response_format"] = new JsonObject { ["type"] = "json_schema", ["json_schema"] = Schema.DeepClone() },
-            ["temperature"] = 0,
-        }.ToJsonString();
+        };
+        if (model.Temperature(0) is { } temperature)
+        {
+            json["temperature"] = temperature; // left out for a model that only takes its default (#120)
+        }
 
-        var url = new Uri(options.Endpoint, $"openai/deployments/{Uri.EscapeDataString(options.Deployment)}/chat/completions?api-version={ApiVersion}");
+        var body = json.ToJsonString();
+
+        var url = new Uri(options.Endpoint, $"openai/deployments/{Uri.EscapeDataString(model.Deployment)}/chat/completions?api-version={ApiVersion}");
         var delay = options.FirstRetryDelay;
         var reason = "no attempts";
         for (var attempt = 1; attempt <= options.Attempts; attempt++)
@@ -131,14 +141,15 @@ public sealed partial class FoundryPhotoRecogniser(
                 if (response.IsSuccessStatusCode)
                 {
                     var parsed = Parse(text);
-                    LogRecognised(ms, parsed.Tokens, parsed.Recognition.Items.Count);
+                    LogRecognised(ms, model.Deployment, parsed.Tokens, parsed.Recognition.Items.Count);
                     return new PhotoRecognitionResult.Recognised(parsed.Recognition);
                 }
 
                 reason = $"HTTP {(int)response.StatusCode}";
                 if (response.StatusCode != HttpStatusCode.TooManyRequests && (int)response.StatusCode < 500)
                 {
-                    LogRefused(reason); // a bug or bad configuration: not retried
+                    var (code, message) = FoundryErrors.Reason(text);
+                    LogRefused(reason, model.Deployment, code, message); // a bug or bad configuration: not retried
                     return new PhotoRecognitionResult.Unavailable(reason);
                 }
             }
@@ -209,9 +220,10 @@ public sealed partial class FoundryPhotoRecogniser(
         return text.Length > max ? text[..max].TrimEnd() : text;
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Photo recognised in {Ms} ms ({Tokens} tokens): {Items} items.")]
-    private partial void LogRecognised(int ms, int tokens, int items);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Photo recognised by {Deployment} in {Ms} ms ({Tokens} tokens): {Items} items.")]
+    private partial void LogRecognised(int ms, string deployment, int tokens, int items);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "The photo model refused the request ({Reason}): check the deployment and the app's role.")]
-    private partial void LogRefused(string reason);
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "The photo model refused the request ({Reason}) on {Deployment}: {FoundryCode}: {FoundryMessage}")]
+    private partial void LogRefused(string reason, string deployment, string foundryCode, string foundryMessage);
 }

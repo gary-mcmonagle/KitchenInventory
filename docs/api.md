@@ -718,6 +718,53 @@ A sibling of `/api/recipes/adjust` for one Ready now idea, which comes back as a
 - **Suggested additions** for an idea use `POST /api/recipes/suggest-additions` unchanged: the app sends the idea as a recipe (its uses as ingredients, its how as the one step).
 - Nothing is stored. Logs record counts, the appliance and whether a tweak was given, never the idea or the tweak.
 
+## AI model settings (#120)
+
+Which Foundry model each job uses, chosen in the app. All need a signed-in user (**401** without a token); any household member may change them, and who and when is recorded. **Register-only:** a model must already be deployed in Foundry, and nothing here creates or lists deployments. The data model is in `docs/data-model.md` (Container: `settings`).
+
+Jobs: `recipes` (suggest, Ready now, Adjust and idea Adjust), `photos` and `genericNames`.
+
+### `GET /api/settings/ai-models`
+
+```json
+{
+  "models": [{
+    "id": "luna", "label": "GPT-6 Luna", "deployment": "gpt-6-luna", "temperatureMode": "default",
+    "jobs": ["recipes"], "addedBy": "<oid>", "addedByName": "Gary", "addedAt": "2026-10-27T09:00:00.000Z", "tests": null
+  }],
+  "active": {
+    "recipes": { "modelId": "luna", "changedBy": "<oid>", "changedByName": "Gary", "changedAt": "…", "previousModelId": "gpt-4o" },
+    "photos": null, "genericNames": null
+  },
+  "defaults": { "recipes": "gpt-4o", "photos": "gpt-4o", "genericNames": "gpt-4o" }
+}
+```
+
+`active.<job>` is `null` while the job is on its default; `defaults` are the deployment names it then uses (the app settings, else `gpt-4o`). `Cache-Control: no-store`. A change takes effect within about a minute on every app instance (the UI says so).
+
+### `PUT /api/settings/ai-models/models/{id}`
+
+`{ "label": "GPT-6 Luna", "deployment": "gpt-6-luna" }`: registers a model, or renames one. `id` is 1 to 40 letters, digits, `-` or `_` (the app makes one). A new model has no `jobs` and `temperatureMode: "usual"` until the tests (#121) run. **200** with the settings as in `GET`.
+
+- **400** a label that isn't 1 to 60 characters; a deployment name that isn't 1 to 64 characters of letters, digits, `.`, `_` and `-`; or a different deployment name for an existing id (a deployment can't be changed: add a new model).
+- **409** the deployment is already registered (ignoring case), or 20 models are registered.
+
+### `DELETE /api/settings/ai-models/models/{id}`
+
+**200** with the settings. **404** no such model. **409** it's the active model for a job (`"Luna is the active model for recipes. Choose another one first."`). A job's `previousModelId` that pointed at it goes back to `null`.
+
+### `PUT /api/settings/ai-models/active/{job}`
+
+`{ "modelId": "luna" }`: makes it the job's active model, recording who and when and keeping the one before as `previousModelId`. Choosing the model that's already active changes nothing. **200** with the settings. **400** a body without a `modelId`. **404** no such job or model. **409** the model hasn't passed that job's tests (`"Luna hasn't passed the tests for recipes."`): its `jobs` doesn't include it.
+
+### `POST /api/settings/ai-models/active/{job}/revert`
+
+Goes back to the job's `previousModelId`, or to its default when that's `null`; the model it left becomes the new previous, so reverting again undoes it. **200** with the settings. **404** no such job, or the job is already on its default. **409** the previous model has been removed.
+
+### Foundry refusals
+
+There is **no fallback to another model**. If the active model refuses a request, it fails as before ("couldn't come up with a recipe just now"), and the app logs at **Error**: `The recipe model refused the request (HTTP 400) on gpt-6-luna: unsupported_value: <Foundry's message, cut to 300 characters>` (likewise for photos and generic names). Never the prompt or the reply. Fix it by reverting.
+
 ## Saved recipes (#105)
 
 The household's one collection of saved recipes and Ready now ideas. Every endpoint needs a signed-in user (**401** without a token). Ids come from the app (UUIDs), so saving is idempotent. Logs record ids, kinds and counts, never titles, notes or recipe text.

@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Azure.Core;
+using CupboardTracker.Application.AiModels;
 using CupboardTracker.Application.GenericNaming;
 using CupboardTracker.Application.ShelfLives;
 using CupboardTracker.Domain.Products;
@@ -140,7 +141,7 @@ public sealed class FoundryThrottle(GenericNameWriterOptions options, TimeProvid
 /// </summary>
 public sealed partial class FoundryGenericNameWriter(
     HttpClient http, GenericNameWriterOptions options, FoundryThrottle throttle, TokenCredential credential, TimeProvider clock,
-    ILogger<FoundryGenericNameWriter> logger) : IGenericNameWriter
+    ILogger<FoundryGenericNameWriter> logger, IActiveAiModels? models = null) : IGenericNameWriter
 {
     private const string ApiVersion = "2024-10-21";
     private static readonly string[] Scopes = ["https://cognitiveservices.azure.com/.default"];
@@ -184,15 +185,24 @@ public sealed partial class FoundryGenericNameWriter(
             return new GenericWriteResult.NotConfigured();
         }
 
-        var body = new JsonObject
+        // The generic names job's active model (#120), else the app setting's deployment.
+        var model = models is null
+            ? new ResolvedModel(options.Deployment, TemperatureMode.Usual)
+            : await models.ForAsync(AiJob.GenericNames, options.Deployment, cancellationToken);
+        var json = new JsonObject
         {
             ["messages"] = new JsonArray(
                 new JsonObject { ["role"] = "system", ["content"] = Instructions },
                 new JsonObject { ["role"] = "user", ["content"] = Prompt(product, aisleName, examples) }),
             ["response_format"] = new JsonObject { ["type"] = "json_schema", ["json_schema"] = Schema.DeepClone() },
-            ["temperature"] = 0,
-        }.ToJsonString();
-        var url = new Uri(options.Endpoint, $"openai/deployments/{Uri.EscapeDataString(options.Deployment)}/chat/completions?api-version={ApiVersion}");
+        };
+        if (model.Temperature(0) is { } temperature)
+        {
+            json["temperature"] = temperature; // left out for a model that only takes its default (#120)
+        }
+
+        var body = json.ToJsonString();
+        var url = new Uri(options.Endpoint, $"openai/deployments/{Uri.EscapeDataString(model.Deployment)}/chat/completions?api-version={ApiVersion}");
         var delay = options.FirstRetryDelay;
         var reason = "no attempts";
         for (var attempt = 1; attempt <= options.Attempts; attempt++)
@@ -211,13 +221,15 @@ public sealed partial class FoundryGenericNameWriter(
                 if (response.IsSuccessStatusCode)
                 {
                     var (name, tokens) = Parse(text);
-                    LogWritten((int)Stopwatch.GetElapsedTime(started).TotalMilliseconds, options.Deployment, tokens);
+                    LogWritten((int)Stopwatch.GetElapsedTime(started).TotalMilliseconds, model.Deployment, tokens);
                     return new GenericWriteResult.Written(name);
                 }
 
                 reason = $"HTTP {(int)response.StatusCode}";
                 if (response.StatusCode != HttpStatusCode.TooManyRequests && (int)response.StatusCode < 500)
                 {
+                    var (code, message) = FoundryErrors.Reason(text);
+                    LogRefused(reason, model.Deployment, code, message); // a bug or bad configuration: not retried
                     return new GenericWriteResult.Failed(reason);
                 }
             }
@@ -283,4 +295,8 @@ public sealed partial class FoundryGenericNameWriter(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Generic name written by {Deployment} in {Ms} ms ({Tokens} tokens).")]
     private partial void LogWritten(int ms, string deployment, int tokens);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "The generic name model refused the request ({Reason}) on {Deployment}: {FoundryCode}: {FoundryMessage}")]
+    private partial void LogRefused(string reason, string deployment, string foundryCode, string foundryMessage);
 }

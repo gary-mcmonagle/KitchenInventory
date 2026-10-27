@@ -240,6 +240,8 @@ module api 'modules/functionApp.bicep' = {
       JEV_API_KEY: '@Microsoft.KeyVault(VaultName=${keyVaultName};SecretName=jev-api-key)'
       // Photo recognition (#58, spike #41): gpt-4o on Foundry, called with the app's identity.
       AI_SERVICES_ENDPOINT: 'https://${aiServicesName}.cognitiveservices.azure.com/'
+      // Since #120 the model each job uses is chosen in the app (the settings container). These two (and the optional
+      // GENERIC_NAME_MODEL_DEPLOYMENT) are only each job's DEFAULT, used until a model is made active.
       PHOTO_MODEL_DEPLOYMENT: 'gpt-4o'
       // Recipe ideas (#73): the same deployment by default; RECIPE_REQUESTS_PER_HOUR defaults to 30 in code.
       RECIPE_MODEL_DEPLOYMENT: 'gpt-4o'

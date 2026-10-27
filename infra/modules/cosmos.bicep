@@ -29,6 +29,8 @@ var containers = [
   { name: 'shoppingList', partitionKey: '/listId', defaultTtl: -1 }
   // Saved recipes and Ready now ideas (#105): one household collection, one partition (householdId "household").
   { name: 'savedRecipes', partitionKey: '/householdId' }
+  // Settings people change in the app (#120): one document, aiModels (the registered Foundry models and each job's active one).
+  { name: 'settings', partitionKey: '/id' }
 ]
 
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {

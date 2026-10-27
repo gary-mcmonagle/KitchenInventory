@@ -9,7 +9,7 @@ All decisions in this document are agreed with Gary. They're listed under [Decis
 ## Overview
 
 - **Cosmos DB serverless**, one account, **one database**.
-- **Six data containers** plus one infrastructure container for the change feed. The Bicep creates all seven (`sentDigests` was added by #46).
+- **Data containers** plus one infrastructure container for the change feed, all created by the Bicep (`sentDigests` was added by #46; `settings` by #120, below, with the later containers).
 - Single environment, and it is the live household system.
 - Volumes are tiny: one household, tens of scans a day, a few hundred units in stock. Partition keys are therefore chosen for **simple, cheap point reads and idempotent writes**, not for scale. Cross-partition queries over this much data are cheap and acceptable.
 - **A product's identity is its own `productId`, not a barcode.** Loose items (fruit, bakery, deli) are products with no barcode, and one product can have several barcodes. Barcodes are an optional way to find a product, through [barcode lookup](#barcode-lookup-document) documents.
@@ -711,6 +711,32 @@ All agreed with Gary (card #29's comment, card #57, spike #28, and Gary's approv
 8. **Hub:** defined by the offline alert card (#44). **Confirmed.**
 9. **Display names:** used exactly as Open Food Facts returns them (spike #28). **Confirmed.**
 10. **Product statuses:** `known`, `noMatch`, `lookupFailed`, with `source` (`openFoodFacts`, `manual`, `photo`) saying where a known product's name came from, as the feature cards use them (#45 Check-in adds to stock, #51 Name an unknown item, #53 Item detail). Replaces the earlier `matched` / `named` / `identified`. **Confirmed.**
+
+## Container: `settings` (#120)
+
+Settings people change in the app, one document each, partitioned by **`/id`**. Today there is one: **`aiModels`**, the Foundry models the household has registered and which one each job uses. Written under its ETag (create-only the first time). No `ttl`.
+
+```json
+{
+  "id": "aiModels", "type": "aiModels",
+  "models": [{
+    "id": "luna", "label": "GPT-6 Luna", "deployment": "gpt-6-luna",
+    "temperatureMode": "default", "jobs": ["recipes"],
+    "addedBy": "<oid>", "addedByName": "Gary", "addedAt": "2026-10-27T09:00:00.000Z",
+    "tests": null
+  }],
+  "active": {
+    "recipes": { "modelId": "luna", "changedBy": "<oid>", "changedByName": "Gary", "changedAt": "…", "previousModelId": "gpt-4o" }
+  }
+}
+```
+
+- **`deployment`** is the **deployment name as shown in Foundry** (the key in `/openai/deployments/<name>/…`, not necessarily the model's name). Nothing here creates or lists deployments in Foundry: a model must already be deployed.
+- **`temperatureMode`:** `usual` sends each caller's own temperature (0.7 or 0.9 for recipes, 0 for photos and generic names); `default` leaves `temperature` out, for a model that only accepts its default (gpt-6-luna). New models start as `usual`; the test suite (#121) sets it.
+- **`jobs`:** which jobs the model has passed tests for (`recipes`, `photos`, `genericNames`); empty until tested (#121). A model can only be made active for a job it passed. **`tests`** holds the latest test results (#121), kept as given.
+- **`active`:** one entry per job, only for jobs that have been given a model. A missing entry (or no document) means the job uses its **default**: the `RECIPE_MODEL_DEPLOYMENT`, `PHOTO_MODEL_DEPLOYMENT` or `GENERIC_NAME_MODEL_DEPLOYMENT` app setting, else `gpt-4o`, with the usual temperature. `previousModelId` (null: the default) is what **revert** goes back to.
+- **Reading:** each Foundry call resolves its job's model per request, from a copy cached for a minute on each app instance (a write clears the copy on the instance that made it), so a change reaches every instance within about a minute. If the document can't be read, the last good copy is used, else the defaults: a settings problem never stops a recipe.
+- At most 20 models; deployment names are unique (ignoring case).
 
 ## Measuring Cosmos (#115)
 
