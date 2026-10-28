@@ -5,7 +5,7 @@ people put on the shopping list (the `memory` documents: one per name ever added
 """
 import collections, datetime as dt
 
-HISTORY_START = "2026-10-20T00:00:00"   # the day after the stock take (18-19 Oct): an app setting in the real thing
+HISTORY_START = "2026-10-19T00:00:00"   # the day after the stock take (18 Oct only: 19 Oct was the first real shop): an app setting in the real thing
 MIN_SCORE = 2                            # the floor: one signal alone isn't "usually"
 TOP_N = 30
 

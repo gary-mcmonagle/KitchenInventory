@@ -42,10 +42,10 @@ All measurements are on the live luna deployment (default temperature), with the
 
 **What the data looks like today** (`usually_buys.py`):
 
-* Scan history: 396 events since 18 Oct. Check-ins per day: 18 Oct **231**, 19 Oct **76**, then 17, 1, 18, 5, 57. So **the stock take is 18 and 19 Oct** (the big evening bursts on 18 Oct 18:00–21:00 and 19 Oct 18:00), and real shops are 23 Oct (18) and 26 Oct (57). *The 19 Oct evening is my reading; Gary to confirm in a comment.* Bursts alone can't tell a stock take from a big shop (a 57-item shop looks like part of one), so **use a date, not burst detection**: an app setting `USUALLY_BUYS_HISTORY_START` (today `2026-10-20`, the day after the stock take).
-* Check-ins since 20 Oct: 98 units of 88 products. **Only 0 products were checked in on two different days**, and only 5 generic names. So "3 check-ins in 90 days" gives nothing; "2 in 90 days" almost nothing.
+* Scan history: 396 events since 18 Oct. Check-ins per day: 18 Oct **231**, 19 Oct **76**, then 17, 1, 18, 5, 57. So **the stock take is 18 Oct** (the big evening bursts 18:00–21:00), and the real shops are **19 Oct (the first one after the stock take, confirmed by Gary), 23 Oct and 26 Oct**. Bursts alone can't tell a stock take from a big shop (the 19 Oct shop of 76 looks like part of one), so **use a date, not burst detection**: an app setting `USUALLY_BUYS_HISTORY_START` (today `2026-10-19`, the day after the stock take).
+* Check-ins since 19 Oct: 174 units of 141 products. **Only 7 products were checked in on two different days**, and 20 generic names. So "3 check-ins in 90 days" gives almost nothing; trips per generic name is the usable signal.
 * Shopping list: the typed items and their tombstones **expire after 7 days** (`ttl`), so ticked-off items aren't a usable history. But the list keeps one **`memory` document per name ever added** (no ttl; 63 names today, with `timesAdded`). That is the durable list signal.
-* Check-outs since 20 Oct: 42 units. A product being **used up** is evidence it's one we use, and it needs no extra history.
+* Check-outs since 19 Oct: 44 units. A product being **used up** is evidence it's one we use, and it needs no extra history.
 
 **The rule** (a pure function, `usually_buys.py`; names are the product's **generic name** where it has one, else its display name; all signals since the history start):
 
@@ -56,7 +56,7 @@ score(name) = trips (distinct check-in days, capped at 4)
 include if score >= 2 (the floor), best first, at most 30. Leave out names in the "Other" aisle (kitchen foil).
 ```
 
-**On today's data:** floor 2 gives **30 names** (15 without the list signal); floor 1 would give 150, floor 3 gives 5. Counting the stock take as history (start 18 Oct) would give 72 names, mostly things bought once, which is why the date matters. Examples at the top: semi-skimmed milk (score 7), baby spinach, dark chocolate. **It improves on its own**: as shops accumulate, "trips" counts rise and the top 30 sharpen; the floor and N stay as settings.
+**On today's data:** floor 2 gives **46 names** (33 without the list signal), which the top-30 cap trims to 30; floor 1 would give 180, floor 3 gives 13, floor 4 gives 4. Counting the stock take as history (start 18 Oct) would give far more names, mostly things bought once, which is why the date matters. Examples at the top: semi-skimmed milk (score 8), baby spinach, dark chocolate. (The experiments below ran with the first version of the list, start 20 Oct: 30 names; the plans' behaviour doesn't depend on it.) **It improves on its own**: as shops accumulate, "trips" counts rise and the top 30 sharpen; the floor and N stay as settings.
 
 **Empty is fine.** No history (or none yet since the start date) gives an empty list; the prompt then omits the usually-buys line and the plan is made without it. Nothing fails.
 
@@ -64,11 +64,11 @@ include if score >= 2 (the floor), best first, at most 30. Leave out names in th
 
 | Query | Rows | RU |
 |---|---|---|
-| `inventoryItems`: `SELECT productId, checkedInAt, checkedOutAt, status WHERE checkedInAt >= @start` | 98 | 5.8 |
-| `inventoryItems`: `SELECT productId, checkedInAt, checkedOutAt WHERE checkedOutAt >= @start` | 42 | 4.0 |
+| `inventoryItems`: `SELECT productId, checkedInAt, checkedOutAt, status WHERE checkedInAt >= @start` | 174 | 8.1 |
+| `inventoryItems`: `SELECT productId, checkedInAt, checkedOutAt WHERE checkedOutAt >= @start` | 44 | 4.0 |
 | `shoppingList` (partition `household`): `SELECT normalizedName, name, timesAdded, lastAddedAt WHERE type = 'memory'` | 63 | 4.9 |
 
-About **15 RU** plus the product names, which the plan already reads for the stock (the existing ~265 RU stock read, so no extra). Compute it per plan creation (it's cheap); no cache needed. Send **generic names**: the list's free-text names (`Milk`, `Yoghurt`) are kept as they are, normalised, and matched to the generic name where the same.
+About **17 RU** plus the product names, which the plan already reads for the stock (the existing ~265 RU stock read, so no extra). Compute it per plan creation (it's cheap); no cache needed. Send **generic names**: the list's free-text names (`Milk`, `Yoghurt`) are kept as they are, normalised, and matched to the generic name where the same.
 
 ## 3. Overlap
 
