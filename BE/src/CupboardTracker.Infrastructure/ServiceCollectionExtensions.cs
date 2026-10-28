@@ -10,6 +10,7 @@ using CupboardTracker.Application.Notifications;
 using CupboardTracker.Application.Ping;
 using CupboardTracker.Application.GenericNaming;
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Plans;
 using CupboardTracker.Application.Push;
 using CupboardTracker.Application.RunOut;
 using CupboardTracker.Application.SavedRecipes;
@@ -184,6 +185,18 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IRecipeAdditionRanker, JevRecipeAdditionRanker>();
         services.AddTransient<SuggestRecipeAdditions>();
 
+        // Plan meals (#119, spike #124): plans in the savedRecipes container, written by a queue-triggered job with the recipes job's
+        // model; plan calls have their own hourly limit; "usually buys" reads the purchase history.
+        services.AddSingleton(sp => MealPlannerOptionsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddHttpClient<IMealPlanner, Plans.FoundryMealPlanner>();
+        services.AddSingleton<IMealPlanRepository, CosmosMealPlanRepository>();
+        services.AddSingleton<IMealPlanScheduler, Plans.StorageQueueMealPlanScheduler>();
+        services.AddSingleton<IPurchaseHistory, CosmosPurchaseHistory>();
+        services.AddSingleton(sp => PlanSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton(sp => UsuallyBuysSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<PlanRateLimit>();
+        services.AddTransient<MealPlans>();
+
         services.AddSingleton<IScanEventRepository, CosmosScanEventRepository>();
         services.AddSingleton<IDeviceRepository, CosmosDeviceRepository>();
         services.AddTransient<RecordScan>();
@@ -320,6 +333,40 @@ public static class ServiceCollectionExtensions
     internal static RecipeAdditionSettings RecipeAdditionSettingsFromConfiguration(IConfiguration config) => new(
         double.TryParse(config["RECIPE_ADDITION_MIN_CONFIDENCE"], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var c) && c is >= 0 and <= 1
             ? c : RecipeAdditionSettings.DefaultMinConfidence);
+
+    internal static Plans.MealPlannerOptions MealPlannerOptionsFromConfiguration(IConfiguration config) => new(
+        Uri.TryCreate(config["AI_SERVICES_ENDPOINT"], UriKind.Absolute, out var uri) ? uri : null,
+        config["RECIPE_MODEL_DEPLOYMENT"] is { Length: > 0 } d ? d : RecipeGenerationOptions.DefaultDeployment);
+
+    /// <summary>PLAN_REQUESTS_PER_HOUR (default 30): plan calls have their own bucket, apart from recipes (spike #124).</summary>
+    internal static PlanSettings PlanSettingsFromConfiguration(IConfiguration config)
+    {
+        if (config["PLAN_REQUESTS_PER_HOUR"] is not { Length: > 0 } text)
+        {
+            return new PlanSettings();
+        }
+
+        return int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var perHour) && perHour >= 1
+            ? new PlanSettings(perHour)
+            : throw new InvalidOperationException("PLAN_REQUESTS_PER_HOUR must be a whole number, 1 or more.");
+    }
+
+    /// <summary>USUALLY_BUYS_HISTORY_START (default 2026-10-19, the day after the stock take), USUALLY_BUYS_MIN_SCORE (2) and
+    /// USUALLY_BUYS_TOP_N (30), from spike #124.</summary>
+    internal static UsuallyBuysSettings UsuallyBuysSettingsFromConfiguration(IConfiguration config)
+    {
+        var start = config["USUALLY_BUYS_HISTORY_START"] is { Length: > 0 } text
+            ? DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed)
+                ? parsed
+                : throw new InvalidOperationException("USUALLY_BUYS_HISTORY_START must be a date, e.g. 2026-10-19.")
+            : UsuallyBuysSettings.DefaultStart;
+        static int Whole(string? text, int fallback, string name) =>
+            text is not { Length: > 0 } ? fallback
+            : int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= 1 ? n
+            : throw new InvalidOperationException($"{name} must be a whole number, 1 or more.");
+        return new UsuallyBuysSettings(
+            start, Whole(config["USUALLY_BUYS_MIN_SCORE"], 2, "USUALLY_BUYS_MIN_SCORE"), Whole(config["USUALLY_BUYS_TOP_N"], 30, "USUALLY_BUYS_TOP_N"));
+    }
 
     /// <summary>RECIPE_REQUESTS_PER_HOUR (default 30): the per-user cost guard on recipe suggestions (#73).</summary>
     internal static RecipeSettings RecipeSettingsFromConfiguration(IConfiguration config)

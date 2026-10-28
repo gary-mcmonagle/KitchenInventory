@@ -23,11 +23,13 @@ public sealed class CosmosSavedRecipeRepository(CosmosContainers containers) : I
     public async Task<Versioned<SavedRecipe>?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         using var response = await Container.ReadItemStreamAsync(id.ToString("D"), Partition, cancellationToken: cancellationToken);
-        return await CosmosJson.ReadAsync(response, cancellationToken) is { } d ? new Versioned<SavedRecipe>(FromDocument(d), CosmosJson.Text(d["_etag"])!) : null;
+        return await CosmosJson.ReadAsync(response, cancellationToken) is { } d && CosmosJson.Text(d["type"]) == "savedRecipe"
+            ? new Versioned<SavedRecipe>(FromDocument(d), CosmosJson.Text(d["_etag"])!)
+            : null; // the container also holds meal plans (#119)
     }
 
     public async Task<IReadOnlyList<SavedRecipe>> ListAsync(CancellationToken cancellationToken) =>
-        [.. (await CosmosJson.QueryAsync(Container, new QueryDefinition("SELECT * FROM c"), Partition, null, cancellationToken)).Select(FromDocument)];
+        [.. (await CosmosJson.QueryAsync(Container, new QueryDefinition("SELECT * FROM c WHERE c.type = 'savedRecipe'"), Partition, null, cancellationToken)).Select(FromDocument)];
 
     public async Task<bool> TryCreateAsync(SavedRecipe recipe, CancellationToken cancellationToken)
     {
