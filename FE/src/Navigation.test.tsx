@@ -293,7 +293,7 @@ test("AI models (#123): Settings leads to the page, which leads to Add a model a
     expect(window.location.pathname).toBe("/settings/ai-models");
     expect(await screen.findByRole("heading", { level: 1, name: "AI models" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("link", { name: "Add a model" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Add a model" }));
     expect(window.location.pathname).toBe("/settings/ai-models/add");
     expect(await screen.findByRole("heading", { level: 1, name: "Add a model" })).toBeInTheDocument();
 
@@ -310,4 +310,45 @@ test("a model's test has its own address and shows over the stock list", async (
     await at("/settings/ai-models/luna/test", api);
 
     expect(await screen.findByRole("heading", { level: 1, name: /Testing GPT-6 Luna/ })).toBeInTheDocument();
+});
+
+test("Plan meals (#119) is reached from the shopping list and from Hungry?, and its screens have their own addresses", async () => {
+    await at("/list");
+    fireEvent.click(await screen.findByRole("link", { name: "Plan meals" }));
+    expect(window.location.pathname).toBe("/plan");
+    expect(await screen.findByRole("heading", { level: 1, name: "Plan meals" })).toBeInTheDocument();
+});
+
+test("the Plan meals row on Hungry? opens the choices", async () => {
+    await at("/recipes");
+    fireEvent.click(await screen.findByRole("link", { name: /Plan meals/ }));
+
+    expect(window.location.pathname).toBe("/plan");
+});
+
+test("a plan's address shows that plan over nothing else, with no bottom tabs", async () => {
+    const api = shellApi() as unknown as ReturnType<typeof shellApi> & Record<string, unknown>;
+    api.mealPlan = async () => ({
+        id: "p1",
+        createdBy: "u",
+        createdByName: "Gary",
+        createdAt: "",
+        updatedAt: "",
+        status: "generating",
+        error: null,
+        addedToListAt: null,
+        meals: [],
+        choices: {
+            days: 2,
+            mealTypes: ["dinner"],
+            diet: "any",
+            equipment: null,
+            preferUseFirst: false,
+            comments: null,
+        },
+    });
+    await at("/plan/p1", api);
+
+    expect(await screen.findByText(/Planning 2 meals…/)).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
 });

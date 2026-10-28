@@ -712,6 +712,14 @@ All agreed with Gary (card #29's comment, card #57, spike #28, and Gary's approv
 9. **Display names:** used exactly as Open Food Facts returns them (spike #28). **Confirmed.**
 10. **Product statuses:** `known`, `noMatch`, `lookupFailed`, with `source` (`openFoodFacts`, `manual`, `photo`) saying where a known product's name came from, as the feature cards use them (#45 Check-in adds to stock, #51 Name an unknown item, #53 Item detail). Replaces the earlier `matched` / `named` / `identified`. **Confirmed.**
 
+### Meal plans in `savedRecipes` (#119)
+
+The same container and partition (`householdId: "household"`) also holds the household's **meal plans**: one document per plan, `type: "mealPlan"`, `id` = the plan's id (a UUID), the plan exactly as `GET /api/meal-plans/{id}` returns it (docs/api.md, Plan meals) plus `householdId` and `type`. **No `ttl`:** plans are kept until deleted (#126 adds the button). Written ETag-checked (create-only the first time, then replaced under the ETag; a change made while another runs is a 409). Saved recipes are read with `WHERE c.type = 'savedRecipe'` (and a saved recipe's id never returns a plan), so the two never mix. A meal holds `recipe` (the full recipe once written, #126, kept as given so a kept meal keeps it), `uses` / `usesUp` as product ids with the name they had when the plan was made, `toBuy` as short generic names, `keep` and `warnings`. `addedToListAt` is for #125.
+
+A new plan is created `generating` and a `{ planId }` message goes on the `meal-plan-jobs` queue in the API app's storage account (created on first use by its identity); the queue-triggered job writes the meals and saves the plan `ready` or `failed`. No infra change.
+
+**"Usually buys" reads** (best effort, about 17 RU on today's data): `inventoryItems` `SELECT productId, checkedInAt, checkedOutAt WHERE checkedInAt >= @start OR checkedOutAt >= @start`; `products` `SELECT id, displayName, genericName WHERE type = 'product'` (only when the first returned rows); `shoppingList`, partition `household`, `SELECT name, timesAdded, aisle WHERE type = 'memory'`. Operation names `PlanHistoryUnits`, `PlanHistoryProducts`, `PlanHistoryList` (#115).
+
 ## Container: `settings` (#120)
 
 Settings people change in the app, one document each, partitioned by **`/id`**. Today there is one: **`aiModels`**, the Foundry models the household has registered and which one each job uses. Written under its ETag (create-only the first time). No `ttl`.

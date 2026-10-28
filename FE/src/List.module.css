@@ -485,3 +485,26 @@
     font-size: 12px;
     font-weight: 700;
 }
+
+/* Sort by aisle, and the way into Plan meals (#119): outlined, not the main action. */
+.toolRow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.planMeals {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--touch);
+    padding: 0 16px;
+    border-radius: var(--radius-chip);
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+}

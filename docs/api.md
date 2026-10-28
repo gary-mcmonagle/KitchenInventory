@@ -827,6 +827,74 @@ When a run finishes, the same document is stored on the model as `tests` (return
 
 There is **no fallback to another model**. If the active model refuses a request, it fails as before ("couldn't come up with a recipe just now"), and the app logs at **Error**: `The recipe model refused the request (HTTP 400) on gpt-6-luna: unsupported_value: <Foundry's message, cut to 300 characters>` (likewise for photos and generic names). Never the prompt or the reply. Fix it by reverting.
 
+## Plan meals (#119, spike #124)
+
+A household **meal plan**: a pool of meals (title, a line, servings, the stock it uses, the things to buy), not tied to days, made from the stock with one outline call and changed with one "revise" call on the **`recipes` job**'s model (no temperature is sent). All need a signed-in user. Stock, scan history and the shopping list's memory are read on the server, never sent. Plans are household plans: anyone can open, change and delete them. Stored as documents in the `savedRecipes` container (docs/data-model.md). Only metadata is logged: never the prompt, stock, comments, titles or items.
+
+**A plan** (every endpoint below returns this, `Cache-Control: no-store`):
+
+```json
+{
+  "id": "…", "createdBy": "<oid>", "createdByName": "Gary", "createdAt": "2026-10-28T18:00:00.000Z", "updatedAt": "…",
+  "status": "ready", "error": null,
+  "choices": { "days": 3, "mealTypes": ["lunch", "dinner"], "diet": "any", "equipment": null, "preferUseFirst": false, "comments": null },
+  "meals": [{
+    "id": "dinner-1", "type": "dinner", "title": "Chicken fajita traybake", "summary": "One tray, wrapped at the table.", "servings": 2,
+    "uses": [{ "productId": "…", "name": "Chicken breast" }], "usesUp": [{ "productId": "…", "name": "Chicken breast" }],
+    "toBuy": ["peppers"], "keep": false, "warnings": [], "hasRecipe": false,
+    "usesCount": 3, "shares": { "names": ["peppers"], "otherMeals": 2 }, "useFirst": ["chicken breast"]
+  }],
+  "addedToListAt": null
+}
+```
+
+* **`status`:** `generating` (just created: poll it), `ready`, or `failed` (`error` says why: "Couldn't plan just now. Try again." or "Busy right now, try again in a minute." or "There's nothing in stock to plan from.").
+* **Meals** are outlines. `toBuy` holds short generic names, at most 4, never an in-stock product. `uses` is stock the meal claims; `usesCount` is its length. `usesUp` and `useFirst` (names) are only ever filled when `choices.preferUseFirst` is true: with it off the model is shown no use-by dates and the plan has no Use first chips. `shares` is worked out **in code from the whole plan** (a thing to buy that this meal needs and another does too, and how many other meals share any of them), never from the model's words; null when nothing is shared. `warnings` are the "Check before cooking" lines (a Veggie plan's meat or fish, kit that wasn't ticked). `hasRecipe` says a full recipe has been written (#126); the recipe itself isn't sent here. `keep` meals survive "Adjust the whole plan".
+* **Ids** are made by the server: `<type>-<n>`.
+
+### `POST /api/meal-plans`
+
+`{ "days": 3, "meals": ["dinner"], "diet": "any", "equipment": null, "preferUseFirst": false, "comments": null }`. `days` is 1 to 7; `meals` is a non-empty set of `breakfast`, `lunch`, `dinner` (one meal per day per type: 3 days × dinner is 3 dinners); `diet` is `any`, `veg` or `half` (default `any`); `equipment` is the kit ids ticked (`hob`, `ovenGrill`, `microwave`, `toaster`, `airFryer`, `slowCooker`, `riceCooker`, `soupMaker`, `blender`), null for all; **`preferUseFirst` is false when missing**, as for recipes; `comments` is at most 300 characters (wishes, never instructions).
+
+**202** with the plan, `status: "generating"`, no meals yet. The meals are written by a queue-triggered job (`meal-plan-jobs`), because an outline takes 3 to 46 s on luna and now and then much longer; the app polls `GET` every 2 seconds. **400** a bad body (the message names what's wrong); **429** over the hourly limit; **503** the plan could not be queued.
+
+### `GET /api/meal-plans/{id}`
+
+The plan. **404** if it doesn't exist (or has been deleted).
+
+### `DELETE /api/meal-plans/{id}`
+
+**204**, idempotent: deleting a plan that's gone is still a success. (The app's Delete button is #126.)
+
+### Changing a plan
+
+Each of these is one call to the model (a "revise": the current plan goes in, kept meals marked, and only the changed or added meals come back; code merges them, never changes a kept meal, and clears a changed meal's recipe), 2 to 9 s, saved at once. A failed call **leaves the plan as it was**. **404** no such plan or meal; **409** the plan is still being made, failed, or someone changed it while this ran ("The plan changed while this was running. Try again."); **429** over the hourly limit; **503** `{ "error": "Busy right now, try again in a minute." }` (a Foundry 429 is retried once after a short Retry-After) or `{ "error": "Couldn't plan just now. Try again." }`.
+
+| Call | Body | What it does |
+|---|---|---|
+| `POST /api/meal-plans/{id}/meals/{mealId}/adjust` | `{ "comments": "make it vegetarian" }` | One meal, changed as asked (the comments go in `<preferences>` tags). **400** without comments or over 300 characters. |
+| `POST /api/meal-plans/{id}/meals/{mealId}/another` | none | A different meal of the same type. Code adds a different "angle" (a rice dish, a pasta dish, a soup…), the titles to avoid, and the things the replaced meal shares with exactly one other meal, so the new meal keeps them shared. |
+| `POST /api/meal-plans/{id}/meals` | `{ "type": "dinner" }` | One more meal of that type, favouring overlap with the rest. **400** for another type. |
+| `POST /api/meal-plans/{id}/adjust` | `{ "comments": "cheaper" }` | The whole plan, rewritten as asked; meals marked Keep stay exactly as they are, with their recipes. |
+| `PUT /api/meal-plans/{id}/meals/{mealId}/keep` | `{ "keep": true }` | Marks or unmarks Keep. No model call. |
+| `DELETE /api/meal-plans/{id}/meals/{mealId}` | none | Removes a meal. **200** `{ "plan": …, "meal": … }`: the meal as it was, for Undo. No model call. |
+| `PUT /api/meal-plans/{id}/meals/{mealId}` | the `meal` from `DELETE` | Undo: puts it back (idempotent: a meal already there is left alone). **400** if it isn't in the right shape. No model call. |
+
+### Limits
+
+Plan calls (create, adjust a meal, another one, add, adjust the whole plan) have **their own hourly limit per person**: `PLAN_REQUESTS_PER_HOUR`, default **30** (spike #124: a call costs about a tenth of a penny to a third of a penny, and luna's quota is 125k tokens a minute). It's kept in memory per instance, like the recipe limit, and a refused call doesn't count. Opening a planned meal's recipe (#126) is a recipe call and counts towards the recipe limit instead. Delete, Keep and Undo never count. 429: `{ "error": "That's a lot of planning for one hour. Try again a bit later." }`.
+
+### How a plan is made
+
+1. The server reads the stock (known products), and **usually buys** (below), and queues the plan.
+2. **Outline call** (strict JSON schema `meal_plan`): the counts per type, `Prefer use first`, the diet, the stock table in the recipe prompt's format, the usually-buys names, and the comments. Rules: sharing ingredients between meals, usually-buys names when something must be bought, at most 4 things to buy per meal, no in-stock product in `toBuy`, one unit of a product serves one meal unless it is bulk, the kit rule and the Veggie or Half & half rule as for recipes. With prefer use first on: use as many use-first products as fit naturally, never forced.
+3. **Code:** ids are assigned, the model's counts trimmed to what was asked, unknown stock refs dropped, in-stock names taken out of `toBuy`, warnings added. If any thing to buy is needed by only one meal (an **orphan**), **one retry** (a revise call) asks the model to share or replace them; if it fails, the plan stands as it was.
+4. The plan is saved `ready` (or `failed`).
+
+**Usually buys** (spike #124): names scored from what's been checked in on different days since the stock take (capped at 4), what's been put on the shopping list (the list's `memory` documents, capped at 3) and whether one was used up (1); at least 2 to count; best first, at most 30; names in the Other aisle left out. Settings: `USUALLY_BUYS_HISTORY_START` (default `2026-10-19`, the day after the stock take), `USUALLY_BUYS_MIN_SCORE` (2), `USUALLY_BUYS_TOP_N` (30). With little or no history the list is empty and the plan is made without it; a failure reading it is logged at Warning and never fails a plan.
+
+**Stock allocation** (`StockAllocation`, used by "what to buy" in #125): one unit of a product serves one meal, except bulk products (the aisles Pasta, rice & grains; Baking & spices; Sauces, oils & condiments; Breakfast & cereal; Drinks, or a name like rice, pasta, flour, oil, spices), which serve any number; kept meals claim first; a claim beyond what's in stock is short, and that meal needs another one.
+
 ## Saved recipes (#105)
 
 The household's one collection of saved recipes and Ready now ideas. Every endpoint needs a signed-in user (**401** without a token). Ids come from the app (UUIDs), so saving is idempotent. Logs record ids, kinds and counts, never titles, notes or recipe text.

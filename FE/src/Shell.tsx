@@ -8,6 +8,8 @@ import { ItemScreen } from "./ItemScreen";
 import { ListScreen } from "./ListScreen";
 import { ModelTestScreen } from "./ModelTestScreen";
 import { NameScreen } from "./NameScreen";
+import { PlanChooseScreen } from "./PlanChooseScreen";
+import { PlanScreen } from "./PlanScreen";
 import { refreshPushSubscription } from "./push";
 import { RecipesScreen } from "./RecipesScreen";
 import {
@@ -19,7 +21,9 @@ import {
     matchEditPath,
     matchItemPath,
     matchNamePath,
+    matchPlanPath,
     LIST_PATH,
+    PLAN_PATH,
     cameFrom,
     RECIPES_PATH,
     savedScroll,
@@ -79,6 +83,7 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     const item = matchItemPath(path);
     const assigning = matchAssignPath(path);
     const aiModelTest = matchAiModelTestPath(path);
+    const plan = matchPlanPath(path);
     const onStock = path === "/" || !matchKnownPath(path);
     // Screens reached from the stock list: the list stays mounted underneath, hidden, so going back keeps its data,
     // scroll, open aisles, search, Use first and live updates, with no reload (#103, spike #99 option A). The same for
@@ -123,6 +128,10 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                         <ListScreen key={resets} api={api} />
                         <BottomNav current="list" />
                     </>
+                ) : plan ? (
+                    <PlanScreen key={plan} api={api} planId={plan} />
+                ) : path === PLAN_PATH ? (
+                    <PlanChooseScreen api={api} />
                 ) : aiModelTest ? (
                     <ModelTestScreen key={aiModelTest} api={api} modelId={aiModelTest} />
                 ) : path === AI_MODEL_ADD_PATH ? (
@@ -151,8 +160,17 @@ function matchKnownPath(path: string): boolean {
             matchEditPath(path) ||
             matchItemPath(path) ||
             matchAssignPath(path) ||
-            matchAiModelTestPath(path)
+            matchAiModelTestPath(path) ||
+            matchPlanPath(path)
         ) ||
-        [ADD_PATH, LIST_PATH, RECIPES_PATH, SETTINGS_PATH, AI_MODELS_PATH, AI_MODEL_ADD_PATH].includes(path)
+        [
+            ADD_PATH,
+            LIST_PATH,
+            RECIPES_PATH,
+            SETTINGS_PATH,
+            AI_MODELS_PATH,
+            AI_MODEL_ADD_PATH,
+            PLAN_PATH,
+        ].includes(path)
     );
 }

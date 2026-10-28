@@ -277,6 +277,59 @@ export interface AiModels {
     testRuns: { perHour: number; left: number } | null;
 }
 
+/** Plan meals (#119): the meal types a plan can hold, in the order the plan shows them. */
+export type PlanMealType = "breakfast" | "lunch" | "dinner";
+
+/** What the household chose (#119). `equipment` is the ticked kit ids (null: all); `preferUseFirst` is off unless sent. */
+export interface PlanChoices {
+    days: number;
+    mealTypes: PlanMealType[];
+    diet: Diet;
+    equipment: Kit[] | null;
+    preferUseFirst: boolean;
+    comments: string | null;
+}
+
+/** One meal of a plan: an outline, not a recipe. The facts come from the whole plan, worked out on the server. */
+export interface PlanMeal {
+    id: string;
+    type: PlanMealType;
+    title: string;
+    summary: string;
+    servings: number;
+    uses: Array<{ productId: string; name: string }>;
+    usesUp: Array<{ productId: string; name: string }>;
+    toBuy: string[];
+    keep: boolean;
+    warnings: string[];
+    hasRecipe: boolean;
+    usesCount: number;
+    shares: { names: string[]; otherMeals: number } | null;
+    useFirst: string[];
+}
+
+export type PlanStatus = "generating" | "ready" | "failed";
+
+/** A household meal plan: a pool of meals, not tied to days. A new one is `generating` until its meals are written. */
+export interface MealPlan {
+    id: string;
+    createdBy: string;
+    createdByName: string;
+    createdAt: string;
+    updatedAt: string;
+    status: PlanStatus;
+    error: string | null;
+    choices: PlanChoices;
+    meals: PlanMeal[];
+    addedToListAt: string | null;
+}
+
+/** What Delete a meal returns: the plan, and the meal exactly as it was, to put back with Undo. */
+export interface DeletedPlanMeal {
+    plan: MealPlan;
+    meal: { id: string } & Record<string, unknown>;
+}
+
 export interface Scanners {
     generatedAt: string;
     hub: {
@@ -1108,6 +1161,80 @@ export class ApiClient {
     /** The run so far; 404 once it has expired (a day). */
     modelTestRun(runId: string): Promise<ModelTestRun> {
         return this.get<ModelTestRun>(`/api/settings/ai-models/test-runs/${encodeURIComponent(runId)}`);
+    }
+
+    /** Queues a plan (#119): 202 with the plan still being made; poll {@link mealPlan}. 422: nothing in stock; 429: over the limit. */
+    createMealPlan(choices: {
+        days: number;
+        meals: PlanMealType[];
+        diet: Diet;
+        equipment: Kit[] | null;
+        preferUseFirst: boolean;
+        comments: string | null;
+    }): Promise<MealPlan> {
+        return this.send<MealPlan>("POST", "/api/meal-plans", choices);
+    }
+
+    mealPlan(id: string): Promise<MealPlan> {
+        return this.get<MealPlan>(`/api/meal-plans/${encodeURIComponent(id)}`);
+    }
+
+    /** Idempotent: 204 even when the plan has gone. */
+    deleteMealPlan(id: string): Promise<void> {
+        return this.send<void>("DELETE", `/api/meal-plans/${encodeURIComponent(id)}`);
+    }
+
+    /** One meal changed as the household says (a "revise" call); other meals stay. 429, 503 busy, 409 changed meanwhile. */
+    adjustPlannedMeal(planId: string, mealId: string, comments: string): Promise<MealPlan> {
+        return this.send<MealPlan>(
+            "POST",
+            `/api/meal-plans/${encodeURIComponent(planId)}/meals/${encodeURIComponent(mealId)}/adjust`,
+            { comments },
+        );
+    }
+
+    /** A different meal of the same type. */
+    anotherPlannedMeal(planId: string, mealId: string): Promise<MealPlan> {
+        return this.send<MealPlan>(
+            "POST",
+            `/api/meal-plans/${encodeURIComponent(planId)}/meals/${encodeURIComponent(mealId)}/another`,
+        );
+    }
+
+    /** One more meal of that type. */
+    addPlannedMeal(planId: string, type: PlanMealType): Promise<MealPlan> {
+        return this.send<MealPlan>("POST", `/api/meal-plans/${encodeURIComponent(planId)}/meals`, { type });
+    }
+
+    /** Rewrites the plan, keeping meals marked Keep (with their recipes). */
+    adjustMealPlan(planId: string, comments: string): Promise<MealPlan> {
+        return this.send<MealPlan>("POST", `/api/meal-plans/${encodeURIComponent(planId)}/adjust`, {
+            comments,
+        });
+    }
+
+    deletePlannedMeal(planId: string, mealId: string): Promise<DeletedPlanMeal> {
+        return this.send<DeletedPlanMeal>(
+            "DELETE",
+            `/api/meal-plans/${encodeURIComponent(planId)}/meals/${encodeURIComponent(mealId)}`,
+        );
+    }
+
+    /** Undo of a delete: the meal as Delete returned it. Idempotent. */
+    restorePlannedMeal(planId: string, meal: DeletedPlanMeal["meal"]): Promise<MealPlan> {
+        return this.send<MealPlan>(
+            "PUT",
+            `/api/meal-plans/${encodeURIComponent(planId)}/meals/${encodeURIComponent(meal.id)}`,
+            meal,
+        );
+    }
+
+    keepPlannedMeal(planId: string, mealId: string, keep: boolean): Promise<MealPlan> {
+        return this.send<MealPlan>(
+            "PUT",
+            `/api/meal-plans/${encodeURIComponent(planId)}/meals/${encodeURIComponent(mealId)}/keep`,
+            { keep },
+        );
     }
 
     /** Public: no token needed. */

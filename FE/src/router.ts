@@ -88,6 +88,16 @@ export const SETTINGS_PATH = "/settings";
 export const LEGACY_SCANNERS_PATH = "/scanners";
 export const ADD_PATH = "/add";
 
+/** Plan meals (#119): step 1 is the choices, step 2 is one plan (`/plan/<id>`). */
+export const PLAN_PATH = "/plan";
+export const planPath = (id: string) => `${PLAN_PATH}/${encodeURIComponent(id)}`;
+
+/** The plan ID if the path is a plan (#119). */
+export function matchPlanPath(path: string): string | null {
+    const match = /^\/plan\/([^/]+)\/?$/.exec(path);
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
 /** AI models (#123): the page under Settings, adding a model, and one model's test (the run is `?run=<runId>`). */
 export const AI_MODELS_PATH = "/settings/ai-models";
 export const AI_MODEL_ADD_PATH = "/settings/ai-models/add";

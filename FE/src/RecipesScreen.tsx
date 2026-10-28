@@ -28,7 +28,7 @@ import {
     stepNumberClass,
 } from "./Plates";
 import plateStyles from "./Plates.module.css";
-import { itemPath, navigate } from "./router";
+import { itemPath, navigate, PLAN_PATH } from "./router";
 import { AdjustSheet, adjustmentLine, type AdjustChoices } from "./RecipeAdjust";
 import styles from "./Recipes.module.css";
 import {
@@ -41,6 +41,7 @@ import {
     savedToRecipe,
     savedToSave,
 } from "./SavedRecipes";
+import planStyles from "./Plans.module.css";
 import savedStyles from "./SavedRecipes.module.css";
 import { newId } from "./shoppingList";
 import { TOAST_MS } from "./StockScreen";
@@ -663,6 +664,17 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                                 onOpenChange={onBoxOpen}
                                 onChoose={openSaved}
                             />
+                            <a
+                                href={PLAN_PATH}
+                                className={planStyles.entryRow}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    navigate(PLAN_PATH);
+                                }}
+                            >
+                                <span>Plan meals</span>
+                                <span className={planStyles.entrySub}>A few days at a time</span>
+                            </a>
                             <div
                                 className={
                                     boxOpen

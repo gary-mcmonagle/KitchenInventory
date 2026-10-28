@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SignInRequiredError, type ApiClient, type ListSuggestion, type ShoppingListItem } from "./api";
 import { groupByAisle, listWhen, type ListGroup } from "./shoppingList";
 import { useListViewed } from "./listViewed";
+import { PLAN_PATH, navigate } from "./router";
 import { useShoppingList, type ShoppingList } from "./useShoppingList";
 import styles from "./List.module.css";
 
@@ -176,7 +177,7 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
                         <span>To buy</span>
                         <span className={styles.sectionCount}>{count}</span>
                     </h2>
-                    <div>
+                    <div className={styles.toolRow}>
                         <button
                             type="button"
                             aria-pressed={byAisle}
@@ -201,6 +202,16 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
                             </svg>
                             Sort by aisle
                         </button>
+                        <a
+                            href={PLAN_PATH}
+                            className={styles.planMeals}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                navigate(PLAN_PATH);
+                            }}
+                        >
+                            Plan meals
+                        </a>
                     </div>
                     {list.loaded && count === 0 && (
                         <div className={styles.empty}>Nothing on the list. Nice.</div>

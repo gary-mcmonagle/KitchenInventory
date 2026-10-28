@@ -1,0 +1,733 @@
+/* Plan meals (#119): project/PlanChoose.dc.html (step 1) and PlanMeals.dc.html (step 2). */
+.screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.top {
+    padding: 14px 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.back {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+}
+
+.step {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.header {
+    padding: 4px var(--page-x) 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.title {
+    margin: 0;
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.subtitle {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.content {
+    flex: 1;
+    padding: 12px var(--page-x) 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.label {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.labelRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.aside {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.help {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+/* The days stepper. */
+.stepper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+}
+
+.stepButton {
+    width: 48px;
+    height: 48px;
+    border: 0;
+    border-radius: var(--radius-button);
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stepButton[aria-disabled="true"] {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.days {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+/* Which meals?: one checkbox row each. */
+.mealList {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+}
+
+.mealRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--off-bg);
+    cursor: pointer;
+}
+
+.mealRow:last-child {
+    border-bottom: 0;
+}
+
+.checkbox {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    accent-color: var(--accent);
+}
+
+.mealName {
+    flex: 1;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* Meat or veg?: the same three-way switch as Hungry?. */
+.diets {
+    display: flex;
+    padding: 4px;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+}
+
+.diet {
+    flex: 1;
+    min-height: var(--touch);
+    padding: 0 6px;
+    border: 0;
+    border-radius: var(--radius-button);
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.diet[aria-checked="true"] {
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.kitChips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.kitChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.kitChipOn {
+    border-color: var(--accent);
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.preferCard {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.preferLabel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: var(--touch);
+    cursor: pointer;
+}
+
+.preferText {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.indent {
+    padding-left: 34px;
+}
+
+.chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.chip {
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.comments {
+    box-sizing: border-box;
+    min-height: 88px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    background: var(--surface);
+    font: inherit;
+    font-size: 16px;
+    line-height: 1.4;
+    color: var(--ink);
+    resize: vertical;
+}
+
+.count {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: right;
+}
+
+.primary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    border: 0;
+    border-radius: var(--radius-input);
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.primary:disabled,
+.primary[aria-disabled="true"] {
+    background: var(--border);
+    color: var(--muted);
+    cursor: default;
+}
+
+.note {
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: var(--radius-input);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.footnote {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+}
+
+/* Step 2. */
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 56px 20px;
+    text-align: center;
+    color: var(--ink-strong);
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.spinner {
+    width: 28px;
+    height: 28px;
+    box-sizing: border-box;
+    border-radius: 14px;
+    border: 3px solid var(--on-border);
+    border-top-color: var(--accent-dark);
+    animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        animation-duration: 3s;
+    }
+}
+
+.whole {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.wholeLabel {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.wholeRow {
+    display: flex;
+    gap: 8px;
+}
+
+.input {
+    flex: 1;
+    min-width: 0;
+    height: 48px;
+    box-sizing: border-box;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    background: var(--surface);
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.outline {
+    flex: none;
+    height: 48px;
+    padding: 0 16px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-input);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.outline:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sectionTitle {
+    margin: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.sectionCount {
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 14px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.cardKept {
+    border-color: var(--accent);
+}
+
+.cardHead {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.cardText {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.mealTitle {
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.mealSummary {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.keep {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 36px;
+    padding: 0 10px;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.keep[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.factUses {
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.factShares {
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: var(--off-bg);
+    color: var(--ink-strong);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.adjust {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.adjustLabel {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink-strong);
+}
+
+.adjustButtons {
+    display: flex;
+    gap: 8px;
+}
+
+.cancel {
+    flex: 1;
+    min-height: var(--touch);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.confirm {
+    flex: 1;
+    min-height: var(--touch);
+    border: 0;
+    border-radius: var(--radius-input);
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.confirm:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    border-top: 1px solid var(--off-bg);
+    margin: 0 -8px;
+}
+
+.action {
+    flex: 1;
+    min-height: var(--touch);
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.action:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.delete {
+    flex: none;
+    width: 52px;
+    min-height: var(--touch);
+    border: 0;
+    background: transparent;
+    color: var(--danger-fg);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.addMeal {
+    min-height: 48px;
+    border: 1.5px dashed #b9c8bf;
+    border-radius: var(--radius-input);
+    background: transparent;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.addMeal:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 24px;
+    max-width: calc(var(--design-width) - 32px);
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 52px;
+    box-sizing: border-box;
+    padding: 0 6px 0 16px;
+    border-radius: var(--radius-input);
+    background: var(--ink);
+    color: #ffffff;
+    font-size: 15px;
+    box-shadow: 0 8px 24px rgba(28, 42, 36, 0.25);
+}
+
+.toastText {
+    flex: 1;
+}
+
+.toastUndo {
+    min-height: var(--touch);
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    color: var(--toast-action);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.problem {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+}
+
+.link {
+    min-height: var(--touch);
+    padding: 0 4px;
+    border: 0;
+    background: transparent;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* The ways in (the shopping list's header and Hungry?). */
+.entry {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--touch);
+    padding: 0 16px;
+    border-radius: var(--radius-chip);
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.entryRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 52px;
+    padding: 0 14px;
+    border-radius: var(--radius-input);
+    border: 1px solid var(--border-soft);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.entrySub {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+}
