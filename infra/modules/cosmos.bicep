@@ -42,6 +42,9 @@ resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
     databaseAccountOfferType: 'Standard'
     capabilities: [
       { name: 'EnableServerless' }
+      // Vector search (spike #127): lets a container hold embeddings and be searched by similarity. Free in itself (only
+      // containers that use it cost anything); registration is automatic and takes about 15 minutes.
+      { name: 'EnableNoSQLVectorSearch' }
     ]
     locations: [
       {

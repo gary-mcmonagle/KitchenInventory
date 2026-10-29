@@ -25,6 +25,10 @@ param capacity int = 10
 @minValue(1)
 param gpt4oCapacity int = 50
 
+@description('Thousands of tokens per minute for text-embedding-3-small (spike #127: ratings are embedded to find the closest ones to a request). Billing is per token, so this is only a speed limit.')
+@minValue(1)
+param embeddingCapacity int = 10
+
 var cognitiveServicesUser = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 
 resource account 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
@@ -78,6 +82,26 @@ resource gpt41mini 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01'
     versionUpgradeOption: 'NoAutoUpgrade'
   }
   dependsOn: [gpt4o] // deployments on one account are created one at a time
+}
+
+// Embeddings for ratings (spike #127). GlobalStandard is the only SKU offered for this model in UK South; the text sent is
+// recipe titles and ingredient names, never anything personal.
+resource embeddings 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+  parent: account
+  name: 'text-embedding-3-small'
+  sku: {
+    name: 'GlobalStandard'
+    capacity: embeddingCapacity
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: 'text-embedding-3-small'
+      version: '1'
+    }
+    versionUpgradeOption: 'NoAutoUpgrade'
+  }
+  dependsOn: [gpt41mini]
 }
 
 resource apps 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
