@@ -1,4 +1,4 @@
-import { groupBarcode, initial, itemsLabel, metaLine, scannedLabel, todayLine } from "./format";
+import { groupBarcode, initial, itemsLabel, metaLine, scannedLabel, stockRowText, todayLine } from "./format";
 
 test("meta line leaves out missing parts and shows ×qty only above 1", () => {
     expect(metaLine("Bisto", "230g", 2)).toBe("Bisto · 230g · ×2");
@@ -106,4 +106,29 @@ test("scanners screen times (UK time)", async () => {
         "5 minutes",
         "30 seconds",
     ]);
+});
+
+test("a stock row leads with the generic name whenever there is one, so one generic name has one spelling (#130)", () => {
+    const row = (displayName: string, genericName: string | null, brand: string | null, count = 1) =>
+        stockRowText({ displayName, genericName, brand, size: null, count });
+
+    // only the casing differs: the generic name leads, the brand goes underneath
+    expect(row("carrots", "Carrots", null, 3)).toEqual({ title: "Carrots", meta: "×3" });
+    expect(row("Baked Beans", "Baked beans", "Tesco")).toEqual({ title: "Baked beans", meta: "Tesco" });
+    expect(row("UDON NOODLES", "Udon noodles", "Sharwood's")).toEqual({
+        title: "Udon noodles",
+        meta: "Sharwood's",
+    });
+    // the display name differs: it goes underneath, with the size
+    expect(
+        stockRowText({
+            displayName: "British carrots",
+            genericName: "Carrots",
+            brand: null,
+            size: "1kg",
+            count: 1,
+        }),
+    ).toEqual({ title: "Carrots", meta: "British carrots · 1kg" });
+    // no generic name: the display name leads, as stored
+    expect(row("Beef Gravy", null, "Bisto")).toEqual({ title: "Beef Gravy", meta: "Bisto" });
 });

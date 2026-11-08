@@ -145,7 +145,7 @@ test("filters on every keystroke, keeping matching aisles open with their match 
 
     type("tesco bean");
     expect(regions()).toEqual(["Tins & jars"]);
-    expect(screen.getByText("Baked Beans")).toBeInTheDocument();
+    expect(screen.getByText("Baked beans")).toBeInTheDocument();
     expect(screen.queryByText("Mature cheddar")).not.toBeInTheDocument();
 });
 

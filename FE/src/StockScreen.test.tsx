@@ -462,7 +462,7 @@ test("grouping: shop order, use first first within an aisle, unknown items apart
 
 // ---- Generic names as the row title (#92, option A)
 
-test("a generic name leads the row with the full name and size underneath; same or none looks as before", async () => {
+test("a generic name always leads the row (full name and size underneath when it differs); none looks as before", async () => {
     const { api } = fakeApi(
         stockOf(
             product({
@@ -486,7 +486,7 @@ test("a generic name leads the row with the full name and size underneath; same 
                 displayName: "Bananas",
                 brand: null,
                 size: null,
-                genericName: " bananas ",
+                genericName: " Bananas ",
                 aisleId: "fruitVeg",
             }),
             product({

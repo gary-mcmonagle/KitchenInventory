@@ -19,9 +19,10 @@ const sameName = (a: string, b: string) =>
     a.trim().replace(/\s+/g, " ").toLowerCase() === b.trim().replace(/\s+/g, " ").toLowerCase();
 
 /**
- * A stock row's title and muted line (#92, option A): the generic name leads when it's there and differs from the
- * display name, with the full product name and size underneath (and the count, as before); otherwise the row is as it
- * was.
+ * A stock row's title and muted line (#92, option A; #130): the generic name always leads when it's there, so one
+ * generic name has one spelling. When the display name differs from it, the full product name and size go underneath
+ * (and the count, as before); when it only differs in casing, the brand does. Without a generic name the display name
+ * leads, as stored.
  */
 export function stockRowText(p: {
     displayName: string;
@@ -30,10 +31,9 @@ export function stockRowText(p: {
     size: string | null;
     count: number;
 }): { title: string; meta: string } {
-    if (p.genericName && !sameName(p.genericName, p.displayName)) {
-        return { title: p.genericName, meta: metaLine(p.displayName, p.size, p.count) };
-    }
-    return { title: p.displayName, meta: metaLine(p.brand, p.size, p.count) };
+    if (!p.genericName) return { title: p.displayName, meta: metaLine(p.brand, p.size, p.count) };
+    const under = sameName(p.genericName, p.displayName) ? p.brand : p.displayName;
+    return { title: p.genericName, meta: metaLine(under, p.size, p.count) };
 }
 
 /** "5010 0123 4567": digits in groups of four. */
