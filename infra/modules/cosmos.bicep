@@ -31,6 +31,10 @@ var containers = [
   { name: 'savedRecipes', partitionKey: '/householdId' }
   // Settings people change in the app (#120): one document, aiModels (the registered Foundry models and each job's active one).
   { name: 'settings', partitionKey: '/id' }
+  // Ratings (#128, spike #127): one rating per person per dish, one household partition (householdId "household"). Each rating
+  // can carry a 256-dimension embedding (written by #129; this card writes none) searched by a flat vector index. A vector
+  // policy can only be set when a container is created, so it is here from the start. Needs the account capability above.
+  { name: 'ratings', partitionKey: '/householdId', vectorDimensions: 256 }
 ]
 
 resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
@@ -81,7 +85,7 @@ resource sqlContainers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/conta
     parent: database
     name: c.name
     properties: {
-      // defaultTtl only where a container sets one: Cosmos rejects an explicit null (the #77 deploy failed on it).
+      // defaultTtl and the vector policy only where a container sets one: Cosmos rejects an explicit null (the #77 deploy failed on it).
       resource: union(
         {
           id: c.name
@@ -90,19 +94,34 @@ resource sqlContainers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/conta
             kind: 'Hash'
             version: 2
           }
-          // Azure's defaults, stated so what-if matches the live containers.
-          indexingPolicy: {
-            automatic: true
-            indexingMode: 'consistent'
-            includedPaths: [{ path: '/*' }]
-            excludedPaths: [{ path: '/"_etag"/?' }]
-          }
+          // Azure's defaults, stated so what-if matches the live containers. A vector container excludes its vector from the
+          // ordinary index and adds the vector index (spike #127: flat, 256 dimensions, cosine).
+          indexingPolicy: union(
+            {
+              automatic: true
+              indexingMode: 'consistent'
+              includedPaths: [{ path: '/*' }]
+              excludedPaths: contains(c, 'vectorDimensions')
+                ? [{ path: '/embedding/*' }, { path: '/"_etag"/?' }]
+                : [{ path: '/"_etag"/?' }]
+            },
+            contains(c, 'vectorDimensions') ? { vectorIndexes: [{ path: '/embedding', type: 'flat' }] } : {}
+          )
           conflictResolutionPolicy: {
             mode: 'LastWriterWins'
             conflictResolutionPath: '/_ts'
           }
         },
-        contains(c, 'defaultTtl') ? { defaultTtl: c.defaultTtl } : {}
+        contains(c, 'defaultTtl') ? { defaultTtl: c.defaultTtl } : {},
+        contains(c, 'vectorDimensions')
+          ? {
+              vectorEmbeddingPolicy: {
+                vectorEmbeddings: [
+                  { path: '/embedding', dataType: 'float32', distanceFunction: 'cosine', dimensions: c.vectorDimensions }
+                ]
+              }
+            }
+          : {}
       )
     }
   }

@@ -1,6 +1,8 @@
+using CupboardTracker.Application.Ratings;
 using CupboardTracker.Application.Recipes;
 using CupboardTracker.Application.SavedRecipes;
 using CupboardTracker.Application.Stock;
+using CupboardTracker.Application.Tests.Ratings;
 using CupboardTracker.Application.Tests.Stock;
 using CupboardTracker.Application.Users;
 using CupboardTracker.Domain.Products;
@@ -93,6 +95,70 @@ public sealed class SavedRecipeTests
         Assert.Equal(("Creamy penne", "Creamy penne", "Penne", "Gary"), (saved.Title, saved.OriginalTitle, saved.Ingredients[0].GenericName, saved.SavedByName));
         Assert.Equal("Creamy penne", Assert.IsType<SavedRecipeResult.Saved>(again).View.Recipe.Title); // the first save stands
         Assert.Single(repository.Items);
+    }
+
+    [Fact]
+    public async Task Saving_records_a_thumbs_up_for_the_saver_under_the_title_it_was_suggested_with()
+    {
+        var ratings = new FakeRatings();
+        var use = new SavedRecipeUseCases(
+            repository, products, new GetStock(queries, products, TestSettings.Stock(), clock), clock, logs,
+            new RatingUseCases(ratings, clock, new ListLogger<RatingUseCases>()));
+        var id = Guid.NewGuid();
+
+        await use.SaveAsync(Recipe(id, "Sam's traybake", new SavedIngredient("Halloumi", "225 g", null, "Halloumi")) with { OriginalTitle = "Halloumi traybake" }, Gary, CancellationToken.None);
+        await use.SaveAsync(Recipe(id, "Sam's traybake"), Gary, CancellationToken.None); // a retry: still one rating
+
+        var rating = Assert.Single(ratings.Items.Values).Value;
+        Assert.Equal((RatingValues.Up, RatingContexts.Saved, "halloumi traybake", RatingKinds.Recipe, id), (rating.Value, rating.Context, rating.NormalizedTitle, rating.Snapshot.Kind, rating.Snapshot.SavedRecipeId));
+        Assert.Equal(("Halloumi", "Halloumi"), (rating.Snapshot.Ingredients[0].Name, rating.Snapshot.Ingredients[0].GenericName));
+    }
+
+    [Fact]
+    public async Task Saving_a_ready_now_idea_records_a_ready_now_rating()
+    {
+        var ratings = new FakeRatings();
+        var use = new SavedRecipeUseCases(
+            repository, products, new GetStock(queries, products, TestSettings.Stock(), clock), clock, logs,
+            new RatingUseCases(ratings, clock, new ListLogger<RatingUseCases>()));
+
+        await use.SaveAsync(
+            new SaveRecipeRequest(Guid.NewGuid(), SavedRecipeKinds.ReadyNow, "Beans on toast", RecipeMeal.Snack, 5, null,
+                [new SavedIngredient("Baked beans", null, null, null)], [], [], "Microwave.", "microwave"),
+            Gary, CancellationToken.None);
+
+        var rating = Assert.Single(ratings.Items.Values).Value;
+        Assert.Equal((RatingKinds.ReadyNow, "microwave"), (rating.Snapshot.Kind, rating.Snapshot.Equipment[0]));
+    }
+
+    [Fact]
+    public async Task A_failing_ratings_store_never_fails_the_save()
+    {
+        var use = new SavedRecipeUseCases(
+            repository, products, new GetStock(queries, products, TestSettings.Stock(), clock), clock, logs,
+            new RatingUseCases(new ThrowingRatings(), clock, new ListLogger<RatingUseCases>()));
+
+        var result = await use.SaveAsync(Recipe(Guid.NewGuid(), "Penne"), Gary, CancellationToken.None);
+
+        Assert.IsType<SavedRecipeResult.Saved>(result);
+        Assert.Single(repository.Items);
+        Assert.Single(logs.At(Microsoft.Extensions.Logging.LogLevel.Warning));
+    }
+
+    private sealed class ThrowingRatings : IRatingRepository
+    {
+        public Task<Versioned<Rating>?> GetAsync(Guid id, CancellationToken cancellationToken) => throw new InvalidOperationException("down");
+
+        public Task<IReadOnlyList<Rating>> ListAsync(CancellationToken cancellationToken) => throw new InvalidOperationException("down");
+
+        public Task<IReadOnlyList<Rating>> FindOwnAsync(Guid personId, string kind, string normalizedTitle, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("down");
+
+        public Task UpsertAsync(Rating rating, CancellationToken cancellationToken) => throw new InvalidOperationException("down");
+
+        public Task<bool> TryReplaceAsync(Versioned<Rating> current, Rating updated, CancellationToken cancellationToken) => throw new InvalidOperationException("down");
+
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new InvalidOperationException("down");
     }
 
     [Fact]

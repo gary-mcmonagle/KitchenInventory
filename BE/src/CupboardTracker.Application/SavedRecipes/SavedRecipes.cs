@@ -1,4 +1,5 @@
 using CupboardTracker.Application.Products;
+using CupboardTracker.Application.Ratings;
 using CupboardTracker.Application.Recipes;
 using CupboardTracker.Application.Stock;
 using CupboardTracker.Application.Users;
@@ -185,11 +186,13 @@ public abstract record SavedRecipeResult
 
 /// <summary>
 /// Saved recipes (#105): save a snapshot (idempotent by id, so Undo of a delete is the same call), list them newest
-/// first, get one, rename it or change its note, and delete it. Each comes back checked against today's stock. Only
-/// metadata is logged: never titles, notes or recipe text.
+/// first, get one, rename it or change its note, and delete it. Each comes back checked against today's stock. Saving
+/// something the person hasn't rated records a 👍 for them (#128, best-effort). Only metadata is logged: never titles,
+/// notes or recipe text.
 /// </summary>
 public sealed partial class SavedRecipeUseCases(
-    ISavedRecipeRepository repository, IProductRepository products, GetStock stock, TimeProvider clock, ILogger<SavedRecipeUseCases> logger)
+    ISavedRecipeRepository repository, IProductRepository products, GetStock stock, TimeProvider clock, ILogger<SavedRecipeUseCases> logger,
+    RatingUseCases? ratings = null)
 {
     public const int MaxTitle = 80;
     public const int MaxNote = 300;
@@ -248,6 +251,7 @@ public sealed partial class SavedRecipeUseCases(
         }
 
         LogSaved(recipe.Id, recipe.Kind, recipe.Ingredients.Count);
+        await RecordLikeAsync(recipe, user, cancellationToken);
         return new SavedRecipeResult.Saved(await CheckAsync(recipe, cancellationToken));
     }
 
@@ -316,6 +320,32 @@ public sealed partial class SavedRecipeUseCases(
         return deleted;
     }
 
+    /// <summary>Saving something you haven't rated records a 👍 for you (#128). A failure here never fails the save.</summary>
+    private async Task RecordLikeAsync(SavedRecipe recipe, CurrentUser user, CancellationToken cancellationToken)
+    {
+        if (ratings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // The title as it was suggested, so a rename before saving still finds the rating of that dish.
+            await ratings.RecordSavedAsync(
+                new RatingSnapshot(
+                    recipe.Kind == SavedRecipeKinds.ReadyNow ? RatingKinds.ReadyNow : RatingKinds.Recipe,
+                    recipe.OriginalTitle, recipe.Meal, recipe.Diet, recipe.TotalMinutes,
+                    [.. recipe.Ingredients.Select(i => new RatingIngredient(i.Name, i.GenericName))],
+                    recipe.Appliance is null or "none" ? [] : [recipe.Appliance],
+                    recipe.Id),
+                user, cancellationToken);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            LogLikeFailed(recipe.Id, e);
+        }
+    }
+
     private async Task<SavedRecipeView> CheckAsync(SavedRecipe recipe, CancellationToken cancellationToken) =>
         new StockStatusChecker(await InStockAsync(cancellationToken)).Check(recipe);
 
@@ -372,4 +402,7 @@ public sealed partial class SavedRecipeUseCases(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Saved recipe {Id} removed.")]
     private partial void LogDeleted(Guid id);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Saved recipe {Id}: recording the 👍 failed; the save went ahead.")]
+    private partial void LogLikeFailed(Guid id, Exception exception);
 }
