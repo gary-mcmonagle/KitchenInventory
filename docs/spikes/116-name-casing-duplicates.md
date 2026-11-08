@@ -27,11 +27,18 @@ Jev matching. Why does it happen, how widespread is it, and what is the fix?
 
 ## 3. What the photo shows
 
-I can't open the attached photo (the Trello tools can't), so the write-up doesn't depend on it. Every pair of the kind Gary describes
-that is in stock today is explained by section 5.1, for example "Udon Noodles" and "UDON NOODLES" (two barcoded Open Food Facts
-products, one stored in capitals), "potatoes" and "Potatoes" (a photo-added loose product and a barcoded one) or "Baked beans" and
-"Baked Beans". **To confirm which one the photo showed, Gary needs to say which names and on which screen** (asked in the card
-comment).
+Gary's photo (the stock list) shows two rows: **"carrots"** (x3, "Opened 18 Oct") and **"Carrots"** ("British carrots · 1kg", bought 19 Oct).
+The live data matches it exactly, and it is the display rule in section 2, **not a pair of same-named products**:
+
+- "carrots" is a **loose product added from a photo**. Its display name is "carrots", the generic name (Jev, sentence case) is "Carrots", and
+  those are equal ignoring case, so the row leads with the display name **as stored**: "carrots".
+- "Carrots" is a **barcoded Open Food Facts product** named "British carrots" (1 kg). Its generic name is also "Carrots", but its display name differs
+  from that, so the row leads with the **generic name**: "Carrots", with "British carrots" underneath.
+
+So the same generic name shows as two spellings depending on which rule each product falls under. The two products are not in the
+same-name group of section 5.1 (their display names differ: "carrots" and "British carrots"); they are one of the 14 casing groups in
+section 5.4. Nothing was duplicated by image identification or manual input, and Jev matching wouldn't change this: the Jev generic
+name already is the same. The loose product's photo-recognised name "carrots" is correct and is kept.
 
 ## 4. How names get into the data
 
