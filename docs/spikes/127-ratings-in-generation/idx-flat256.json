@@ -1,0 +1,1 @@
+{"indexingMode":"consistent","automatic":true,"includedPaths":[{"path":"/*"}],"excludedPaths":[{"path":"/embedding/*"},{"path":"/\"_etag\"/?"}],"vectorIndexes":[{"path":"/embedding","type":"flat"}]}
