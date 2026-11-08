@@ -4,7 +4,7 @@
 
 **Answer in one paragraph.** It works, it's cheap, and it needs **one infrastructure change that is already done** (Cosmos vector search on the existing serverless account, and a `text-embedding-3-small` deployment). Keep the ratings in a new **`ratings`** container (partition `/household`, an embedding on each rating, a **`flat` vector index at 256 dimensions**). A request embeds its own context and takes the **20 nearest dishes**; a **timer** rewrites the **taste profile** from the dish-level ratings a few minutes after a change (at most 4 a day). Send the profile and the examples in their own `<taste>` section, **only from 10 ratings up**. On luna the profile turned the share of suggestions in the household's liked formats from **4 in 15 to 10 in 15** for 150 extra prompt tokens; sending **every rating** (6,000 tokens at 300 ratings, about 40,000 at 2,000) did **no better than sending nothing**, so it is rejected. Running cost is about **40p a year** (3p a month) at 500 ratings and the same at 2,000, far under the card's 20 to 50p a *month* guess. **No new model job**: the `recipes` job is right for the profile rewrite.
 
-All data is **made up** (no household data was read or used). The spike ran on the live account with three temporary containers (`spike-ratings-flat256`, `-qflat512`, `-disk512`, to be deleted by Gary: see the end), 65 luna calls (**£0.028 in all**) and about 20,000 embedding tokens. Scripts and the container policies are in [`127-ratings-in-generation/`](127-ratings-in-generation/).
+All data is **made up** (no household data was read or used). The spike ran on the live account with three temporary containers (`spike-ratings-flat256`, `-qflat512`, `-disk512`, deleted afterwards: see the end), 65 luna calls (**£0.028 in all**) and about 20,000 embedding tokens. Scripts and the container policies are in [`127-ratings-in-generation/`](127-ratings-in-generation/).
 
 ## 1. Vector search on our Cosmos account
 
@@ -158,9 +158,9 @@ That is about **3p a month**, far under the card's 20 to 50p guess. (Rewrites do
 * **#129 verification note:** the made-up data couldn't strictly test "disliked ingredients don't appear" (one mushroom idea in the baseline); the verification steps on #129 (seed a mushroom pattern, ask for three dinners) are the real test, and should be run on at least 10 ideas.
 * No new model job (so no follow-up to #120, #121 or #123), unless the recipes job is switched away from luna (then re-run the model tests).
 
-## Clean-up (done by Gary; the agent's login can't delete these)
+## Clean-up (done 2026-11-01)
 
-The three temporary containers (`spike-ratings-flat256`, `spike-ratings-qflat512`, `spike-ratings-disk512`, 2,000, 2,000 and 300 made-up documents) and the three data-contributor role assignments on them. Delete the containers, then the assignments (the containers' own assignments go with them in practice, but remove them explicitly):
+The three temporary containers (`spike-ratings-flat256`, `spike-ratings-qflat512`, `spike-ratings-disk512`, 2,000, 2,000 and 300 made-up documents) and the three data-contributor role assignments on them were deleted by Gary (the agent's login can't delete these) with the commands below, and checked afterwards: no `spike-*` container and no spike-scoped assignment remains.
 
 ```bash
 for v in flat256 qflat512 disk512; do az cosmosdb sql container delete -g rg-cupboard-tracker -a cosmos-cupboard-ugxum7 -d cupboard -n spike-ratings-$v --yes; done
