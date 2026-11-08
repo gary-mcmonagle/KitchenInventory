@@ -556,6 +556,68 @@ export interface SavedRecipe {
     servingsVeg?: number;
 }
 
+/** Ratings (#128): 👍 or 👎, what it was of, and when it was rated. */
+export type RatingValue = "up" | "down";
+export type RatingKind = "recipe" | "readyNow" | "plannedMeal";
+export type RatingContext = "suggested" | "readyNow" | "saved" | "plannedMeal" | "afterCooking";
+export type RatingReason =
+    "tooSpicy" | "tooMuchEffort" | "tookTooLong" | "notFilling" | "ingredient" | "justNotForUs";
+
+/** One person's rating of a dish, as the API returns it. `mine` is whether the signed-in person made it. */
+export interface Rating {
+    id: string;
+    rating: RatingValue;
+    reasons: RatingReason[];
+    dislikedIngredients: string[];
+    context: RatingContext;
+    ratedAt: string;
+    updatedAt: string;
+    personName: string;
+    mine: boolean;
+    kind: RatingKind;
+    title: string;
+    /** The dish's identity within its kind: trimmed, spaces collapsed, lower case. */
+    key: string;
+    meal: RecipeMeal;
+    diet: Diet;
+    totalMinutes: number;
+    ingredients: Array<{ name: string; genericName: string | null }>;
+    equipment: string[];
+    savedRecipeId: string | null;
+    planId: string | null;
+    mealId: string | null;
+}
+
+/** A dish and everyone's ratings of it, newest first (GET /api/ratings). */
+export interface RatedDish {
+    kind: RatingKind;
+    key: string;
+    title: string;
+    meal: RecipeMeal;
+    diet: Diet;
+    totalMinutes: number;
+    latestAt: string;
+    ratings: Rating[];
+}
+
+/** PUT /api/ratings/{id}: the rating and a small snapshot of what was rated (no steps, no amounts). */
+export interface RatingBody {
+    rating: RatingValue;
+    reasons?: RatingReason[];
+    dislikedIngredients?: string[];
+    context: RatingContext;
+    kind: RatingKind;
+    title: string;
+    meal: RecipeMeal;
+    totalMinutes: number;
+    diet?: Diet;
+    ingredients: Array<{ name: string; genericName?: string | null }>;
+    equipment?: string[];
+    savedRecipeId?: string | null;
+    planId?: string | null;
+    mealId?: string | null;
+}
+
 /** PUT /api/saved-recipes/{id}: what's being saved (a snapshot of what was shown). */
 export interface SaveRecipeBody {
     kind: "recipe" | "readyNow";
@@ -1033,6 +1095,29 @@ export class ApiClient {
 
     deleteSavedRecipe(id: string): Promise<void> {
         return this.send("DELETE", `/api/saved-recipes/${encodeURIComponent(id)}`);
+    }
+
+    /** The household's ratings grouped by dish, the dish with the newest rating first (#128). */
+    ratings(): Promise<{ total: number; dishes: RatedDish[] }> {
+        return this.get("/api/ratings");
+    }
+
+    /** Rates a dish. Idempotent by id; rating the same dish again replaces your earlier rating. */
+    putRating(id: string, body: RatingBody): Promise<Rating> {
+        return this.send("PUT", `/api/ratings/${encodeURIComponent(id)}`, body);
+    }
+
+    /** Changes the reasons of your own 👎. */
+    updateRating(
+        id: string,
+        change: { reasons: RatingReason[]; dislikedIngredients: string[] },
+    ): Promise<Rating> {
+        return this.send("PATCH", `/api/ratings/${encodeURIComponent(id)}`, change);
+    }
+
+    /** Takes back your own rating (204 whether or not it was there). */
+    deleteRating(id: string): Promise<void> {
+        return this.send("DELETE", `/api/ratings/${encodeURIComponent(id)}`);
     }
 
     /** Up to 3 in-stock things that would improve the recipe (#104; Jev, quick, not rate limited). */

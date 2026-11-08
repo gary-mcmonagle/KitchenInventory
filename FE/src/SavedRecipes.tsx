@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { QuickIdea, Recipe, RecipeMeal, RecipeStep, SaveRecipeBody, SavedRecipe } from "./api";
+import { RatePills } from "./RatingControls";
+import { savedSnapshot } from "./ratings";
 import { PlateLegend, PlateTag, servingsText, stepClass, stepNumberClass } from "./Plates";
 import plateStyles from "./Plates.module.css";
 import { useOptionalShoppingList } from "./useShoppingList";
@@ -605,6 +607,8 @@ export function SavedRecipeView({
                     </div>
                     {recipe.diet === "half" && <PlateLegend />}
                 </div>
+
+                <RatePills snapshot={savedSnapshot(recipe)} context="saved" />
 
                 {saved && (
                     <div className={styles.noteCard}>

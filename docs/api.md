@@ -951,6 +951,58 @@ For `kind: "readyNow"`, send `uses` (`[{ name, productId }]`) instead of `ingred
 
 **204**; **404** if there's no such one. The app's Undo puts it back with `PUT`.
 
+## Ratings (#128, spike #127)
+
+The household's 👍 / 👎 of recipes, Ready now ideas and planned meals, **per person**. Every endpoint needs a signed-in user (**401** without a token). Ids come from the app (UUIDs), so a rating sent twice is kept once. You change or remove **only your own** rating (**403** for someone else's). Logs record ids, the rating, its context and counts, **never** titles, ingredients or reasons.
+
+**A rating**, as every endpoint returns it (never the person's object id: `mine` says whether it's yours):
+
+```json
+{
+  "id": "…", "rating": "up" | "down", "reasons": ["ingredient", "tooSpicy"], "dislikedIngredients": ["Peppers"],
+  "context": "suggested" | "readyNow" | "saved" | "plannedMeal" | "afterCooking",
+  "ratedAt": "…", "updatedAt": "…", "personName": "Sam", "mine": true,
+  "kind": "recipe" | "readyNow" | "plannedMeal", "title": "Halloumi traybake", "key": "halloumi traybake",
+  "meal": "dinner", "diet": "any", "totalMinutes": 40,
+  "ingredients": [{ "name": "Halloumi", "genericName": "Halloumi" | null }], "equipment": ["ovenGrill"],
+  "savedRecipeId": "…" | null, "planId": "…" | null, "mealId": "dinner-2" | null
+}
+```
+
+- **One rating per person per dish.** A dish is its `kind` and its `title` with case and extra spaces ignored (`key`: trimmed, spaces collapsed, lower case; the app computes the same). Rating a dish again **replaces** your earlier rating of it (a different `id` removes the old document), and other people's ratings of it are separate.
+- **Reasons** go only with 👎: `tooSpicy`, `tooMuchEffort`, `tookTooLong`, `notFilling`, `ingredient`, `justNotForUs`. `ingredient` needs `dislikedIngredients` (1 to 5 names, each up to 100 characters); those names are kept only with that reason.
+- **Context** says when it was rated: `suggested` (on a recipe the app made), `readyNow` (an idea), `saved` (from a saved recipe, or the 👍 recorded by saving), `plannedMeal`, `afterCooking` ("How was it?" after a planned meal is ticked Made, #126).
+- **The snapshot** (`kind`, `title`, `meal`, `diet`, `totalMinutes`, `ingredients`, `equipment`, the links) is small on purpose: no steps and no amounts. `title` 1–80 characters, at most 15 ingredients (blank ones dropped), at most 10 kit ids, `totalMinutes` kept between 0 and 600.
+
+### `GET /api/ratings`
+
+**200** `{ "total": 24, "dishes": [ { "kind", "key", "title", "meal", "diet", "totalMinutes", "latestAt", "ratings": [ <rating>, … ] } ] }`: every rating, **grouped by dish**, the dish with the newest rating first and each dish's ratings newest first. The app shows Our taste from this and finds the signed-in person's rating of what's on screen by `kind` and `key` (`mine: true`).
+
+### `PUT /api/ratings/{id}`
+
+```json
+{
+  "rating": "down", "reasons": ["ingredient", "tooSpicy"], "dislikedIngredients": ["Peppers"], "context": "suggested",
+  "kind": "recipe", "title": "…", "meal": "dinner", "totalMinutes": 40, "diet": "any",
+  "ingredients": [{ "name": "…", "genericName": null }], "equipment": ["hob"],
+  "savedRecipeId": null, "planId": null, "mealId": null
+}
+```
+
+`reasons`, `dislikedIngredients`, `ingredients`, `equipment`, `diet` and the links are optional. **Idempotent:** a second `PUT` with the same body (and id) changes nothing. **200** the rating; **400** for a bad body, rating, context, kind, meal, title, reason, or reasons on a 👍; **403** if that id is someone else's.
+
+### `PATCH /api/ratings/{id}`
+
+`{ "reasons": ["notFilling"], "dislikedIngredients": [] }` replaces the reasons of your own 👎 (the "What wasn't right?" sheet). **200** the rating; **400** for a bad reason or a 👍; **403** someone else's; **404** if it's gone; **409** if it kept changing meanwhile (ETag, retried first).
+
+### `DELETE /api/ratings/{id}`
+
+Takes back your own rating. **Idempotent: 204** whether or not it was there; **403** for someone else's. The app's Undo is a `PUT` of the same body.
+
+### Saving records a 👍
+
+`PUT /api/saved-recipes/{id}` also records a 👍 (context `saved`, linked by `savedRecipeId`) for the person saving, **unless they have rated that dish already** (matched by the recipe's `originalTitle`, so renaming before saving still finds it). It runs after the save, is best-effort (a failure is a warning and never fails the save), and happens only when the saved recipe is created, not on a retry. **Unsaving never removes a rating.**
+
 ## Shopping list (#84)
 
 One list for the household. Every endpoint needs a signed-in user (**401** without a token). Item ids and change ids come from the app (UUIDs), so a write sent twice is applied once (ready for offline use). People are shown by name, never by object ID.

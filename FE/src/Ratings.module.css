@@ -1,0 +1,481 @@
+/* Rating buttons, the reasons sheet and Our taste (#128): project/RateRecipe.dc.html and project/OurTaste.dc.html. */
+
+/* "Fancy this?" with Like and Not for us, under a recipe's heading. */
+.rateRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rateLabel {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-strong);
+}
+
+.pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border-radius: var(--radius-chip);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink-strong);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.pillUp[aria-pressed="true"] {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    border-color: var(--accent);
+}
+
+.pillDown[aria-pressed="true"] {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+    border-color: var(--danger-fg);
+}
+
+.thumbDown {
+    transform: rotate(180deg);
+}
+
+.note {
+    margin-top: -4px;
+    font-size: 13px;
+    color: var(--muted);
+    text-align: right;
+}
+
+.noteFailed {
+    color: var(--danger-fg);
+    font-weight: 600;
+}
+
+/* The two icon buttons on a Ready now idea. */
+.iconRow {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.iconNote {
+    flex: 1;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.icon {
+    width: var(--touch);
+    height: var(--touch);
+    border: 0;
+    border-radius: 22px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.iconUp[aria-pressed="true"] {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.iconDown[aria-pressed="true"] {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}
+
+/* "What wasn't right?" */
+.scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: var(--scrim);
+}
+
+.sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 31;
+    margin: 0 auto;
+    max-width: var(--design-width);
+    padding: 10px var(--page-x) 28px;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 -8px 24px rgba(28, 42, 36, 0.15);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.sheet:focus {
+    outline: none;
+}
+
+.grab {
+    align-self: center;
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+}
+
+.sheetTitle {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.sheetSub {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.chip {
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.chip[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+}
+
+.which {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border-radius: var(--radius-input);
+    background: var(--ground);
+}
+
+.whichTitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink-strong);
+}
+
+.smallChip {
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: 18px;
+    font-size: 13px;
+}
+
+.sheetButtons {
+    display: flex;
+    gap: 10px;
+}
+
+.skip,
+.done {
+    flex: 1;
+    min-height: 48px;
+    border-radius: var(--radius-input);
+    font: inherit;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.skip {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.done {
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+    font-weight: 700;
+}
+
+/* Our taste */
+.page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+}
+
+.top {
+    padding: 14px 12px 0;
+    display: flex;
+    align-items: center;
+}
+
+.back {
+    width: var(--touch);
+    height: var(--touch);
+    border-radius: 22px;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+}
+
+.header {
+    padding: 4px var(--page-x) 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.title {
+    margin: 0;
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.subtitle {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.body {
+    flex: 1;
+    padding: 12px var(--page-x) 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.tabs {
+    display: flex;
+    padding: 4px;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+}
+
+.tab {
+    flex: 1;
+    min-height: var(--touch);
+    border: 0;
+    border-radius: var(--radius-button);
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.tab[aria-selected="true"] {
+    background: var(--accent);
+    color: #ffffff;
+}
+
+.rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 72px;
+    padding: 10px 6px 10px 14px;
+    border-bottom: 1px solid var(--off-bg);
+}
+
+.row:last-child {
+    border-bottom: 0;
+}
+
+.rowText {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.rowTitleLine {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.rowTitle {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.cooked {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.rowMeta {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.rowWho {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-strong);
+}
+
+.rowReasons {
+    font-size: 13px;
+    color: var(--danger-fg);
+}
+
+.rowActions {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.remove {
+    width: var(--touch);
+    height: var(--touch);
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.change {
+    border: 0;
+    background: transparent;
+    min-height: 32px;
+    padding: 0 8px;
+    color: var(--accent-dark);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.empty {
+    padding: 24px 14px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+}
+
+.footnote {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.errorCard {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: var(--radius-input);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 14px;
+}
+
+.errorCard button {
+    margin-left: auto;
+    min-height: var(--touch);
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--radius-button);
+    background: var(--surface);
+    color: var(--warn-fg);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 24px;
+    z-index: 40;
+    margin: 0 auto;
+    max-width: calc(var(--design-width) - 32px);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 52px;
+    padding: 0 6px 0 16px;
+    border-radius: var(--radius-input);
+    background: var(--ink);
+    color: #ffffff;
+    font-size: 15px;
+    box-shadow: 0 8px 24px rgba(28, 42, 36, 0.25);
+}
+
+.toast span {
+    flex: 1;
+}
+
+.undo {
+    min-height: var(--touch);
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    color: var(--toast-action);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}

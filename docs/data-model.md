@@ -564,6 +564,29 @@ The household's saved recipes and Ready now ideas, in **one partition**: `househ
 - **Stock status** isn't stored: the API works it out against today's stock on every read (see `docs/api.md`, Saved recipes).
 - Created once (`PUT` is idempotent by `id`); renames and notes are ETag-checked replaces; removed by delete (Undo creates it again).
 
+## Container: `ratings` (#128, spike #127)
+
+The household's 👍 / 👎 of dishes, **per person**, in **one partition**: `householdId` is always `"household"` (as `savedRecipes`; every rating is read together for Our taste, and a vector search over them is then a single-partition query). One document per person per dish.
+
+```json
+{
+  "id": "<the app's UUID>", "householdId": "household", "personId": "<oid>", "personName": "Sam",
+  "rating": "up" | "down", "reasons": ["ingredient", "tooSpicy"], "dislikedIngredients": ["Peppers"],
+  "context": "suggested" | "readyNow" | "saved" | "plannedMeal" | "afterCooking", "ratedAt": "…", "updatedAt": "…",
+  "kind": "recipe" | "readyNow" | "plannedMeal", "title": "Halloumi traybake", "normalizedTitle": "halloumi traybake",
+  "meal": "dinner", "diet": "any", "totalMinutes": 40,
+  "ingredients": [{ "name": "Halloumi", "genericName": "Halloumi" }], "equipment": ["ovenGrill"],
+  "savedRecipeId": "…", "planId": "…", "mealId": "dinner-2",
+  "embedding": [0.01, …]
+}
+```
+
+- **A snapshot, not a recipe:** the dish's title, meal, diet, minutes, at most 15 main ingredients (name and generic name), kit and links when there are any. No steps and no amounts.
+- **One per person per dish:** `personId` + `kind` + `normalizedTitle` (trimmed, spaces collapsed, lower case). The server finds it by that query on every `PUT`; rating again writes the new document and deletes the old one. Another person's rating of the same dish is its own document.
+- **Reasons** only on `down`; `dislikedIngredients` only with the `ingredient` reason. `savedRecipeId`, `planId` and `mealId` are written only when there is one.
+- **The vector (spike #127):** the container has a **vector embedding policy** (`/embedding`, `float32`, `cosine`, **256 dimensions**) and a **`flat` vector index**, and `/embedding/*` is excluded from the ordinary index. A vector policy can only be set when a container is created, so it is here now; **#128 writes no embeddings** (the next card, #129, does: `text-embedding-3-small` at 256 dimensions, from a queue). Reads here list the fields and never ask for `embedding`, and a replace drops it, which #129 queues again on every change. Measured on 300 and 2,000 made-up ratings: a top-20 query is 8 and 31 RU, a write 13 RU (`docs/spikes/127-ratings-in-generation.md`). It needs the account capability `EnableNoSQLVectorSearch`.
+- Written by upsert (idempotent by `id`); reasons are an ETag-checked replace; removed by delete (Undo creates it again). The ratings are never changed by anyone but the person who made them.
+
 ## Container: `pushSeen` (#77)
 
 Short-lived documents, partitioned by **`/eventKey`**, each with its own **`ttl`** (the container's default is a day), so Cosmos deletes them itself.

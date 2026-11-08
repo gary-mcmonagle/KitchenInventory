@@ -28,7 +28,9 @@ import {
     stepNumberClass,
 } from "./Plates";
 import plateStyles from "./Plates.module.css";
-import { itemPath, navigate, PLAN_PATH } from "./router";
+import { RateIcons, RatePills } from "./RatingControls";
+import { ideaSnapshot, recipeSnapshot } from "./ratings";
+import { itemPath, navigate, PLAN_PATH, TASTE_PATH } from "./router";
 import { AdjustSheet, adjustmentLine, type AdjustChoices } from "./RecipeAdjust";
 import styles from "./Recipes.module.css";
 import {
@@ -45,6 +47,7 @@ import planStyles from "./Plans.module.css";
 import savedStyles from "./SavedRecipes.module.css";
 import { newId } from "./shoppingList";
 import { TOAST_MS } from "./StockScreen";
+import { useOptionalRatings } from "./useRatings";
 
 const MEALS: Array<{ id: RecipeMeal; label: string }> = [
     { id: "breakfast", label: "Breakfast" },
@@ -234,6 +237,10 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
     };
     useEffect(() => () => clearTimeout(toastTimer.current), []);
 
+    // Ratings (#128): saving something unrated records a 👍 on the server, so read them again after a save.
+    const ratings = useOptionalRatings();
+    const refreshRatings = ratings?.refresh;
+
     const loadSaved = useCallback(() => {
         api.savedRecipes()
             .then((s) => {
@@ -286,6 +293,7 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
         remember(item, id);
         try {
             upsert(await api.saveRecipe(id, body));
+            refreshRatings?.();
             showToast("Saved to Hungry?", () => {
                 setToast(null);
                 void unsaveItem(item, id, body, false);
@@ -340,6 +348,7 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
         try {
             const back = await api.saveRecipe(recipe.id, savedToSave(recipe));
             upsert(back);
+            refreshRatings?.();
             setPhase((p) => (p.kind === "saved" && p.recipe.id === recipe.id ? { ...p, recipe: back } : p));
         } catch (error) {
             setSavedFlag(false);
@@ -675,6 +684,7 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                                 <span>Plan meals</span>
                                 <span className={planStyles.entrySub}>A few days at a time</span>
                             </a>
+                            <OurTasteRow />
                             <div
                                 className={
                                     boxOpen
@@ -734,6 +744,29 @@ export function RecipesScreen({ api, now }: { api: ApiClient; now?: Date }) {
                 </div>
             )}
         </div>
+    );
+}
+
+/** "Our taste · 24 ratings ›" on Hungry? (#128): the way in to the household's ratings. Shown only inside the signed-in app. */
+function OurTasteRow() {
+    const ratings = useOptionalRatings();
+    if (!ratings) return null;
+    return (
+        <a
+            href={TASTE_PATH}
+            className={planStyles.entryRow}
+            onClick={(e) => {
+                e.preventDefault();
+                navigate(TASTE_PATH);
+            }}
+        >
+            <span>Our taste</span>
+            <span className={planStyles.entrySub}>
+                {ratings.total === 0
+                    ? "Like or not, it adds up"
+                    : `${ratings.total} ${ratings.total === 1 ? "rating" : "ratings"} ›`}
+            </span>
+        </a>
     );
 }
 
@@ -1208,6 +1241,8 @@ function RecipeView({
                     {recipe.diet === "half" && <PlateLegend />}
                 </div>
 
+                <RatePills snapshot={recipeSnapshot(recipe)} context="suggested" />
+
                 <CheckBeforeCooking warnings={recipe.warnings} />
 
                 {recipe.usesUp.length > 0 && (
@@ -1619,6 +1654,7 @@ function IdeasView({
                                     )}
                                 </div>
                             )}
+                            <RateIcons snapshot={ideaSnapshot(idea, meal)} context="readyNow" />
                         </article>
                     );
                 })}

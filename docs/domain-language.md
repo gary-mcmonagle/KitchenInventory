@@ -292,6 +292,13 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Stock status (of a saved recipe)** – whether each ingredient is in today's stock: **have** (the same product, or any product with the same generic name, or a matching name), **use first** (had, and due soon), or **missing**. Basic staples always count as had. The recipe shows "You've got everything" (with "Uses up …") or "Missing: …", and **Add missing to the list** puts the missing ones on the shopping list by generic name.
 
+**Rating** – a person's 👍 or 👎 of a dish (a recipe, a Ready now idea or a planned meal), kept per person (#128, spike #127). **Save** stays the favourite: saving something you haven't rated also records a 👍 for you, and unsaving never removes a rating. A person has **one rating per dish** (same kind and same title, ignoring case and spaces): rating it again replaces theirs, while other people's ratings of it are their own. A 👎 can carry optional **reasons** (too spicy, too much effort, took too long, not filling, didn't like an ingredient: which one, just not for us). A rating keeps a small **snapshot** of the dish (title, meal, diet, minutes, main ingredients, kit, no steps or amounts) and a **context**: rated when **suggested**, on a **Ready now** idea, from a **saved** recipe, on a **planned meal**, or **after cooking**.
+- In code: `Rating`, `RatingSnapshot`, `RatingUseCases`, `IRatingRepository`; container `ratings`
+
+**After cooking** – a rating made from "How was it?" after a planned meal is ticked **Made** (#126): the same 👍 / 👎 with context `afterCooking`. It replaces an earlier rating of the same dish by the same person. (Not built yet: it needs the Plans screens, #126.)
+
+**Our taste** – the page that lists the household's ratings (#128): two tabs, **Liked** and **Not for us**, newest first, each dish with who rated it, the reasons and "After cooking" where it was. A dish people disagree about is in both tabs. You can change or remove your own rating from its row (with Undo), never someone else's. The top of the page is kept for the **taste profile** that a later card (#129) adds.
+
 **Push notification** – a message that appears on a household member's phone or computer from Cupboard Tracker, even when the app is closed (#77). Only on devices where they turned notifications on; on iPhone, only in the app added to the Home Screen.
 - In code: `SendPush`, `PushMessage`, `IPushSender`
 

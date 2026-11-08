@@ -109,6 +109,9 @@ export function matchAiModelTestPath(path: string): string | null {
     return match && match[1] !== "add" ? decodeURIComponent(match[1]) : null;
 }
 export const RECIPES_PATH = "/recipes";
+
+/** Our taste (#128): the household's ratings, reached from Hungry?. */
+export const TASTE_PATH = "/taste";
 export const LIST_PATH = "/list";
 
 /** "What is this?" for a store-label check-in (#58). */

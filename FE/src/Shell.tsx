@@ -8,6 +8,7 @@ import { ItemScreen } from "./ItemScreen";
 import { ListScreen } from "./ListScreen";
 import { ModelTestScreen } from "./ModelTestScreen";
 import { NameScreen } from "./NameScreen";
+import { OurTasteScreen } from "./OurTasteScreen";
 import { PlanChooseScreen } from "./PlanChooseScreen";
 import { PlanScreen } from "./PlanScreen";
 import { refreshPushSubscription } from "./push";
@@ -29,11 +30,13 @@ import {
     savedScroll,
     LEGACY_SCANNERS_PATH,
     SETTINGS_PATH,
+    TASTE_PATH,
     usePath,
     useTabResets,
 } from "./router";
 import { SettingsScreen } from "./SettingsScreen";
 import { StockScreen } from "./StockScreen";
+import { RatingsProvider } from "./useRatings";
 import { ShoppingListProvider } from "./useShoppingList";
 
 /** The signed-in app: the stock list (with a muted footer for verification), item detail, naming or editing a
@@ -92,62 +95,69 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
         !!(naming || editing || item || assigning || aiModelTest) ||
         [ADD_PATH, SETTINGS_PATH, AI_MODELS_PATH, AI_MODEL_ADD_PATH].includes(path);
     const onRecipes = path === RECIPES_PATH;
-    const overRecipes = !!item && cameFrom() === RECIPES_PATH;
+    const overRecipes = (!!item && cameFrom() === RECIPES_PATH) || path === TASTE_PATH; // Our taste opens over Hungry? (#128)
     useLayoutEffect(() => {
         window.history.scrollRestoration = "manual";
         window.scrollTo(0, onStock ? savedScroll("/") : onRecipes ? savedScroll(RECIPES_PATH) : 0);
     }, [onStock, onRecipes, path]);
     return (
         <ShoppingListProvider api={api}>
-            <main className={styles.page}>
-                {(onStock || overStock) && (
-                    <div hidden={!onStock} className={styles.layer}>
-                        <StockScreen key={resets} api={api} visible={onStock} />
-                        <footer className={styles.footer}>{footer}</footer>
-                        <BottomNav current="stock" />
-                    </div>
-                )}
-                {(onRecipes || overRecipes) && (
-                    <div hidden={!onRecipes} className={styles.layer}>
-                        <RecipesScreen key={resets} api={api} />
-                        <BottomNav current="recipes" />
-                    </div>
-                )}
-                {naming ? (
-                    <NameScreen key={naming} api={api} productId={naming} />
-                ) : editing ? (
-                    <NameScreen key={`edit-${editing}`} api={api} productId={editing} mode="edit" />
-                ) : item ? (
-                    <ItemScreen key={item} api={api} productId={item} />
-                ) : path === ADD_PATH ? (
-                    <AddScreen api={api} />
-                ) : assigning ? (
-                    <AddScreen key={assigning} api={api} assignScanId={assigning} />
-                ) : path === LIST_PATH ? (
-                    <>
-                        <ListScreen key={resets} api={api} />
-                        <BottomNav current="list" />
-                    </>
-                ) : plan ? (
-                    <PlanScreen key={plan} api={api} planId={plan} />
-                ) : path === PLAN_PATH ? (
-                    <PlanChooseScreen api={api} />
-                ) : aiModelTest ? (
-                    <ModelTestScreen key={aiModelTest} api={api} modelId={aiModelTest} />
-                ) : path === AI_MODEL_ADD_PATH ? (
-                    <ModelTestScreen api={api} modelId={null} />
-                ) : path === AI_MODELS_PATH ? (
-                    <>
-                        <AiModelsScreen api={api} />
-                        <BottomNav current="stock" />
-                    </>
-                ) : path === SETTINGS_PATH ? (
-                    <>
-                        <SettingsScreen api={api} />
-                        <BottomNav current="stock" />
-                    </>
-                ) : null}
-            </main>
+            <RatingsProvider api={api}>
+                <main className={styles.page}>
+                    {(onStock || overStock) && (
+                        <div hidden={!onStock} className={styles.layer}>
+                            <StockScreen key={resets} api={api} visible={onStock} />
+                            <footer className={styles.footer}>{footer}</footer>
+                            <BottomNav current="stock" />
+                        </div>
+                    )}
+                    {(onRecipes || overRecipes) && (
+                        <div hidden={!onRecipes} className={styles.layer}>
+                            <RecipesScreen key={resets} api={api} />
+                            <BottomNav current="recipes" />
+                        </div>
+                    )}
+                    {naming ? (
+                        <NameScreen key={naming} api={api} productId={naming} />
+                    ) : editing ? (
+                        <NameScreen key={`edit-${editing}`} api={api} productId={editing} mode="edit" />
+                    ) : item ? (
+                        <ItemScreen key={item} api={api} productId={item} />
+                    ) : path === ADD_PATH ? (
+                        <AddScreen api={api} />
+                    ) : assigning ? (
+                        <AddScreen key={assigning} api={api} assignScanId={assigning} />
+                    ) : path === LIST_PATH ? (
+                        <>
+                            <ListScreen key={resets} api={api} />
+                            <BottomNav current="list" />
+                        </>
+                    ) : path === TASTE_PATH ? (
+                        <>
+                            <OurTasteScreen />
+                            <BottomNav current="recipes" />
+                        </>
+                    ) : plan ? (
+                        <PlanScreen key={plan} api={api} planId={plan} />
+                    ) : path === PLAN_PATH ? (
+                        <PlanChooseScreen api={api} />
+                    ) : aiModelTest ? (
+                        <ModelTestScreen key={aiModelTest} api={api} modelId={aiModelTest} />
+                    ) : path === AI_MODEL_ADD_PATH ? (
+                        <ModelTestScreen api={api} modelId={null} />
+                    ) : path === AI_MODELS_PATH ? (
+                        <>
+                            <AiModelsScreen api={api} />
+                            <BottomNav current="stock" />
+                        </>
+                    ) : path === SETTINGS_PATH ? (
+                        <>
+                            <SettingsScreen api={api} />
+                            <BottomNav current="stock" />
+                        </>
+                    ) : null}
+                </main>
+            </RatingsProvider>
         </ShoppingListProvider>
     );
 }
@@ -167,6 +177,7 @@ function matchKnownPath(path: string): boolean {
             ADD_PATH,
             LIST_PATH,
             RECIPES_PATH,
+            TASTE_PATH,
             SETTINGS_PATH,
             AI_MODELS_PATH,
             AI_MODEL_ADD_PATH,
