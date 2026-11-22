@@ -36,7 +36,7 @@ public sealed class CosmosScannersQueries(CosmosContainers containers) : IScanne
 
     public async Task<IReadOnlyList<Unit>> GetCheckedOutSinceAsync(DateTimeOffset since, CancellationToken cancellationToken)
     {
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.status = 'checkedOut' AND c.checkedOutAt >= @since")
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.status = 'checkedOut' AND c.checkedOutAt >= @since AND (NOT IS_DEFINED(c.checkOutReason) OR c.checkOutReason != 'undoneCheckIn')")
             .WithParameter("@since", CosmosJson.Timestamp(since));
         var rows = await CosmosJson.QueryAsync(containers.InventoryItems, query, partitionKey: null, max: null, cancellationToken);
         return rows.Select(CosmosUnitRepository.ToUnit).ToList();

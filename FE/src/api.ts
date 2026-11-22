@@ -137,6 +137,19 @@ export interface ClearOutResult {
     }>;
 }
 
+/** A scan with the phone camera (#133). `notInStock` (check-out) records nothing; `needsName` is saved to name later. */
+export type CameraScanResult =
+    | { outcome: "checkedIn"; unitId: string; productId: string; displayName: string; count: number }
+    | { outcome: "needsName"; unitId: string | null; productId: string | null; barcode: string }
+    | {
+          outcome: "checkedOut";
+          unitId: string;
+          productId: string;
+          displayName: string;
+          remainingCount: number;
+      }
+    | { outcome: "notInStock"; barcode: string };
+
 export interface UndoneCheckOut {
     unitId: string;
     productId: string;
@@ -871,6 +884,16 @@ export class ApiClient {
     /** Checks out that unit (item detail; 409 → ApiError: not in stock). */
     checkOutUnit(unitId: string): Promise<CheckedOut> {
         return this.send<CheckedOut>("POST", `/api/units/${encodeURIComponent(unitId)}/check-out`);
+    }
+
+    /** Scan with the phone camera (#133). `requestId` is the client's id for this scan: a retry with it changes nothing more. */
+    cameraScan(body: { requestId: string; barcode: string; role: "in" | "out" }): Promise<CameraScanResult> {
+        return this.send<CameraScanResult>("POST", "/api/camera-scans", body);
+    }
+
+    /** Takes back a camera check-in (#133). */
+    undoCheckIn(unitId: string): Promise<{ unitId: string; productId: string; undone: boolean }> {
+        return this.send("POST", `/api/units/${encodeURIComponent(unitId)}/undo-check-in`);
     }
 
     /** Clear out (#132): checks out many units in one go. Each goes through the same check-out as a single one. */

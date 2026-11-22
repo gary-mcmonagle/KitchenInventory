@@ -28,7 +28,11 @@ public sealed partial class CheckOutUnit(
 {
     /// <param name="reason">Null for an ordinary check-out; <see cref="CheckOutReasons.StockCheck"/> for "Gone" (#94),
     /// which counts as running out (#89) but pushes to nobody (#81): it's a correction, not news.</param>
-    public async Task<CheckOutUnitResult> ExecuteAsync(Guid unitId, CurrentUser user, CancellationToken cancellationToken, string? reason = null)
+    /// <param name="scanId">Set for a scan from the phone camera (#133): the client's request id, so a retry is recognised.</param>
+    /// <param name="source">Null is <see cref="Unit.AppSource"/>; the camera passes <see cref="CameraScanning.Source"/>.</param>
+    public async Task<CheckOutUnitResult> ExecuteAsync(
+        Guid unitId, CurrentUser user, CancellationToken cancellationToken, string? reason = null, Guid? scanId = null,
+        string? source = null)
     {
         var current = await units.FindAsync(unitId, cancellationToken);
         if (current is null)
@@ -38,7 +42,7 @@ public sealed partial class CheckOutUnit(
 
         var now = clock.GetUtcNow();
         if (current.Value.Status != UnitStatus.InStock
-            || !await units.TryReplaceAsync(current, current.Value.CheckOutByUser(user.ObjectId, now, reason), cancellationToken))
+            || !await units.TryReplaceAsync(current, current.Value.CheckOutByUser(user.ObjectId, now, reason, scanId, source), cancellationToken))
         {
             return new CheckOutUnitResult.NotInStock(unitId);
         }

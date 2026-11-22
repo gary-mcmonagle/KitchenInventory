@@ -236,6 +236,9 @@ internal sealed class FakeUnits : IUnitRepository
 
     public Task<bool> IsCheckedOutByScanAsync(Guid productId, Guid scanId, CancellationToken cancellationToken) =>
         Task.FromResult(Units.Values.Any(v => v.Unit.ProductId == productId && v.Unit.CheckOutScanId == scanId));
+
+    public Task<Unit?> FindCheckedOutByScanAsync(Guid productId, Guid scanId, CancellationToken cancellationToken) =>
+        Task.FromResult(Units.Values.Select(v => v.Unit).FirstOrDefault(u => u.ProductId == productId && u.CheckOutScanId == scanId));
 }
 
 internal sealed class FakeUnmatched : IUnmatchedCheckOutRepository

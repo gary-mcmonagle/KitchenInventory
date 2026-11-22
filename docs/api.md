@@ -245,6 +245,32 @@ Check out **that** unit, from item detail (#53). No body. Recorded like a stock-
 - **Undo** is the existing `POST /api/units/{unitId}/undo-check-out` for the units whose outcome was `checkedOut` (so it never touches a unit that was already out).
 - **Logging:** one line with counts only (`Clear out: n units requested, n checked out, n unchanged, n failed.`), never names.
 
+### `POST /api/camera-scans`
+
+Scan in or out with the phone camera (#133). The same check-in or check-out a scanner makes: no second lookup or check-out path.
+
+```json
+{ "requestId": "<guid the app made for this scan>", "barcode": "5000354922831", "role": "in" | "out" }
+```
+
+- **Check in** goes through the scan processor (product cache, Open Food Facts, no-match, the store-label rule, the live feed, the stock change push), with scan id = `requestId` and device `app-camera`; the unit also records the signed-in person (`checkedInBy`). A retry with the same `requestId` changes nothing.
+- **Check out** takes the soonest-expiring unit (check-out order) through the app check-out, with `checkOutSource: "camera"`, `checkedOutBy` and `checkOutScanId` = `requestId`, so a retry returns the same unit and takes no more. **Nothing in stock, or a barcode never seen, records nothing** (no unmatched check-out).
+- **200**, by `outcome`:
+  - `checkedIn`: `{ unitId, productId, displayName, count }` (`count` in stock now).
+  - `needsName`: `{ unitId, productId, barcode }`: a barcode Open Food Facts doesn't know, saved as a no-match check-in to name later (shown under Waiting for a name and on Scanners). `unitId` and `productId` are `null` for a store label (it follows the store-label flow: nothing to undo).
+  - `checkedOut`: `{ unitId, productId, displayName, remainingCount }`.
+  - `notInStock`: `{ barcode }`. Nothing changed.
+- **400** `{ "error": "…" }` for a body that isn't `{ requestId, barcode, role }`, an unknown `role`, or a barcode that isn't 8, 12 or 13 digits with a valid check digit (the app expands UPC-E to its 12-digit UPC-A first).
+- **Logging:** `Camera scan (in|out): <outcome>.`, never names or barcodes.
+
+### `POST /api/units/{unitId}/undo-check-in`
+
+Takes back a camera check-in (#133): the unit leaves stock with `checkOutReason: "undoneCheckIn"`, so it isn't counted as used (it's left out of recently checked out and the digest, and isn't run out). Joins the stock change push as a removal, netting the "added". **Idempotent.** Check-out is undone with `POST /api/units/{unitId}/undo-check-out`.
+
+- **200** `{ "unitId": "…", "productId": "…", "undone": true }` (`false` when it was already undone).
+- **404** `{ "error": "No such unit." }`
+- **409** `{ "error": "…" }`: not a unit the camera checked in (so it can't remove ordinary stock), older than 24 hours, or checked out for real since. Nothing changed.
+
 ### "Still got this?" (#94)
 
 A unit **asks** from its estimated day (estimate ≤ today, UK date) until someone answers. All need a signed-in user.

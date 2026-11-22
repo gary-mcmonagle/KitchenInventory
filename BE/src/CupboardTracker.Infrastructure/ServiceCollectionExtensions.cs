@@ -227,6 +227,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<SetShelfLife>();
         services.AddTransient<CheckOutUnit>();
         services.AddTransient<CheckOutMany>(); // #132
+        services.AddTransient<CameraScan>(); // #133
+        services.AddTransient<UndoCheckIn>(); // #133
         services.AddSingleton(sp => StillGotThisSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddTransient<MarkStillHere>();
         services.AddTransient<GetExpiredUnits>();

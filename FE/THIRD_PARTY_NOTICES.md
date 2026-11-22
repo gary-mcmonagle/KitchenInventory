@@ -209,3 +209,8 @@ Apache License 2.0:
    See the License for the specific language governing permissions and
    limitations under the License.
 ```
+
+## ZXing (barcode reading from the phone camera, #133)
+
+`@zxing/library` 0.21.3 (https://github.com/zxing-js/library), a TypeScript port of ZXing, used under the MIT License. It is
+loaded only when the camera scanner opens, and only where the browser has no native `BarcodeDetector` (iPhone Safari).

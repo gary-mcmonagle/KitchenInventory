@@ -112,12 +112,17 @@ public sealed record Unit(
 
     /// <summary>Checked out from the stock list by a signed-in user (no scan). <paramref name="reason"/> is null for an
     /// ordinary check-out (used), or <see cref="CheckOutReasons.StockCheck"/> for "Gone" (#94).</summary>
-    public Unit CheckOutByUser(Guid userId, DateTimeOffset at, string? reason = null) =>
+    public Unit CheckOutByUser(Guid userId, DateTimeOffset at, string? reason = null, Guid? scanId = null, string? source = null) =>
         this with
         {
-            Status = UnitStatus.CheckedOut, CheckedOutAt = at, CheckOutScanId = null, CheckOutSource = AppSource,
+            Status = UnitStatus.CheckedOut, CheckedOutAt = at, CheckOutScanId = scanId, CheckOutSource = source ?? AppSource,
             CheckedOutBy = userId, CheckOutReason = reason,
         };
+
+    /// <summary>A check-in taken back (#133): the unit leaves stock, with the reason <see cref="CheckOutReasons.UndoneCheckIn"/>
+    /// so it never counts as something used (not shown as checked out, not run out, not in the digest).</summary>
+    public Unit UndoCheckIn(Guid userId, DateTimeOffset at) =>
+        CheckOutByUser(userId, at, CheckOutReasons.UndoneCheckIn);
 
     /// <summary>Someone said it's still here (#94): it stops asking "Still got this?" for a while. The date is unchanged.</summary>
     public Unit ConfirmedStillHere(DateTimeOffset at, string via) => this with { LastConfirmedAt = at, LastConfirmedVia = via };
@@ -146,6 +151,17 @@ public static class CheckOutReasons
 {
     /// <summary>"Gone" from a "Still got this?" prompt: a correction to the stock, not something used just now.</summary>
     public const string StockCheck = "stockCheck";
+
+    /// <summary>A check-in from the phone camera that was undone straight away (#133): it was never really in stock.</summary>
+    public const string UndoneCheckIn = "undoneCheckIn";
+}
+
+/// <summary>What a scan from the phone camera (#133) is recorded as: the "device" on its check-in, and the source on its check-out.</summary>
+public static class CameraScanning
+{
+    public const string Device = "app-camera";
+
+    public const string Source = "camera";
 }
 
 /// <summary>How a unit was last confirmed as still in the house (#94; #98 adds the stock check by place).</summary>

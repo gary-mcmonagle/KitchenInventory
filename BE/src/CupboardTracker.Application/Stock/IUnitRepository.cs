@@ -23,6 +23,9 @@ public interface IUnitRepository
 
     /// <summary>Whether a unit of this product was already checked out by this scan (a replay).</summary>
     Task<bool> IsCheckedOutByScanAsync(Guid productId, Guid scanId, CancellationToken cancellationToken);
+
+    /// <summary>The unit of this product that this scan checked out (a replay of a camera check-out, #133), or null.</summary>
+    Task<Unit?> FindCheckedOutByScanAsync(Guid productId, Guid scanId, CancellationToken cancellationToken);
 }
 
 public interface IUnmatchedCheckOutRepository

@@ -12,6 +12,9 @@ npm run dev                  # http://localhost:5173 (registered as an SPA redir
 npm test && npm run lint && npm run build
 ```
 
+- **Feature toggles** (`src/features.ts`), build-time `VITE_FEATURE_*` variables, **on unless set to `false`**:
+  `VITE_FEATURE_CAMERA_SCAN` (#133) switches the **Scan** button and the `/scan` camera scanner. Unset (the default,
+  and what `deploy/ui.sh` builds) means on. For a local build with it off: `VITE_FEATURE_CAMERA_SCAN=false npm run dev`.
 - `src/tokens.css`: design tokens from the mockups (colours, radii, touch target, Figtree). Use them, not raw values.
 - `src/api.ts`: the only way to call the API (bearer token; 401 → sign in again and come back; 403 → no access).
 - `public/staticwebapp.config.json`: SPA fallback routing. SWA's built-in auth isn't used.

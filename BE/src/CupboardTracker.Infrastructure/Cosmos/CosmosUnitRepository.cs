@@ -93,6 +93,14 @@ public sealed class CosmosUnitRepository(CosmosContainers containers) : IUnitRep
         return count > 0;
     }
 
+    public async Task<Unit?> FindCheckedOutByScanAsync(Guid productId, Guid scanId, CancellationToken cancellationToken)
+    {
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.checkOutScanId = @scanId")
+            .WithParameter("@scanId", scanId.ToString("D"));
+        var documents = await CosmosJson.QueryAsync(Items, query, new PartitionKey(productId.ToString("D")), max: 1, cancellationToken);
+        return documents is [var d, ..] ? ToUnit(d) : null;
+    }
+
     internal static JsonObject Write(Unit unit, JsonObject? existing)
     {
         var document = existing ?? new JsonObject();

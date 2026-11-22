@@ -52,6 +52,20 @@
     text-decoration: none;
 }
 
+/* Scan with the camera (#133): the green button beside Add. */
+.scanButton {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    background: var(--accent);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
 .statusDot {
     position: absolute;
     top: 1px;

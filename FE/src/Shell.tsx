@@ -4,6 +4,8 @@ import styles from "./App.module.css";
 import { AddScreen } from "./AddScreen";
 import { AiModelsScreen } from "./AiModelsScreen";
 import { BottomNav } from "./BottomNav";
+import { CameraScanScreen } from "./CameraScanScreen";
+import { cameraScanEnabled } from "./features";
 import { ItemScreen } from "./ItemScreen";
 import { ListScreen } from "./ListScreen";
 import { ModelTestScreen } from "./ModelTestScreen";
@@ -25,6 +27,7 @@ import {
     matchPlanPath,
     LIST_PATH,
     PLAN_PATH,
+    SCAN_PATH,
     cameFrom,
     RECIPES_PATH,
     savedScroll,
@@ -91,8 +94,9 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
     // Screens reached from the stock list: the list stays mounted underneath, hidden, so going back keeps its data,
     // scroll, open aisles, search, Use first and live updates, with no reload (#103, spike #99 option A). The same for
     // Hungry? under item detail opened from a recipe.
+    const scanning = path === SCAN_PATH && cameraScanEnabled(); // the camera scanner (#133), unless the feature is off
     const overStock =
-        !!(naming || editing || item || assigning || aiModelTest) ||
+        !!(naming || editing || item || assigning || aiModelTest || scanning) ||
         [ADD_PATH, SETTINGS_PATH, AI_MODELS_PATH, AI_MODEL_ADD_PATH].includes(path);
     const onRecipes = path === RECIPES_PATH;
     const overRecipes = (!!item && cameFrom() === RECIPES_PATH) || path === TASTE_PATH; // Our taste opens over Hungry? (#128)
@@ -117,7 +121,9 @@ export function Shell({ api, buildSha }: { api: ApiClient; buildSha: string }) {
                             <BottomNav current="recipes" />
                         </div>
                     )}
-                    {naming ? (
+                    {scanning ? (
+                        <CameraScanScreen api={api} />
+                    ) : naming ? (
                         <NameScreen key={naming} api={api} productId={naming} />
                     ) : editing ? (
                         <NameScreen key={`edit-${editing}`} api={api} productId={editing} mode="edit" />

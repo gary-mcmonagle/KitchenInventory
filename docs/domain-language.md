@@ -57,6 +57,11 @@ If you need a term that isn't here, add it as part of the card that introduces i
 
 **Check-out** – removing a unit from stock: a scan on the `out` device, or the check-out action in the stock list. Both take the same unit (soonest estimated expiry, then oldest check-in) and are recorded on it as `checkOutSource` `scanner` or `ui`.
 
+**Camera scan** – checking things in or out with the phone camera instead of a USB scanner (the green **Scan** button beside Add on the stock list, `/scan`): Check in or Check out at the top, reading barcodes continuously until Done, a running list with Undo on each row. Each read is the same check-in or check-out a scanner makes (a check-in goes through the scan processor, a check-out takes the soonest-expiring unit), recorded with the device `app-camera` or the source `camera` and the signed-in person. The same barcode is ignored for 2 seconds. A check-out of something not in stock records nothing (unlike a scanner's unmatched check-out). Behind a build-time toggle, `VITE_FEATURE_CAMERA_SCAN` (on unless `false`).
+- In code: `CameraScan`, `UndoCheckIn`, `POST /api/camera-scans`, `CameraScanScreen` (UI), `cameraScanEnabled`
+
+**Undone check-in** – a camera check-in taken back (Undo in a camera scan): the unit leaves stock with the check-out reason `undoneCheckIn`, so it doesn't show as used (not in recently checked out or the digest) and doesn't count as running out. Only a camera check-in, and only for 24 hours.
+
 **Clear out** – a mode on the stock list (the round list button beside Add) for catching up when stock has drifted from the cupboards: tick what's gone and check it all out in one go. One tap picks every unit of a product, a stepper picks fewer (soonest-expiring first), a sheet confirms, and Undo puts the whole batch back. No reason is asked. Each unit is an ordinary app check-out (`checkOutSource: "ui"`); there is no second way to check out.
 - In code: `CheckOutMany`, `POST /api/units/check-out`, `ClearOut` (UI)
 - In code: `CheckOutScan`, `CheckOutFromApp`

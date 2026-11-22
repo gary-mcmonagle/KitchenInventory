@@ -18,7 +18,7 @@ public sealed class CosmosDigestQueries(CosmosContainers containers) : IDigestQu
 
     public Task<IReadOnlyList<DigestUnit>> GetCheckedOutAsync(DigestWindow window, CancellationToken cancellationToken) =>
         QueryAsync(InWindow(
-            "SELECT c.productId, c.barcode FROM c WHERE c.status = 'checkedOut' AND c.checkedOutAt >= @start AND c.checkedOutAt < @end",
+            "SELECT c.productId, c.barcode FROM c WHERE c.status = 'checkedOut' AND c.checkedOutAt >= @start AND c.checkedOutAt < @end AND (NOT IS_DEFINED(c.checkOutReason) OR c.checkOutReason != 'undoneCheckIn')",
             window), cancellationToken, "DigestCheckedOut");
 
     private static QueryDefinition InWindow(string sql, DigestWindow window) =>

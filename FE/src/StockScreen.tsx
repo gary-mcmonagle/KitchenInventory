@@ -22,12 +22,22 @@ import {
 } from "./format";
 import { CheckSheet, checkFromUrl } from "./CheckSheet";
 import { ClearOut } from "./ClearOut";
+import { cameraScanEnabled } from "./features";
 import { AISLES, type AisleInfo } from "./aisles";
 import { takeFlash } from "./flash";
 import { rememberItemPreview } from "./itemPreview";
 import { ProductTile } from "./ProductTile";
 import { createSeenReporter } from "./push";
-import { ADD_PATH, itemPath, LIST_PATH, namePath, navigate, onTabReset, SETTINGS_PATH } from "./router";
+import {
+    ADD_PATH,
+    itemPath,
+    LIST_PATH,
+    namePath,
+    navigate,
+    onTabReset,
+    SCAN_PATH,
+    SETTINGS_PATH,
+} from "./router";
 import { scannerLabel, scannerStatus, type ScannerStatus } from "./scannerStatus";
 import { matchesSearch, searchWords } from "./stockSearch";
 import styles from "./Stock.module.css";
@@ -575,6 +585,31 @@ export function StockScreen({
                                 <path d="M4 7l1.5 1.5L8 6M4 13l1.5 1.5L8 12M4 19l1.5 1.5L8 18M12 7h8M12 13h8M12 19h8" />
                             </svg>
                         </button>
+                    )}
+                    {cameraScanEnabled() && (
+                        <a
+                            href={SCAN_PATH}
+                            className={styles.scanButton}
+                            aria-label="Scan"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                navigate(SCAN_PATH);
+                            }}
+                        >
+                            <svg
+                                width="22"
+                                height="22"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M10.5 8v8M14 8v8M17 8v8" />
+                            </svg>
+                        </a>
                     )}
                     <a
                         href={ADD_PATH}

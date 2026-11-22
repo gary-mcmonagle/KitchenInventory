@@ -88,6 +88,9 @@ export const SETTINGS_PATH = "/settings";
 export const LEGACY_SCANNERS_PATH = "/scanners";
 export const ADD_PATH = "/add";
 
+/** Scan in and out with the phone camera (#133); only reachable while the feature is on. */
+export const SCAN_PATH = "/scan";
+
 /** Plan meals (#119): step 1 is the choices, step 2 is one plan (`/plan/<id>`). */
 export const PLAN_PATH = "/plan";
 export const planPath = (id: string) => `${PLAN_PATH}/${encodeURIComponent(id)}`;
