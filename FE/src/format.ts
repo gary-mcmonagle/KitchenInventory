@@ -92,6 +92,17 @@ export function expiryBadge(daysUntil: number, isoDate: string): { text: string;
     return { text: `Est. ${when}`, tone };
 }
 
+/** Clear out's badge (#132): only when expired, today, tomorrow or within 2 days; otherwise none. */
+export function clearOutBadge(daysUntil: number | null): { text: string; tone: "expired" | "soon" } | null {
+    if (daysUntil === null || daysUntil > 2) return null;
+    if (daysUntil < 0)
+        return {
+            text: daysUntil === -1 ? "Expired yesterday" : `Expired ${-daysUntil} days ago`,
+            tone: "expired",
+        };
+    return { text: daysUntil === 0 ? "Today" : daysUntil === 1 ? "Tomorrow" : "In 2 days", tone: "soon" };
+}
+
 /** A shelf life in words: "4 days", "2 weeks", "a month", "6 months", "a year", "2 years". */
 export function keepsAbout(days: number): string {
     const plural = (n: number, unit: string, one: string) => (n === 1 ? one : `${n} ${unit}s`);

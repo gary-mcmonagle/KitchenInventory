@@ -232,6 +232,19 @@ Check out **that** unit, from item detail (#53). No body. Recorded like a stock-
 - **404** `{ "error": "No such unit." }`
 - **409** `{ "error": "That unit isn't in stock." }`: already checked out (or a scanner took it meanwhile). Nothing changed.
 
+### `POST /api/units/check-out`
+
+**Clear out** (#132): checks out many units in one request. Each unit goes through the same check-out as `POST /api/units/{unitId}/check-out` (`checkOutSource: "ui"`, `checkedOutBy` = the caller, ETag-guarded, so the scan feed, run-out detection, stock change pushes and logging behave as for a single check-out). The app picks the units: for each selected product the first *n* of its in-stock `units` (check-out order, so soonest expiring first).
+
+```json
+{ "unitIds": ["…", "…"] }
+```
+
+- **200** `{ "checkedOut": 2, "unchanged": 1, "failed": 0, "units": [{ "unitId": "…", "outcome": "checkedOut" | "unchanged" | "failed", "productId": "…" | null }] }` in the order sent. `checkedOut`: this request took it. `unchanged`: it was already checked out, or there is no such unit; nothing changed and it isn't an error, so **a replayed request changes nothing**. `failed`: it couldn't be saved (a storage error); the others still went through and stay checked out, so the app says how many didn't.
+- **400** `{ "error": "…" }` for a body that isn't `{ "unitIds": [GUID, …] }`, no units, more than **300**, or the same unit twice (body at most 32 KB).
+- **Undo** is the existing `POST /api/units/{unitId}/undo-check-out` for the units whose outcome was `checkedOut` (so it never touches a unit that was already out).
+- **Logging:** one line with counts only (`Clear out: n units requested, n checked out, n unchanged, n failed.`), never names.
+
 ### "Still got this?" (#94)
 
 A unit **asks** from its estimated day (estimate ≤ today, UK date) until someone answers. All need a signed-in user.

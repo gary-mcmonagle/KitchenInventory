@@ -56,6 +56,9 @@ If you need a term that isn't here, add it as part of the card that introduces i
 - Not to be confused with: **Scan event**. A scan event is the raw record of a scan; a check-in is the stock change it causes.
 
 **Check-out** – removing a unit from stock: a scan on the `out` device, or the check-out action in the stock list. Both take the same unit (soonest estimated expiry, then oldest check-in) and are recorded on it as `checkOutSource` `scanner` or `ui`.
+
+**Clear out** – a mode on the stock list (the round list button beside Add) for catching up when stock has drifted from the cupboards: tick what's gone and check it all out in one go. One tap picks every unit of a product, a stepper picks fewer (soonest-expiring first), a sheet confirms, and Undo puts the whole batch back. No reason is asked. Each unit is an ordinary app check-out (`checkOutSource: "ui"`); there is no second way to check out.
+- In code: `CheckOutMany`, `POST /api/units/check-out`, `ClearOut` (UI)
 - In code: `CheckOutScan`, `CheckOutFromApp`
 
 **Device** – the logical identity the Pi gives a scanner, and its role.

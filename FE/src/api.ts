@@ -125,6 +125,18 @@ export interface CheckedOut {
     remainingCount: number;
 }
 
+/** What a clear out (#132) did to each unit: this request took it, it was already out or unknown (nothing changed), or it failed. */
+export interface ClearOutResult {
+    checkedOut: number;
+    unchanged: number;
+    failed: number;
+    units: Array<{
+        unitId: string;
+        outcome: "checkedOut" | "unchanged" | "failed";
+        productId: string | null;
+    }>;
+}
+
 export interface UndoneCheckOut {
     unitId: string;
     productId: string;
@@ -859,6 +871,11 @@ export class ApiClient {
     /** Checks out that unit (item detail; 409 → ApiError: not in stock). */
     checkOutUnit(unitId: string): Promise<CheckedOut> {
         return this.send<CheckedOut>("POST", `/api/units/${encodeURIComponent(unitId)}/check-out`);
+    }
+
+    /** Clear out (#132): checks out many units in one go. Each goes through the same check-out as a single one. */
+    checkOutUnits(unitIds: string[]): Promise<ClearOutResult> {
+        return this.send<ClearOutResult>("POST", "/api/units/check-out", { unitIds });
     }
 
     /** "Still got this?" → Still here (#94): it stops asking for a couple of days. Idempotent. */

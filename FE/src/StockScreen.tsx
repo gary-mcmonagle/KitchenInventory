@@ -21,6 +21,7 @@ import {
     todayLine,
 } from "./format";
 import { CheckSheet, checkFromUrl } from "./CheckSheet";
+import { ClearOut } from "./ClearOut";
 import { AISLES, type AisleInfo } from "./aisles";
 import { takeFlash } from "./flash";
 import { rememberItemPreview } from "./itemPreview";
@@ -212,6 +213,7 @@ export function StockScreen({
 
     // "Still got these?" (#94): from a tapped "Still got this?" push (/?check=expired). The query goes at once too.
     const [checkSheet, setCheckSheet] = useState(false);
+    const [clearingOut, setClearingOut] = useState(false); // Clear out (#132): a mode over the list
     useEffect(() => {
         if (!visible || !checkFromUrl()) return;
         setCheckSheet(true);
@@ -552,6 +554,28 @@ export function StockScreen({
                             />
                         )}
                     </a>
+                    {stock && stock.products.length > 0 && (
+                        <button
+                            type="button"
+                            className={styles.settingsButton}
+                            aria-label="Clear out"
+                            onClick={() => setClearingOut(true)}
+                        >
+                            <svg
+                                width="22"
+                                height="22"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M4 7l1.5 1.5L8 6M4 13l1.5 1.5L8 12M4 19l1.5 1.5L8 18M12 7h8M12 13h8M12 19h8" />
+                            </svg>
+                        </button>
+                    )}
                     <a
                         href={ADD_PATH}
                         className={styles.addButton}
@@ -777,6 +801,14 @@ export function StockScreen({
                         </button>
                     )}
                 </div>
+            )}
+            {clearingOut && visible && stock && (
+                <ClearOut
+                    api={api}
+                    stock={stock}
+                    onClose={() => setClearingOut(false)}
+                    onChanged={() => void load({ quiet: true })}
+                />
             )}
             {sheet && visible && <RunOutSheet api={api} source={sheet} onClose={() => setSheet(null)} />}
             {checkSheet && visible && (

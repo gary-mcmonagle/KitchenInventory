@@ -180,6 +180,7 @@ test("Check out and the name link on named rows, Name it on unnamed rows, nothin
 
     await screen.findByRole("region", { name: "Other" });
     expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
+        "Clear out", // the header's (#132)
         "Use first · 0",
         "Other1 item",
         "Mark one Beef Gravy as opened",

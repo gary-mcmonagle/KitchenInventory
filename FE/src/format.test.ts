@@ -1,4 +1,13 @@
-import { groupBarcode, initial, itemsLabel, metaLine, scannedLabel, stockRowText, todayLine } from "./format";
+import {
+    clearOutBadge,
+    groupBarcode,
+    initial,
+    itemsLabel,
+    metaLine,
+    scannedLabel,
+    stockRowText,
+    todayLine,
+} from "./format";
 
 test("meta line leaves out missing parts and shows ×qty only above 1", () => {
     expect(metaLine("Bisto", "230g", 2)).toBe("Bisto · 230g · ×2");
@@ -131,4 +140,14 @@ test("a stock row leads with the generic name whenever there is one, so one gene
     ).toEqual({ title: "Carrots", meta: "British carrots · 1kg" });
     // no generic name: the display name leads, as stored
     expect(row("Beef Gravy", null, "Bisto")).toEqual({ title: "Beef Gravy", meta: "Bisto" });
+});
+
+test("clear out's badge shows only when expired, today, tomorrow or within 2 days (#132)", () => {
+    expect(clearOutBadge(-1)).toEqual({ text: "Expired yesterday", tone: "expired" });
+    expect(clearOutBadge(-3)).toEqual({ text: "Expired 3 days ago", tone: "expired" });
+    expect(clearOutBadge(0)).toEqual({ text: "Today", tone: "soon" });
+    expect(clearOutBadge(1)).toEqual({ text: "Tomorrow", tone: "soon" });
+    expect(clearOutBadge(2)).toEqual({ text: "In 2 days", tone: "soon" });
+    expect(clearOutBadge(3)).toBeNull();
+    expect(clearOutBadge(null)).toBeNull();
 });

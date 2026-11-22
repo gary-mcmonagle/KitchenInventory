@@ -226,6 +226,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<EditProductDetails>();
         services.AddTransient<SetShelfLife>();
         services.AddTransient<CheckOutUnit>();
+        services.AddTransient<CheckOutMany>(); // #132
         services.AddSingleton(sp => StillGotThisSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddTransient<MarkStillHere>();
         services.AddTransient<GetExpiredUnits>();

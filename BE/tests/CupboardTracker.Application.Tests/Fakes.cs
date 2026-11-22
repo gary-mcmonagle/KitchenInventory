@@ -169,6 +169,9 @@ internal sealed class FakeUnits : IUnitRepository
     /// <summary>Unit IDs a concurrent writer will check out just before our replace (an ETag conflict).</summary>
     public HashSet<Guid> StolenBeforeReplace { get; } = [];
 
+    /// <summary>Unit IDs whose write fails with an exception (a storage error).</summary>
+    public HashSet<Guid> FailOnReplace { get; } = [];
+
     public IEnumerable<Unit> InStock(Guid productId) =>
         Units.Values.Select(v => v.Unit).Where(u => u.ProductId == productId && u.Status == UnitStatus.InStock);
 
@@ -205,6 +208,11 @@ internal sealed class FakeUnits : IUnitRepository
 
     public Task<bool> TryReplaceAsync(Versioned<Unit> current, Unit updated, CancellationToken cancellationToken)
     {
+        if (FailOnReplace.Contains(updated.UnitId))
+        {
+            throw new InvalidOperationException("storage error");
+        }
+
         if (StolenBeforeReplace.Remove(updated.UnitId))
         {
             var (unit, version) = Units[updated.UnitId];
