@@ -51,12 +51,12 @@
     font-size: 15px;
 }
 
-.mode button[aria-pressed="true"].in {
+.mode button[aria-pressed="true"].modeIn {
     background: var(--accent);
     color: #ffffff;
 }
 
-.mode button[aria-pressed="true"].out {
+.mode button[aria-pressed="true"].modeOut {
     background: var(--warn-bg);
     color: var(--warn-fg);
 }

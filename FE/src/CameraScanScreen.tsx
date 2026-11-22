@@ -199,7 +199,7 @@ export function CameraScanScreen({ api, start = startReader }: { api: ApiClient;
                 <div className={styles.mode} role="group" aria-label="Scan mode">
                     <button
                         type="button"
-                        className="in"
+                        className={styles.modeIn}
                         aria-pressed={mode === "in"}
                         onClick={() => setMode("in")}
                     >
@@ -207,7 +207,7 @@ export function CameraScanScreen({ api, start = startReader }: { api: ApiClient;
                     </button>
                     <button
                         type="button"
-                        className="out"
+                        className={styles.modeOut}
                         aria-pressed={mode === "out"}
                         onClick={() => setMode("out")}
                     >
