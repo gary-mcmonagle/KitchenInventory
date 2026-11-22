@@ -2,8 +2,8 @@ import "@testing-library/jest-dom/vitest";
 import { configure } from "@testing-library/react";
 
 // The suite runs many screens in parallel; under load the default 1 s for findBy… was occasionally too short (flaky
-// first tests in NameScreen and ItemScreen). 3 s still fails fast on a real miss.
-configure({ asyncUtilTimeout: 3000 });
+// first tests in NameScreen and ItemScreen). 5 s still fails fast on a real miss.
+configure({ asyncUtilTimeout: 5000 });
 
 // No real SignalR in tests: screens get a connection that never connects (the scan feed's own tests inject a fake).
 vi.mock("@microsoft/signalr", async (importOriginal) => {

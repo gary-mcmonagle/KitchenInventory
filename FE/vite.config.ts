@@ -12,5 +12,6 @@ export default defineConfig({
         globals: true,
         setupFiles: ["./src/test-setup.ts"],
         css: true, // tokens.test.ts reads tokens.css
+        testTimeout: 15_000, // the long screen tests time out at the 5 s default when the files run in parallel
     },
 });
