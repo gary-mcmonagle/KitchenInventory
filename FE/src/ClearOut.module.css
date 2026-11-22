@@ -133,6 +133,7 @@
 
 .pick {
     flex: 1;
+    overflow: hidden;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -184,6 +185,7 @@
 }
 
 .text {
+    flex: 1;
     min-width: 0;
     padding: 6px 0;
 }
@@ -198,6 +200,7 @@
 
 .meta {
     display: block;
+    overflow-wrap: anywhere;
     color: var(--muted);
     font-size: 13px;
     margin-top: 2px;
@@ -354,7 +357,13 @@
     border-bottom: 0;
 }
 
+.summary li span:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .summary li span:last-child {
+    flex: none;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
 }

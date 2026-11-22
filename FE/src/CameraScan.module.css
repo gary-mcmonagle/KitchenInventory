@@ -43,21 +43,32 @@
 
 .mode button {
     min-height: 40px;
-    border: 0;
+    border: 2px solid transparent;
     border-radius: 11px;
     background: none;
-    color: rgba(255, 255, 255, 0.8);
-    font-weight: 700;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 600;
     font-size: 15px;
+    -webkit-appearance: none;
+    appearance: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* The active mode is solid and bold with a light ring; the other is plain and dim. */
+.mode button[aria-pressed="true"] {
+    font-weight: 800;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
 .mode button[aria-pressed="true"].modeIn {
     background: var(--accent);
+    border-color: #7fd3a6;
     color: #ffffff;
 }
 
 .mode button[aria-pressed="true"].modeOut {
     background: var(--warn-bg);
+    border-color: #ffc56b;
     color: var(--warn-fg);
 }
 
