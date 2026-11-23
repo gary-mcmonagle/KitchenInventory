@@ -150,6 +150,25 @@ export type CameraScanResult =
       }
     | { outcome: "notInStock"; barcode: string };
 
+/** One suggestion in the usuals selection (#134). `why` is written by the server from the facts. */
+export interface UsualsItem {
+    name: string;
+    genericNameId: string | null;
+    aisle: string;
+    band: "due" | "maybe";
+    why: string;
+    productId: string;
+}
+
+/** A usuals job (#134). `method` is `jev`, or `pattern` when the plain rule was used; null until ready. */
+export interface UsualsJob {
+    jobId: string;
+    status: "working" | "ready" | "failed";
+    step: "history" | "deciding" | "list";
+    method: "jev" | "pattern" | null;
+    items: UsualsItem[];
+}
+
 export interface UndoneCheckOut {
     unitId: string;
     productId: string;
@@ -1241,6 +1260,16 @@ export class ApiClient {
 
     clearTicked(): Promise<{ cleared: string[] }> {
         return this.send("POST", "/api/shopping-list/clear-done");
+    }
+
+    /** "Add usuals" (#134): starts working out what usually gets bought and looks due. 429 → ApiError: too many this hour. */
+    startUsuals(): Promise<UsualsJob> {
+        return this.send<UsualsJob>("POST", "/api/shopping-list/usuals");
+    }
+
+    /** Where a usuals job is, and the selection once it's ready (404 → ApiError: it has expired). */
+    usualsJob(jobId: string): Promise<UsualsJob> {
+        return this.get<UsualsJob>(`/api/shopping-list/usuals/${encodeURIComponent(jobId)}`);
     }
 
     listSuggestions(q: string): Promise<{ suggestions: ListSuggestion[] }> {

@@ -4,6 +4,7 @@ import { groupByAisle, listWhen, type ListGroup } from "./shoppingList";
 import { useListViewed } from "./listViewed";
 import { PLAN_PATH, navigate } from "./router";
 import { useShoppingList, type ShoppingList } from "./useShoppingList";
+import { UsualsButton, UsualsSheet } from "./Usuals";
 import styles from "./List.module.css";
 
 /** Sort by aisle, remembered on this device. Storage can be missing or throw: then off. */
@@ -46,6 +47,7 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
     const [suggestions, setSuggestions] = useState<ListSuggestion[]>([]);
     const [byAisle, setByAisle] = useState(storedByAisle);
     const [doneOpen, setDoneOpen] = useState(true);
+    const [usualsOpen, setUsualsOpen] = useState(false); // "Add usuals" (#134)
     const asked = useRef(0);
 
     const offline = list.offline;
@@ -212,6 +214,7 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
                         >
                             Plan meals
                         </a>
+                        <UsualsButton disabled={offline} onClick={() => setUsualsOpen(true)} />
                     </div>
                     {list.loaded && count === 0 && (
                         <div className={styles.empty}>Nothing on the list. Nice.</div>
@@ -316,6 +319,13 @@ export function ListScreen({ api, now }: { api: ApiClient; now?: Date }) {
                     </section>
                 )}
             </div>
+            {usualsOpen && (
+                <UsualsSheet
+                    api={api}
+                    onClose={() => setUsualsOpen(false)}
+                    onAdd={(picked) => picked.forEach((item) => list.add(item.name, item.productId, "usual"))}
+                />
+            )}
         </div>
     );
 }

@@ -1,0 +1,378 @@
+/* "Add usuals" (#134, project "Usuals" canvas): the progress sheet, the selection, and the empty and failed states. */
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+}
+
+.scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+}
+
+.sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: var(--design-width);
+    margin: 0 auto;
+    box-sizing: border-box;
+    background: var(--surface);
+    border-radius: 24px 24px 0 0;
+    padding: 10px var(--page-x) calc(28px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 -8px 24px rgba(28, 42, 36, 0.18);
+    max-height: 100%;
+}
+
+.tall {
+    top: 56px;
+    background: var(--ground);
+    padding: 10px 0 0;
+    gap: 0;
+}
+
+.handle {
+    align-self: center;
+    width: 40px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border);
+    flex: none;
+}
+
+.title {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 800;
+}
+
+.lead {
+    margin: 4px 0 0;
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--muted);
+}
+
+.steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    font-size: 16px;
+    line-height: 1.3;
+    color: var(--muted);
+}
+
+.stepActive {
+    color: var(--ink);
+    font-weight: 700;
+}
+
+.stepIcon {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    box-sizing: border-box;
+    border-radius: 13px;
+}
+
+.stepDone {
+    background: var(--accent);
+    display: grid;
+    place-items: center;
+}
+
+.stepWaiting {
+    border: 2px solid var(--border);
+}
+
+.spinner {
+    border: 3px solid var(--accent-tint);
+    border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        animation: none;
+    }
+}
+
+.secondary {
+    min-height: 48px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.primary {
+    min-height: 52px;
+    border: 0;
+    border-radius: var(--radius-card);
+    background: var(--accent);
+    color: #ffffff;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.primary:disabled {
+    background: #c5d2ca;
+}
+
+.quiet {
+    min-height: var(--touch);
+    background: none;
+    border: 0;
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    padding: 12px 8px 4px;
+}
+
+.badgeIcon {
+    width: 56px;
+    height: 56px;
+    border-radius: 28px;
+    display: grid;
+    place-items: center;
+}
+
+.okIcon {
+    background: var(--accent-tint);
+    color: var(--accent);
+}
+
+.badIcon {
+    background: var(--danger-bg);
+    color: var(--danger-fg);
+}
+
+.body {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--muted);
+    max-width: 300px;
+}
+
+.head {
+    padding: 0 var(--page-x);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: none;
+}
+
+.note {
+    padding: 10px 12px;
+    border-radius: var(--radius-input);
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+    font-size: 14px;
+    line-height: 1.4;
+    font-weight: 600;
+}
+
+.bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--touch);
+}
+
+.count {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.link {
+    min-height: var(--touch);
+    padding: 0 4px;
+    background: none;
+    border: 0;
+    color: var(--accent);
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 var(--page-x) 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.groupTitle {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+}
+
+.groupCount {
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 64px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    text-align: left;
+    color: var(--ink);
+    font: inherit;
+}
+
+.rowOn {
+    border-color: var(--accent);
+    background: #f5faf7;
+}
+
+.tick {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    display: grid;
+    place-items: center;
+}
+
+.rowOn .tick {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.tick svg {
+    opacity: 0;
+}
+
+.rowOn .tick svg {
+    opacity: 1;
+}
+
+.text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.name {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.why {
+    font-size: 13px;
+    line-height: 1.35;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
+.pill {
+    flex: none;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+}
+
+.pillDue {
+    background: var(--accent-tint);
+    color: var(--accent-dark);
+}
+
+.pillMaybe {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.foot {
+    flex: none;
+    padding: 12px var(--page-x) calc(24px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, var(--ground) 75%, rgba(244, 247, 243, 0));
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.usualsButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: var(--touch);
+    padding: 0 16px;
+    border-radius: var(--radius-chip);
+    border: 0;
+    background: var(--accent);
+    color: #ffffff;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.usualsButton:disabled {
+    background: #c5d2ca;
+}

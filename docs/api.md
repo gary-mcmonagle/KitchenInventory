@@ -1052,7 +1052,7 @@ One list for the household. Every endpoint needs a signed-in user (**401** witho
 {
   "id": "…", "name": "Semi-skimmed milk", "note": "2", "productId": "…" | null,
   "aisleId": "dairyEggs" | null, "aisleName": "Dairy & eggs" | null, "findingAisle": false,
-  "source": "typed" | "suggestion" | "itemDetail" | "checkOutPrompt" | "autoRunOut" | "savedRecipe" | "stockSearch", "status": "open" | "done",
+  "source": "typed" | "suggestion" | "itemDetail" | "checkOutPrompt" | "autoRunOut" | "savedRecipe" | "stockSearch" | "usual", "status": "open" | "done",
   "addedByName": "Gary", "addedAt": "…", "doneByName": null, "doneAt": null,
   "updatedAt": "…", "version": 3, "removed": false
 }
@@ -1071,7 +1071,34 @@ One list for the household. Every endpoint needs a signed-in user (**401** witho
 - **Idempotent:** an id that exists returns the item as it is.
 - **No duplicates:** a name already open (lower case, trimmed, single spaces) returns that item with `merged: true`, adding the note if one was given.
 - **Aisle:** with `productId`, the product's aisle (and, when `name` is left out, its generic name or display name). A typed item reuses the aisle that name had before, or is queued for Jev (the aisles feature's choice question) on the API app's `list-aisles` queue; until then `aisleId` is null. Jev unreachable → `other` for now, retried by a timer every 15 minutes.
-- **400** for a missing id or changeId, a name of 0 or over 80 characters, a note over 60, or an unknown product. `source` is one of `typed`, `suggestion`, `itemDetail` or `checkOutPrompt` (the sheet after a check-out, #89); `autoRunOut` is refused (only the server adds those).
+- **400** for a missing id or changeId, a name of 0 or over 80 characters, a note over 60, or an unknown product. `source` is one of `typed`, `suggestion`, `itemDetail`, `checkOutPrompt` (the sheet after a check-out, #89), `savedRecipe`, `stockSearch` or `usual` (ticked in the Add usuals selection, #134); `autoRunOut` is refused (only the server adds those).
+
+### Add usuals (#134, spike #135)
+
+What the household usually buys and looks due, for the shopping list's **Add usuals** button. Asynchronous like Plan meals: a job, polled by the sheet. Both calls need a signed-in user (**401** without a token).
+
+#### `POST /api/shopping-list/usuals`
+
+No body. **202** with the job (`status: "working"`, `step: "history"`); a message goes on the `usuals-jobs` queue and the queue-triggered `usualsJob` function works it out. **429** `{ "error": "That's a lot of usuals for one hour. Try again a bit later." }` over `USUALS_REQUESTS_PER_HOUR` (default 10 a person, in memory per instance).
+
+#### `GET /api/shopping-list/usuals/{jobId}`
+
+```json
+{ "jobId": "…", "status": "working" | "ready" | "failed", "step": "history" | "deciding" | "list", "method": "jev" | "pattern" | null,
+  "items": [{ "name": "Medium eggs", "genericNameId": "…", "aisle": "dairyEggs", "band": "due" | "maybe",
+              "why": "Bought in 4 of the last 4 weeks", "productId": "…" }] }
+```
+
+- `step` is what the sheet shows while `working`: reading the history, asking Jev, then leaving out what's on the list now. `items` is empty until `ready`, **uncapped** (every candidate that clears the Maybe cut-off), **Due before Maybe**, best first; the app groups them by `aisle`. `productId` is the most recently bought product with that name, so the added item gets its aisle from it. **404** once the job has expired (6 hours).
+- `method` is `jev`, or `pattern` when Jev wasn't configured, didn't answer every question or ran over the time budget, and the plain rule was used (the sheet says "Based on your buying pattern only.").
+- The app puts ticked items on the list with the ordinary `PUT /api/shopping-list/items/{id}` and `source: "usual"`.
+
+**How it works.**
+- **History:** check-ins since `USUALLY_BUYS_HISTORY_START` (from every source), counted by **Monday-to-Sunday UK week**; the current unfinished week is not history; units whose check-in was undone (`checkOutReason: "undoneCheckIn"`) are left out; names are generic names (the display name when there is none). A **candidate** is a name bought in two or more weeks. **Stock is never read** (spike #135: it made the suggestions worse).
+- **Jev:** one `noul` (yes/no probability) question per candidate, each its own request, four at a time, `jev-1.13.0`; the state is the name, its aisle and one sentence of weekly history. **Due** at probability `USUALS_JEV_DUE_CONFIDENCE` (0.8) or more, **Maybe** from `USUALS_JEV_MAYBE_CONFIDENCE` (0.6). Any unanswered question, or going over `USUALS_JOB_BUDGET_SECONDS` (60), uses the **plain rule** instead: share of weeks bought, **Due** at `USUALS_PATTERN_DUE` (0.75), **Maybe** from `USUALS_PATTERN_MAYBE` (0.5).
+- **On the list already:** names open or ticked on the list are left out before Jev is asked and again before the job finishes.
+- **Failure:** an error reading the history sets `status: "failed"` (logged at Error); nothing is added in any case.
+- **Logging:** counts and timings only (`Usuals: n candidates, n not already on the list, n offered (n due, n maybe), method …, n Jev input tokens, n ms.`), never names, facts or prompts.
 
 ### `POST /api/shopping-list/items/{id}/done`, `/undone` and `DELETE /api/shopping-list/items/{id}`
 

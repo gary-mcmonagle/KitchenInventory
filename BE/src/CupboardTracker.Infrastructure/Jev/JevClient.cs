@@ -11,7 +11,7 @@ namespace CupboardTracker.Infrastructure.Jev;
 public abstract record JevResponse
 {
     /// <summary>200: the <c>answers</c> object, keyed by question id.</summary>
-    public sealed record Answered(JsonObject Answers) : JevResponse;
+    public sealed record Answered(JsonObject Answers, int InputTokens = 0) : JevResponse;
 
     /// <summary>429/529, 5xx, timeouts and network errors, still failing after the last attempt.</summary>
     public sealed record Unavailable(string Reason) : JevResponse;
@@ -80,8 +80,10 @@ public sealed class JevClient(HttpClient http, JevOptions options, TimeProvider 
             var text = await response.Content.ReadAsStringAsync(timeout.Token);
             try
             {
-                return JsonNode.Parse(text)?["answers"] is JsonObject answers
-                    ? (new JevResponse.Answered(answers), null)
+                var root = JsonNode.Parse(text);
+                var tokens = root?["usage"]?["input_tokens"] is JsonValue t && t.TryGetValue<int>(out var n) ? n : 0;
+                return root?["answers"] is JsonObject answers
+                    ? (new JevResponse.Answered(answers, tokens), null)
                     : (new JevResponse.Refused("no answers in the response"), null);
             }
             catch (JsonException)

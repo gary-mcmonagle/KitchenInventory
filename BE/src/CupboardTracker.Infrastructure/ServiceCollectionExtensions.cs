@@ -21,6 +21,7 @@ using CupboardTracker.Application.Scanners;
 using CupboardTracker.Application.Scans;
 using CupboardTracker.Application.ShelfLives;
 using CupboardTracker.Application.Stock;
+using CupboardTracker.Application.Usuals;
 using CupboardTracker.Infrastructure.Cosmos;
 using CupboardTracker.Infrastructure.Email;
 using CupboardTracker.Infrastructure.GenericNaming;
@@ -195,6 +196,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMealPlanRepository, CosmosMealPlanRepository>();
         services.AddSingleton<IMealPlanScheduler, Plans.StorageQueueMealPlanScheduler>();
         services.AddSingleton<IPurchaseHistory, CosmosPurchaseHistory>();
+        services.AddSingleton<IUsualsHistory, CosmosUsualsHistory>(); // #134
+        services.AddSingleton<IUsualsJobRepository, CosmosUsualsJobRepository>();
+        services.AddSingleton<IUsualsJobScheduler, Usuals.StorageQueueUsualsScheduler>();
+        services.AddSingleton(sp => UsualsSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddSingleton<UsualsRateLimit>();
+        services.AddTransient<IUsualsJudge, JevUsualsJudge>();
+        services.AddTransient<UsualsJobs>();
         services.AddSingleton(sp => PlanSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddSingleton(sp => UsuallyBuysSettingsFromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddSingleton<PlanRateLimit>();
@@ -372,6 +380,35 @@ public static class ServiceCollectionExtensions
             : throw new InvalidOperationException($"{name} must be a whole number, 1 or more.");
         return new UsuallyBuysSettings(
             start, Whole(config["USUALLY_BUYS_MIN_SCORE"], 2, "USUALLY_BUYS_MIN_SCORE"), Whole(config["USUALLY_BUYS_TOP_N"], 30, "USUALLY_BUYS_TOP_N"));
+    }
+
+    /// <summary>The usuals (#134, spike #135): <c>USUALS_JEV_DUE_CONFIDENCE</c> (0.8) and <c>USUALS_JEV_MAYBE_CONFIDENCE</c> (0.6), the share of
+    /// weeks for the fallback <c>USUALS_PATTERN_DUE</c> (0.75) and <c>USUALS_PATTERN_MAYBE</c> (0.5), <c>USUALS_REQUESTS_PER_HOUR</c> (10) and
+    /// <c>USUALS_JOB_BUDGET_SECONDS</c> (60). All optional.</summary>
+    internal static UsualsSettings UsualsSettingsFromConfiguration(IConfiguration config)
+    {
+        static double Fraction(string? text, double fallback, string name) =>
+            text is not { Length: > 0 } ? fallback
+            : double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) && v is > 0 and <= 1 ? v
+            : throw new InvalidOperationException($"{name} must be a number above 0 and at most 1.");
+        static int Whole(string? text, int fallback, string name) =>
+            text is not { Length: > 0 } ? fallback
+            : int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= 1 ? n
+            : throw new InvalidOperationException($"{name} must be a whole number, 1 or more.");
+        var defaults = new UsualsSettings();
+        var due = Fraction(config["USUALS_JEV_DUE_CONFIDENCE"], defaults.DueConfidence, "USUALS_JEV_DUE_CONFIDENCE");
+        var maybe = Fraction(config["USUALS_JEV_MAYBE_CONFIDENCE"], defaults.MaybeConfidence, "USUALS_JEV_MAYBE_CONFIDENCE");
+        var patternDue = Fraction(config["USUALS_PATTERN_DUE"], defaults.PatternDue, "USUALS_PATTERN_DUE");
+        var patternMaybe = Fraction(config["USUALS_PATTERN_MAYBE"], defaults.PatternMaybe, "USUALS_PATTERN_MAYBE");
+        if (maybe > due || patternMaybe > patternDue)
+        {
+            throw new InvalidOperationException("The Maybe cut-off for the usuals can't be above the Due one.");
+        }
+
+        return new UsualsSettings(
+            due, maybe, patternDue, patternMaybe,
+            Whole(config["USUALS_REQUESTS_PER_HOUR"], defaults.RequestsPerHour, "USUALS_REQUESTS_PER_HOUR"),
+            TimeSpan.FromSeconds(Whole(config["USUALS_JOB_BUDGET_SECONDS"], 60, "USUALS_JOB_BUDGET_SECONDS")));
     }
 
     /// <summary>RECIPE_REQUESTS_PER_HOUR (default 30): the per-user cost guard on recipe suggestions (#73).</summary>

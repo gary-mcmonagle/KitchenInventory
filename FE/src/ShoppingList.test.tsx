@@ -1,5 +1,5 @@
 import { HubConnectionState } from "@microsoft/signalr";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ApiClient, ShoppingListItem } from "./api";
 import { BottomNav } from "./BottomNav";
 import { BY_AISLE_KEY, ListScreen, SUGGEST_DELAY_MS } from "./ListScreen";
@@ -398,4 +398,49 @@ test("the List tells the API it was viewed when it opens (#86)", async () => {
     const { api } = setup();
     await flush();
     expect(api.shoppingListViewed).toHaveBeenCalledTimes(1);
+});
+
+describe("Add usuals (#134)", () => {
+    test("the button opens the selection, and ticked items go on the list as usuals", async () => {
+        const { api } = setup([item("a", "Bread")]);
+        Object.assign(api, {
+            startUsuals: vi.fn(async () => ({
+                jobId: "j",
+                status: "ready",
+                step: "list",
+                method: "jev",
+                items: [
+                    {
+                        name: "Medium eggs",
+                        genericNameId: null,
+                        aisle: "dairyEggs",
+                        band: "due",
+                        why: "Bought in 4 of the last 4 weeks",
+                        productId: "11111111-1111-1111-1111-111111111111",
+                    },
+                    {
+                        name: "Squash",
+                        genericNameId: null,
+                        aisle: "fruitVeg",
+                        band: "maybe",
+                        why: "Bought in 2 of the last 4 weeks",
+                        productId: "22222222-2222-2222-2222-222222222222",
+                    },
+                ],
+            })),
+        });
+
+        fireEvent.click(await screen.findByRole("button", { name: "Add usuals" }));
+        expect(await screen.findByRole("heading", { name: "Your usuals" })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Add 1 item to the list" }));
+
+        await waitFor(() => expect(api.addToList).toHaveBeenCalledTimes(1));
+        expect(api.addToList).toHaveBeenCalledWith(expect.any(String), {
+            changeId: expect.any(String),
+            name: "Medium eggs",
+            productId: "11111111-1111-1111-1111-111111111111",
+            source: "usual",
+        });
+        expect(screen.queryByRole("heading", { name: "Your usuals" })).not.toBeInTheDocument();
+    });
 });

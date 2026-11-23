@@ -161,6 +161,17 @@ public sealed class ShoppingListTests
     // ---- Adding
 
     [Fact]
+    public async Task An_item_added_from_Add_usuals_is_accepted_with_its_source_and_aisle_from_its_product()
+    {
+        var milk = Product("Semi-skimmed milk", aisle: "dairyEggs");
+
+        var item = await Add("Semi-skimmed milk", productId: milk, source: ListItemSources.Usual);
+
+        Assert.Equal(("usual", "dairyEggs", ListAisleSources.Product), (item.Source, item.Aisle, item.AisleSource));
+        Assert.Contains(ListItemSources.Usual, ListItemSources.FromTheApp);
+    }
+
+    [Fact]
     public async Task A_typed_item_is_added_at_once_with_no_aisle_and_its_aisle_is_queued()
     {
         var item = await Add("  Kitchen   Foil ", note: "the big roll");

@@ -203,6 +203,11 @@ If you need a term that isn't here, add it as part of the card that introduces i
 **Unit state** – opened, frozen or defrosted: what happened to a unit after it was bought (#65), marked from the **More** button on a unit in item detail, today or on a different day, with Undo. The product's estimates for each state come from Jev once per product, so marking is instant; until they arrive, the new estimate is "on its way".
 - In code: `UnitState`, `UnitStates`, `ProductStateEstimates`
 
+**Usuals** – what the household usually buys, offered by **Add usuals** on the shopping list (#134, spike #135): the button works out which names (generic names) are bought most weeks and looks due, and shows **the selection** to tick and add. History is counted by Monday-to-Sunday week since the stock take, and **stock plays no part** (the spike found it made the suggestions worse). Jev gives each candidate a probability; if Jev isn't available, the share of weeks it was bought in is used instead.
+- **Due** – a suggestion Jev rates at 0.8 or more (or, without Jev, bought in at least three quarters of the weeks): pre-ticked. **Maybe** – 0.6 to 0.8 (half of the weeks, without Jev): listed, not ticked. Below that it isn't offered.
+- **The selection** – the sheet that lists every suggestion grouped by aisle, each with a "Bought in 4 of the last 4 weeks" line; there is no limit on how many. Nothing goes on the list until the add button. Items it adds have the source `usual`.
+- In code: `UsualsJobs`, `UsualsFacts`, `IUsualsJudge` (`JevUsualsJudge`), `POST /api/shopping-list/usuals`, `UsualsSheet` (UI)
+
 **Stock search** – the box at the top of the stock list (#91). It filters the list in the app as you type: every word must be part of a product's name, brand, generic name, aisle name or barcode, ignoring case and accents. Matching aisles show open; the rest are hidden. The search is kept while the app is open, never stored on the device.
 - In code: `matchesSearch`, `stockSearch.ts`
 

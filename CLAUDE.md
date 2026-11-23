@@ -228,6 +228,14 @@ There is **one environment, and it's the live household system**. Treat it with 
 - **Logs:** `Meal plan created: …`, `Meal plan written: <status>, n meals, n bought for one meal only before and after (retried …), n ms`, `Meal plan changed: …`, `Plan model (outline|revise): n ms on <deployment>, n prompt + n completion tokens.` Never the prompt, stock, comments, titles or items.
 - **Testing live:** a plan costs a fraction of a penny, but keep it to a handful and **delete every plan you make** (`DELETE /api/meal-plans/{id}`).
 
+### Add usuals (#134, spike #135)
+
+- **What:** the **Add usuals** button on the shopping list (`UsualsSheet`, `FE/src/Usuals.tsx`): progress, then **the selection** to tick and add (no limit on how many). API in docs/api.md (Add usuals); `UsualsJobs`, `UsualsFacts` (Application), `JevUsualsJudge` and `CosmosUsualsHistory` (Infrastructure), `UsualsFunctions` (Functions.Api).
+- **How:** asynchronous like Plan meals: the start request writes a job (`usuals:<jobId>` in `pushSeen`, six-hour ttl) and a `{ jobId }` message on the `usuals-jobs` queue (created on first use), run by the `usualsJob` queue trigger; the sheet polls. History by **Monday-to-Sunday UK week** since `USUALLY_BUYS_HISTORY_START`; **stock is never read**; Jev (`noul`, one request per candidate, four at a time) decides Due (0.8) and Maybe (0.6); the plain share-of-weeks rule (0.75 and 0.5) is the fallback.
+- **Settings** (all optional, defaults in code): `USUALS_JEV_DUE_CONFIDENCE` (0.8), `USUALS_JEV_MAYBE_CONFIDENCE` (0.6), `USUALS_PATTERN_DUE` (0.75), `USUALS_PATTERN_MAYBE` (0.5), `USUALS_REQUESTS_PER_HOUR` (10 a person, in memory), `USUALS_JOB_BUDGET_SECONDS` (60). No new secret (the existing `JEV_API_KEY`); no infra change.
+- **Logs:** `Usuals: …` and `Usuals Jev: …` (counts, tokens and milliseconds only); a failed job logs an Error, which fires the error alert.
+- **Benchmark:** `docs/spikes/135-usuals-jev.py` (`weekly --iso-weeks`) re-measures Jev against the plain rule on the live history (read-only; the Jev key from `local.env`). Re-run it at eight to ten weeks of history.
+
 ### Error alert ("Cupboard Tracker errors", #48)
 
 Azure Monitor emails `ALERT_EMAIL_TO` when either Function app has an **exception**, a trace at **Error or above**, or a **5xx** request. 4xx validation failures and warnings don't count, so log real failures that need a person at Error, and anything retried or expected at Warning or below. It's in Bicep (`infra/modules/errorAlert.bicep`): the log search rule `alert-cupboard-errors` on the Log Analytics workspace, and the action group `ag-cupboard-alerts`. No app code is involved.
